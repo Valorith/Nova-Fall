@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
+import { useAuthStore } from '@/stores/auth';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -11,6 +12,12 @@ const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'login',
     component: () => import('@/views/LoginView.vue'),
+    meta: { guestOnly: true },
+  },
+  {
+    path: '/auth/callback',
+    name: 'auth-callback',
+    component: () => import('@/views/AuthCallbackView.vue'),
   },
   {
     path: '/game',
@@ -25,14 +32,30 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach((to, _from, next) => {
-  const isAuthenticated = localStorage.getItem('auth_token');
+router.beforeEach(async (to, _from, next) => {
+  const authStore = useAuthStore();
 
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    next({ name: 'login' });
-  } else {
-    next();
+  // Initialize auth state if not done
+  if (!authStore.isInitialized) {
+    await authStore.initialize();
   }
+
+  // Skip auth callback route
+  if (to.name === 'auth-callback') {
+    return next();
+  }
+
+  // Redirect authenticated users away from guest-only pages
+  if (to.meta.guestOnly && authStore.isAuthenticated) {
+    return next({ name: 'game' });
+  }
+
+  // Redirect unauthenticated users to login
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    return next({ name: 'login' });
+  }
+
+  next();
 });
 
 export default router;

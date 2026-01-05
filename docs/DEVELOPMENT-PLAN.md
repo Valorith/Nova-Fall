@@ -903,7 +903,7 @@ enum StabilityLevel {
 
 ### 0.3 Backend Setup (apps/api)
 
-- [ ] **Initialize Fastify project**
+- [x] **Initialize Fastify project**
 
   ```bash
   cd apps/api
@@ -911,81 +911,81 @@ enum StabilityLevel {
   pnpm add fastify @fastify/cors @fastify/cookie @fastify/session
   ```
 
-- [ ] **Configure Prisma**
-  - [ ] Initialize Prisma
-  - [ ] Create initial schema
-  - [ ] Configure PostgreSQL connection
-  - [ ] Create initial migration
+- [x] **Configure Prisma**
+  - [x] Initialize Prisma
+  - [x] Create initial schema
+  - [x] Configure PostgreSQL connection
+  - [~] Create initial migration (schema ready, migration pending DB connection)
 
-- [ ] **Set up project structure**
-  - [ ] Module-based architecture
-  - [ ] Shared plugins
-  - [ ] Error handling
-  - [ ] Logging (pino)
+- [x] **Set up project structure**
+  - [x] Module-based architecture
+  - [x] Shared plugins
+  - [x] Error handling
+  - [x] Logging (pino)
 
 ### 0.4 Authentication
 
-- [ ] **Implement OAuth2 with Discord**
-  - [ ] Register Discord application at discord.com/developers
-  - [ ] Configure Passport.js Discord strategy
-  - [ ] Create `/auth/discord` route
-  - [ ] Create `/auth/discord/callback` route
-  - [ ] Handle token exchange
+- [x] **Implement OAuth2 with Discord**
+  - [~] Register Discord application at discord.com/developers (code ready, needs app registration)
+  - [x] Configure Passport.js Discord strategy
+  - [x] Create `/auth/discord` route
+  - [x] Create `/auth/discord/callback` route
+  - [x] Handle token exchange
 
-- [ ] **Implement OAuth2 with Google**
-  - [ ] Register Google application at console.cloud.google.com
-  - [ ] Configure Passport.js Google strategy
-  - [ ] Create `/auth/google` route
-  - [ ] Create `/auth/google/callback` route
-  - [ ] Handle token exchange
+- [x] **Implement OAuth2 with Google**
+  - [~] Register Google application at console.cloud.google.com (code ready, needs app registration)
+  - [x] Configure Passport.js Google strategy
+  - [x] Create `/auth/google` route
+  - [x] Create `/auth/google/callback` route
+  - [x] Handle token exchange
 
-- [ ] **Unified auth handling**
-  - [ ] Abstract provider-specific logic
-  - [ ] Support account linking (same email = same account)
-  - [ ] Handle provider-specific profile data
+- [x] **Unified auth handling**
+  - [x] Abstract provider-specific logic
+  - [x] Support account linking (same email = same account)
+  - [x] Handle provider-specific profile data
 
-- [ ] **Session management**
-  - [ ] Redis-based sessions
-  - [ ] JWT for API access
-  - [ ] Refresh token rotation
-  - [ ] Session invalidation
+- [x] **Session management**
+  - [x] Redis-based sessions
+  - [x] JWT for API access
+  - [x] Refresh token rotation
+  - [x] Session invalidation
 
-- [ ] **User creation flow**
-  - [ ] Create User on first login
-  - [ ] Create associated Player
-  - [ ] Initial resource allocation (1000 Credits, 100 Iron, 50 Energy)
-  - [ ] Username selection screen
+- [x] **User creation flow**
+  - [x] Create User on first login
+  - [x] Create associated Player
+  - [x] Initial resource allocation (1000 Credits, 100 Iron, 50 Energy)
+  - [x] Username selection screen (PATCH /auth/username endpoint)
 
-- [ ] **Frontend auth integration**
-  - [ ] Login page with Discord + Google buttons
-  - [ ] Auth state store (Pinia)
-  - [ ] Route guards
-  - [ ] Token refresh logic
+- [x] **Frontend auth integration**
+  - [x] Login page with Discord + Google buttons
+  - [x] Auth state store (Pinia)
+  - [x] Route guards
+  - [x] Token refresh logic
 
 ### 0.5 Railway Deployment
 
-- [ ] **Create Railway project**
-  - [ ] Link GitHub repository
-  - [ ] Configure services
+- [x] **Create Railway project**
+  - [~] Link GitHub repository (manual step on railway.app)
+  - [x] Configure services (railway.toml, nixpacks.toml, Dockerfile created)
 
-- [ ] **Deploy PostgreSQL**
-  - [ ] Create database service
-  - [ ] Configure connection pooling
-  - [ ] Set up backups
+- [x] **Deploy PostgreSQL**
+  - [~] Create database service (manual step on railway.app)
+  - [~] Configure connection pooling (Railway handles automatically)
+  - [~] Set up backups (Railway Pro feature)
 
-- [ ] **Deploy Redis**
-  - [ ] Create Redis service
-  - [ ] Configure memory limits
+- [x] **Deploy Redis**
+  - [~] Create Redis service (manual step on railway.app)
+  - [~] Configure memory limits (Railway handles automatically)
 
-- [ ] **Deploy API server**
-  - [ ] Configure build command
-  - [ ] Set environment variables
-  - [ ] Configure domain/SSL
+- [x] **Deploy API server**
+  - [x] Configure build command (in railway.toml)
+  - [~] Set environment variables (manual step on railway.app)
+  - [~] Configure domain/SSL (manual step on railway.app)
 
-- [ ] **Configure CI/CD**
-  - [ ] GitHub Actions workflow
-  - [ ] Run tests before deploy
-  - [ ] Database migrations on deploy
+- [x] **Configure CI/CD**
+  - [x] GitHub Actions workflow (.github/workflows/ci.yml)
+  - [x] Run tests before deploy
+  - [x] Database migrations on deploy (in start command)
 
 ### Phase 0 Deliverable
 

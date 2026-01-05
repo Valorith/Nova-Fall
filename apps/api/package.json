@@ -23,6 +23,7 @@
     "@nova-fall/shared": "workspace:*",
     "@nova-fall/game-logic": "workspace:*",
     "fastify": "^4.25.0",
+    "fastify-plugin": "^4.5.0",
     "@fastify/cors": "^9.0.0",
     "@fastify/cookie": "^9.3.0",
     "@fastify/session": "^10.7.0",
@@ -32,12 +33,15 @@
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4",
     "passport-google-oauth20": "^2.0.0",
-    "pino": "^8.17.0"
+    "jose": "^5.2.0",
+    "pino": "^8.17.0",
+    "zod": "^3.22.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/passport": "^1.0.16",
     "@types/passport-google-oauth20": "^2.0.14",
+    "pino-pretty": "^10.3.0",
     "prisma": "^5.8.0",
     "tsup": "^8.0.0",
     "tsx": "^4.7.0",

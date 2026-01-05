@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+buildCommand = "cd ../.. && pnpm install --frozen-lockfile && pnpm --filter @nova-fall/api build && pnpm --filter @nova-fall/api db:generate"
+
+[deploy]
+startCommand = "pnpm --filter @nova-fall/api db:migrate && pnpm --filter @nova-fall/api start"
+healthcheckPath = "/health"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

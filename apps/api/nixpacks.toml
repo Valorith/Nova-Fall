@@ -1,0 +1,14 @@
+[phases.setup]
+nixPkgs = ["nodejs_20", "pnpm"]
+
+[phases.install]
+cmds = ["cd ../.. && pnpm install --frozen-lockfile"]
+
+[phases.build]
+cmds = [
+  "cd ../.. && pnpm --filter @nova-fall/api build",
+  "cd ../.. && pnpm --filter @nova-fall/api db:generate"
+]
+
+[start]
+cmd = "cd ../.. && pnpm --filter @nova-fall/api db:migrate && pnpm --filter @nova-fall/api start"

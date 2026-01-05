@@ -1,0 +1,612 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== AUTH & USERS ====================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  username      String    @unique
+  oauthProvider String    // 'discord', 'google'
+  oauthId       String
+  avatarUrl     String?
+  isPremium     Boolean   @default(false)
+  premiumUntil  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  player   Player?
+  sessions Session[]
+
+  @@index([oauthProvider, oauthId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+}
+
+// ==================== PLAYER ====================
+
+model Player {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName   String
+
+  // Resources stored as JSON for flexibility
+  resources     Json     @default("{\"credits\": 1000, \"iron\": 100, \"energy\": 50}")
+
+  // Unlocked research
+  research      Json     @default("[]")
+
+  // Stats
+  reputation    Int      @default(0)
+  totalNodes    Int      @default(0)
+  totalUnits    Int      @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  ownedNodes       Node[]
+  units            Unit[]
+  items            Item[]
+  caravans         Caravan[]
+  marketOrders     MarketOrder[]
+  attacksInitiated Battle[]       @relation("Attacker")
+  attacksReceived  Battle[]       @relation("Defender")
+  researchQueue    ResearchQueue[]
+
+  // Corporation
+  corpMembership   CorpMember?
+}
+
+// ==================== WORLD & NODES ====================
+
+model Node {
+  id          String    @id @default(cuid())
+  name        String
+  type        NodeType
+  tier        Int       @default(1)
+
+  // Position on world map
+  positionX   Float
+  positionY   Float
+  regionId    String?   // For environmental zones
+
+  // Ownership
+  ownerId     String?
+  owner       Player?   @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  claimedAt   DateTime?
+
+  // State
+  storage     Json      @default("{}")  // Resources stored here
+  upkeepPaid  DateTime?
+  upkeepDue   DateTime?
+  status      NodeStatus @default(NEUTRAL)
+
+  // Attack cooldowns
+  lastAttackedAt      DateTime?  // When last attack resolved
+  attackCooldownUntil DateTime?  // 3 days after last attack (player attacks blocked)
+  attackImmunityUntil DateTime?  // 3 minutes post-battle immunity
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  buildings         Building[]
+  garrison          Unit[]
+  connectionsFrom   NodeConnection[] @relation("FromNode")
+  connectionsTo     NodeConnection[] @relation("ToNode")
+  battles           Battle[]
+  caravansFrom      Caravan[]        @relation("CaravanOrigin")
+  caravansTo        Caravan[]        @relation("CaravanDestination")
+  caravansCurrent   Caravan[]        @relation("CaravanCurrent")
+  marketOrders      MarketOrder[]
+
+  // Corporation territory
+  corpId            String?
+  corporation       Corporation?     @relation(fields: [corpId], references: [id])
+
+  @@index([ownerId])
+  @@index([type])
+  @@index([regionId])
+}
+
+model NodeConnection {
+  id          String   @id @default(cuid())
+  fromNodeId  String
+  fromNode    Node     @relation("FromNode", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNodeId    String
+  toNode      Node     @relation("ToNode", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  distance    Int      // Travel time in seconds
+  dangerLevel Int      @default(0)  // 0-100
+  roadType    RoadType @default(DIRT)
+
+  @@unique([fromNodeId, toNodeId])
+  @@index([fromNodeId])
+  @@index([toNodeId])
+}
+
+// ==================== BUILDINGS ====================
+
+model Building {
+  id            String       @id @default(cuid())
+  typeId        String       // References config file
+  tier          Int          @default(1)
+
+  // Health
+  health        Int
+  maxHealth     Int
+
+  // Position within node (grid coordinates)
+  gridX         Int
+  gridY         Int
+
+  // State
+  isActive      Boolean      @default(true)
+  isConstructing Boolean     @default(false)
+  constructionEnd DateTime?
+
+  // Production queue for factories
+  productionQueue Json?
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relations
+  nodeId        String
+  node          Node         @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId])
+  @@index([typeId])
+}
+
+// ==================== UNITS ====================
+
+model Unit {
+  id            String     @id @default(cuid())
+  typeId        String     // References config file
+  name          String?    // Custom name (optional)
+
+  // Stats
+  health        Int
+  maxHealth     Int
+  experience    Int        @default(0)
+  veterancy     Veterancy  @default(ROOKIE)
+
+  // State
+  status        UnitStatus @default(IDLE)
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // Owner
+  playerId      String
+  player        Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  // Location (one of these)
+  nodeId        String?
+  node          Node?      @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  caravanId     String?
+  caravan       Caravan?   @relation(fields: [caravanId], references: [id], onDelete: SetNull)
+
+  // Equipment
+  equipment     Json       @default("[]")
+
+  @@index([playerId])
+  @@index([nodeId])
+  @@index([typeId])
+}
+
+// ==================== ITEMS ====================
+
+model Item {
+  id            String   @id @default(cuid())
+  typeId        String   // References config file
+  name          String
+  rarity        Rarity
+
+  // Stats
+  baseStats     Json
+  upgrades      Json     @default("[]")
+  upgradeSlots  Int
+
+  // Owner
+  playerId      String
+  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  // Location
+  nodeStorageId String?
+
+  createdAt     DateTime @default(now())
+
+  @@index([playerId])
+  @@index([typeId])
+}
+
+// ==================== COMBAT ====================
+
+model Battle {
+  id            String       @id @default(cuid())
+
+  // Location
+  nodeId        String
+  node          Node         @relation(fields: [nodeId], references: [id])
+
+  // Participants
+  attackerId    String
+  attacker      Player       @relation("Attacker", fields: [attackerId], references: [id])
+  defenderId    String?
+  defender      Player?      @relation("Defender", fields: [defenderId], references: [id])
+
+  // Origin (where attackers came from, for retreat)
+  originNodeId  String
+
+  // Snapshots of forces at battle start
+  attackForce   Json
+  defenseState  Json
+
+  // Timing - Preparation Phase
+  initiatedAt   DateTime     @default(now())  // When attack was declared
+  prepEndsAt    DateTime     // Random: initiatedAt + 20-28 hours
+  forcesLockedAt DateTime?   // prepEndsAt - 1 hour (no more changes)
+
+  // Timing - Combat Phase
+  combatStartedAt DateTime?  // When combat actually began
+  combatEndsAt    DateTime?  // combatStartedAt + 30 minutes
+  resolvedAt      DateTime?  // When battle ended
+
+  // State
+  status        BattleStatus @default(PREP_PHASE)
+  result        BattleResult?
+
+  // Battle log
+  events        Json         @default("[]")
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([nodeId])
+  @@index([attackerId])
+  @@index([defenderId])
+  @@index([status])
+  @@index([prepEndsAt])
+}
+
+// ==================== ECONOMY ====================
+
+model MarketOrder {
+  id            String      @id @default(cuid())
+  type          OrderType
+
+  // What's being traded
+  resourceType  String
+  quantity      Int
+  pricePerUnit  Int
+
+  // Filled amount
+  filledQty     Int         @default(0)
+
+  // Owner
+  playerId      String
+  player        Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  // Location
+  nodeId        String
+  node          Node        @relation(fields: [nodeId], references: [id])
+
+  // State
+  status        OrderStatus @default(OPEN)
+  expiresAt     DateTime?
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([playerId])
+  @@index([nodeId])
+  @@index([resourceType])
+  @@index([status])
+}
+
+model Caravan {
+  id              String        @id @default(cuid())
+  vehicleType     String        // References config file
+
+  // Cargo
+  cargo           Json          // { resourceType: quantity }
+  capacity        Int
+
+  // Owner
+  playerId        String
+  player          Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  // Route
+  originId        String
+  origin          Node          @relation("CaravanOrigin", fields: [originId], references: [id])
+  destinationId   String
+  destination     Node          @relation("CaravanDestination", fields: [destinationId], references: [id])
+  currentNodeId   String?
+  currentNode     Node?         @relation("CaravanCurrent", fields: [currentNodeId], references: [id])
+  route           Json          // Array of node IDs
+  routeProgress   Int           @default(0)  // Index in route
+  edgeProgress    Float         @default(0)  // 0-1 on current edge
+
+  // State
+  status          CaravanStatus @default(LOADING)
+
+  // Timing
+  departedAt      DateTime?
+  estimatedArrival DateTime?
+
+  // Escorts
+  escorts         Unit[]
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([playerId])
+  @@index([status])
+}
+
+// ==================== RESEARCH ====================
+
+model ResearchQueue {
+  id            String   @id @default(cuid())
+
+  playerId      String
+  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  techId        String   // References config file
+  progress      Float    @default(0)  // 0-1
+  completesAt   DateTime
+
+  createdAt     DateTime @default(now())
+
+  @@index([playerId])
+}
+
+// ==================== CORPORATIONS ====================
+
+model Corporation {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  tag           String   @unique  // 3-5 character tag
+  description   String?
+
+  // Resources
+  bank          Json     @default("{\"credits\": 0}")
+
+  // Stats
+  influence     Int      @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  members       CorpMember[]
+  territories   Node[]
+  diplomacy     CorpDiplomacy[] @relation("SourceCorp")
+  diplomacyWith CorpDiplomacy[] @relation("TargetCorp")
+}
+
+model CorpMember {
+  id            String   @id @default(cuid())
+
+  playerId      String   @unique
+  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  corpId        String
+  corporation   Corporation @relation(fields: [corpId], references: [id], onDelete: Cascade)
+
+  rank          CorpRank
+  permissions   Json     @default("[]")
+  contribution  Int      @default(0)
+
+  joinedAt      DateTime @default(now())
+
+  @@index([corpId])
+}
+
+model CorpDiplomacy {
+  id            String         @id @default(cuid())
+
+  sourceCorpId  String
+  sourceCorp    Corporation    @relation("SourceCorp", fields: [sourceCorpId], references: [id], onDelete: Cascade)
+  targetCorpId  String
+  targetCorp    Corporation    @relation("TargetCorp", fields: [targetCorpId], references: [id], onDelete: Cascade)
+
+  type          DiplomacyType
+  expiresAt     DateTime?
+
+  createdAt     DateTime       @default(now())
+
+  @@unique([sourceCorpId, targetCorpId])
+}
+
+// ==================== NPC THREATS ====================
+
+model NPCThreat {
+  id            String     @id @default(cuid())
+  typeId        String     // References config file
+  name          String
+
+  // Stats
+  strength      Int
+  health        Int
+  maxHealth     Int
+
+  // Location
+  currentNodeId String?
+  targetNodeId  String?
+
+  // Behavior
+  behavior      Json
+  route         Json?
+
+  // Loot
+  lootTable     Json
+
+  // Timing
+  spawnedAt     DateTime   @default(now())
+  expiresAt     DateTime?
+
+  status        ThreatStatus @default(ROAMING)
+
+  @@index([currentNodeId])
+  @@index([status])
+}
+
+// ==================== ENVIRONMENT ====================
+
+model EnvironmentZone {
+  id            String   @id @default(cuid())
+  name          String
+
+  // Affected region
+  regionId      String
+
+  // Current state
+  stability     StabilityLevel @default(STABLE)
+  activeEvent   String?        // Event type ID
+  eventEndsAt   DateTime?
+
+  // Upkeep modifier (1.0 = normal)
+  upkeepMod     Float    @default(1.0)
+
+  // Next state change
+  nextChangeAt  DateTime
+
+  updatedAt     DateTime @updatedAt
+}
+
+// ==================== ENUMS ====================
+
+enum NodeType {
+  MINING
+  REFINERY
+  RESEARCH
+  TRADE_HUB
+  FORTRESS
+  AGRICULTURAL
+  POWER_PLANT
+  CAPITAL
+}
+
+enum NodeStatus {
+  NEUTRAL
+  CLAIMED
+  CONTESTED
+  UNDER_ATTACK
+}
+
+enum RoadType {
+  DIRT
+  PAVED
+  HIGHWAY
+  HAZARDOUS
+}
+
+enum UnitStatus {
+  IDLE
+  TRAINING
+  MOVING
+  GARRISON
+  IN_COMBAT
+  ESCORTING
+}
+
+enum Veterancy {
+  ROOKIE
+  REGULAR
+  VETERAN
+  ELITE
+  LEGENDARY
+}
+
+enum Rarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+enum BattleStatus {
+  PREP_PHASE      // 20-28 hour preparation period
+  FORCES_LOCKED   // Final hour, no changes allowed
+  IN_PROGRESS     // Active combat (30 min window)
+  RESOLVED        // Battle complete
+  CANCELLED       // Attacker withdrew during prep
+}
+
+enum BattleResult {
+  ATTACKER_VICTORY
+  DEFENDER_VICTORY
+  DRAW             // Both sides destroyed (rare)
+}
+
+enum OrderType {
+  BUY
+  SELL
+}
+
+enum OrderStatus {
+  OPEN
+  PARTIAL
+  FILLED
+  CANCELLED
+  EXPIRED
+}
+
+enum CaravanStatus {
+  LOADING
+  EN_ROUTE
+  ARRIVED
+  INTERCEPTED
+  DESTROYED
+}
+
+enum CorpRank {
+  CEO
+  DIRECTOR
+  MANAGER
+  VETERAN
+  ASSOCIATE
+}
+
+enum DiplomacyType {
+  ALLIANCE
+  NON_AGGRESSION
+  TRADE_AGREEMENT
+  WAR
+}
+
+enum ThreatStatus {
+  ROAMING
+  ATTACKING
+  RETREATING
+  DEFEATED
+}
+
+enum StabilityLevel {
+  STABLE
+  UNSTABLE
+  HAZARDOUS
+  EXTREME
+}
