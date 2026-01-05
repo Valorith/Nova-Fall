@@ -16,12 +16,12 @@ Nova Fall is a browser-based multiplayer territory control game set on a newly c
 
 Before starting ANY work session, you MUST read these files:
 
-| Priority | File | Purpose |
-|----------|------|---------|
-| 1 | `CLAUDE.md` (this file) | Project rules and conventions |
-| 2 | `docs/DEVELOPMENT-PLAN.md` | Master checklist and specifications |
-| 3 | `docs/GAME-DESIGN-DOCUMENT.md` | Full game design reference |
-| 4 | `docs/PROGRESS.md` | Session-by-session progress log |
+| Priority | File                           | Purpose                             |
+| -------- | ------------------------------ | ----------------------------------- |
+| 1        | `CLAUDE.md` (this file)        | Project rules and conventions       |
+| 2        | `docs/DEVELOPMENT-PLAN.md`     | Master checklist and specifications |
+| 3        | `docs/GAME-DESIGN-DOCUMENT.md` | Full game design reference          |
+| 4        | `docs/PROGRESS.md`             | Session-by-session progress log     |
 
 ---
 
@@ -88,14 +88,14 @@ After completing every 5 tasks, STOP and:
 
 When the user says these commands, respond accordingly:
 
-| Command | Action |
-|---------|--------|
-| `status` | Report current phase, completion %, last 3 completed tasks, next 3 pending tasks, blockers |
-| `plan` | Show the next 10 unchecked tasks from the development plan |
-| `phase` | Summarize current phase progress and remaining tasks |
-| `blockers` | List all tasks marked with `[!]` and their blocking reasons |
-| `decisions` | Show the Key Decisions Log from this file |
-| `verify` | Re-read DEVELOPMENT-PLAN.md and confirm current work aligns with spec |
+| Command     | Action                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| `status`    | Report current phase, completion %, last 3 completed tasks, next 3 pending tasks, blockers |
+| `plan`      | Show the next 10 unchecked tasks from the development plan                                 |
+| `phase`     | Summarize current phase progress and remaining tasks                                       |
+| `blockers`  | List all tasks marked with `[!]` and their blocking reasons                                |
+| `decisions` | Show the Key Decisions Log from this file                                                  |
+| `verify`    | Re-read DEVELOPMENT-PLAN.md and confirm current work aligns with spec                      |
 
 ---
 
@@ -104,6 +104,7 @@ When the user says these commands, respond accordingly:
 ### Technology Stack (Do Not Deviate)
 
 **Frontend:**
+
 - Vue 3 + TypeScript
 - Vite
 - Pinia (state management)
@@ -112,6 +113,7 @@ When the user says these commands, respond accordingly:
 - TailwindCSS
 
 **Backend:**
+
 - Node.js 20 LTS
 - Fastify
 - Prisma + PostgreSQL
@@ -121,7 +123,8 @@ When the user says these commands, respond accordingly:
 - Passport.js (Discord + Google OAuth)
 
 **Infrastructure:**
-- Railway (all services)
+
+- Railway (all services). Reference Railway Documentation here when needed: https://docs.railway.com/
 - No external paid services
 
 ### Code Style
@@ -161,6 +164,7 @@ Scopes: api, web, ws, worker, shared, game-logic, db, docs
 ```
 
 Examples:
+
 - `feat(api): add OAuth2 Discord authentication`
 - `fix(web): correct zoom level transition`
 - `docs(plan): mark Phase 0.3 complete`
@@ -185,14 +189,14 @@ Examples:
 
 <!-- UPDATE THIS SECTION AT THE END OF EVERY SESSION -->
 
-| Field | Value |
-|-------|-------|
-| **Current Phase** | Phase 0 - Foundation |
-| **Phase Progress** | 0% (0/X tasks) |
-| **Current Task** | Not started |
-| **Blockers** | None |
-| **Last Session** | N/A |
-| **Last Updated** | 2025-01-04 |
+| Field              | Value                                     |
+| ------------------ | ----------------------------------------- |
+| **Current Phase**  | Phase 0 - Foundation                      |
+| **Phase Progress** | Sections 0.1-0.2 complete (8/8 tasks)     |
+| **Current Task**   | Section 0.3 - Backend Setup               |
+| **Blockers**       | None                                      |
+| **Last Session**   | Session 1 - 2026-01-04                    |
+| **Last Updated**   | 2026-01-04                                |
 
 ---
 
@@ -200,42 +204,49 @@ Examples:
 
 Record ALL significant decisions here. If it's not documented, it didn't happen.
 
-| Date | Decision | Rationale | Approved By |
-|------|----------|-----------|-------------|
-| 2025-01-04 | 100 nodes for MVP map | Balance between scope and playability | User |
-| 2025-01-04 | 24h ± 4h random attack prep time | Strategic preparation without being instant | User |
-| 2025-01-04 | 30 minute combat window | Long enough for tactics, short enough for sessions | User |
-| 2025-01-04 | 3-day post-battle cooldown | Prevents griefing, allows recovery | User |
-| 2025-01-04 | Discord + Google OAuth | Two popular options, both free | User |
-| 2025-01-04 | 1000 Credits + 100 Iron + 50 Energy start | Reasonable starting resources | User |
-| 2025-01-04 | Infrastructure transfers on capture | Meaningful territory control | User |
-| 2025-01-04 | Defending units retreat to adjacent node | Prevents total loss, allows recovery | User |
+| Date       | Decision                                  | Rationale                                          | Approved By |
+| ---------- | ----------------------------------------- | -------------------------------------------------- | ----------- |
+| 2025-01-04 | 100 nodes for MVP map                     | Balance between scope and playability              | User        |
+| 2025-01-04 | 24h ± 4h random attack prep time          | Strategic preparation without being instant        | User        |
+| 2025-01-04 | 30 minute combat window                   | Long enough for tactics, short enough for sessions | User        |
+| 2025-01-04 | 3-day post-battle cooldown                | Prevents griefing, allows recovery                 | User        |
+| 2025-01-04 | Discord + Google OAuth                    | Two popular options, both free                     | User        |
+| 2025-01-04 | 1000 Credits + 100 Iron + 50 Energy start | Reasonable starting resources                      | User        |
+| 2025-01-04 | Infrastructure transfers on capture       | Meaningful territory control                       | User        |
+| 2025-01-04 | Defending units retreat to adjacent node  | Prevents total loss, allows recovery               | User        |
+| 2026-01-04 | pnpm 9.15.4 as package manager            | Stable version, efficient workspace support        | Claude      |
+| 2026-01-04 | ESLint flat config format                 | Modern approach, better TypeScript integration     | Claude      |
+| 2026-01-04 | Husky + lint-staged for pre-commit        | Industry standard, ensures code quality            | Claude      |
+| 2026-01-04 | vue-tsc 2.2.0                             | Compatible with TypeScript 5.9+                    | Claude      |
 
 ---
 
 ## Game Specifications Quick Reference
 
 ### Attack System Timeline
+
 ```
 INITIATION → PREPARATION (20-28h) → LOCKED (1h) → COMBAT (30m) → COOLDOWN (3d)
 ```
 
 ### Key Values
-| Setting | Value |
-|---------|-------|
-| Map size | 100 nodes |
-| Attack prep time | 24 hours ± 4 hours (random) |
-| Forces lock | 1 hour before combat |
-| Combat window | 30 minutes |
-| Post-battle immunity | 3 minutes |
-| Post-battle cooldown | 3 days (player attacks only) |
-| Starting Credits | 1,000 |
-| Starting Iron | 100 |
-| Starting Energy | 50 |
-| Base node upkeep | 50 Credits/hour |
-| Distance upkeep penalty | +15% per node from HQ |
+
+| Setting                 | Value                        |
+| ----------------------- | ---------------------------- |
+| Map size                | 100 nodes                    |
+| Attack prep time        | 24 hours ± 4 hours (random)  |
+| Forces lock             | 1 hour before combat         |
+| Combat window           | 30 minutes                   |
+| Post-battle immunity    | 3 minutes                    |
+| Post-battle cooldown    | 3 days (player attacks only) |
+| Starting Credits        | 1,000                        |
+| Starting Iron           | 100                          |
+| Starting Energy         | 50                           |
+| Base node upkeep        | 50 Credits/hour              |
+| Distance upkeep penalty | +15% per node from HQ        |
 
 ### Free Tier Limitations
+
 - Max Tech Tier: 2
 - Max Nodes: 5
 - Research Queues: 1
@@ -308,6 +319,7 @@ Before marking ANY phase complete, verify:
 ## Emergency Procedures
 
 ### If You Realize You've Deviated From the Plan
+
 1. STOP immediately
 2. Document what was done differently
 3. Report to user with full transparency
@@ -315,6 +327,7 @@ Before marking ANY phase complete, verify:
 5. May need to revert changes
 
 ### If You Find a Bug in Completed Work
+
 1. Document the bug clearly
 2. Check if it blocks current work
 3. If blocking: fix immediately, document fix
@@ -322,6 +335,7 @@ Before marking ANY phase complete, verify:
 5. Update progress log
 
 ### If the Plan Has an Error or Omission
+
 1. Do not silently work around it
 2. Stop and report the issue
 3. Propose a correction
@@ -332,7 +346,7 @@ Before marking ANY phase complete, verify:
 
 ## Remember
 
-> The development plan exists to keep this project on track for a 3-month MVP. 
+> The development plan exists to keep this project on track for a 3-month MVP.
 > Every deviation, no matter how well-intentioned, risks scope creep and delays.
 > When in doubt, ask. When certain, still verify.
 
@@ -340,5 +354,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-*Last Updated: 2025-01-04*
-*Version: 1.0.0*
+_Last Updated: 2025-01-04_
+_Version: 1.0.0_

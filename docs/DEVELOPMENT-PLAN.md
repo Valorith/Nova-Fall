@@ -33,6 +33,7 @@
 ## 1. Project Overview
 
 ### Core Game Loop
+
 1. Players claim and develop territory nodes across the planetary surface
 2. Build defensive structures and production facilities
 3. Research technologies to unlock advanced units and buildings
@@ -42,6 +43,7 @@
 7. Join corporations for collective benefits
 
 ### Key Constraints
+
 - **Upkeep System:** Territory and units have ongoing costs
 - **Tech Tiers:** Free players limited to Tier 2
 - **Time-Limited Combat:** Attackers have fixed windows to succeed
@@ -52,30 +54,33 @@
 ## 2. Technology Stack
 
 ### Frontend
-| Component | Technology | Version |
-|-----------|------------|---------|
-| Framework | Vue 3 | ^3.4 |
-| Language | TypeScript | ^5.3 |
-| Build Tool | Vite | ^5.0 |
-| State Management | Pinia | ^2.1 |
-| Game Renderer | PixiJS | ^8.0 |
-| HTTP Client | Axios | ^1.6 |
-| WebSocket | Socket.io-client | ^4.7 |
+
+| Component        | Technology       | Version |
+| ---------------- | ---------------- | ------- |
+| Framework        | Vue 3            | ^3.4    |
+| Language         | TypeScript       | ^5.3    |
+| Build Tool       | Vite             | ^5.0    |
+| State Management | Pinia            | ^2.1    |
+| Game Renderer    | PixiJS           | ^8.0    |
+| HTTP Client      | Axios            | ^1.6    |
+| WebSocket        | Socket.io-client | ^4.7    |
 
 ### Backend
-| Component | Technology | Version |
-|-----------|------------|---------|
-| Runtime | Node.js | ^20 LTS |
-| Framework | Fastify | ^4.25 |
-| Language | TypeScript | ^5.3 |
-| ORM | Prisma | ^5.8 |
-| Database | PostgreSQL | 16 |
-| Cache | Redis | 7 |
-| WebSocket | Socket.io | ^4.7 |
-| Job Queue | BullMQ | ^5.1 |
-| Auth | Passport.js | ^0.7 |
+
+| Component | Technology  | Version |
+| --------- | ----------- | ------- |
+| Runtime   | Node.js     | ^20 LTS |
+| Framework | Fastify     | ^4.25   |
+| Language  | TypeScript  | ^5.3    |
+| ORM       | Prisma      | ^5.8    |
+| Database  | PostgreSQL  | 16      |
+| Cache     | Redis       | 7       |
+| WebSocket | Socket.io   | ^4.7    |
+| Job Queue | BullMQ      | ^5.1    |
+| Auth      | Passport.js | ^0.7    |
 
 ### Infrastructure (Railway)
+
 ```
 railway-project/
 ├── api-server          # REST API + Auth
@@ -255,18 +260,18 @@ model Player {
   userId        String   @unique
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   displayName   String
-  
+
   // Resources stored as JSON for flexibility
   resources     Json     @default("{\"credits\": 1000, \"iron\": 100, \"energy\": 50}")
-  
+
   // Unlocked research
   research      Json     @default("[]")
-  
+
   // Stats
   reputation    Int      @default(0)
   totalNodes    Int      @default(0)
   totalUnits    Int      @default(0)
-  
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -279,7 +284,7 @@ model Player {
   attacksInitiated Battle[]       @relation("Attacker")
   attacksReceived  Battle[]       @relation("Defender")
   researchQueue    ResearchQueue[]
-  
+
   // Corporation
   corpMembership   CorpMember?
 }
@@ -291,28 +296,28 @@ model Node {
   name        String
   type        NodeType
   tier        Int       @default(1)
-  
+
   // Position on world map
   positionX   Float
   positionY   Float
   regionId    String?   // For environmental zones
-  
+
   // Ownership
   ownerId     String?
   owner       Player?   @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   claimedAt   DateTime?
-  
+
   // State
   storage     Json      @default("{}")  // Resources stored here
   upkeepPaid  DateTime?
   upkeepDue   DateTime?
   status      NodeStatus @default(NEUTRAL)
-  
+
   // Attack cooldowns
   lastAttackedAt      DateTime?  // When last attack resolved
   attackCooldownUntil DateTime?  // 3 days after last attack (player attacks blocked)
   attackImmunityUntil DateTime?  // 3 minutes post-battle immunity
-  
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -326,7 +331,7 @@ model Node {
   caravansTo        Caravan[]        @relation("CaravanDestination")
   caravansCurrent   Caravan[]        @relation("CaravanCurrent")
   marketOrders      MarketOrder[]
-  
+
   // Corporation territory
   corpId            String?
   corporation       Corporation?     @relation(fields: [corpId], references: [id])
@@ -342,11 +347,11 @@ model NodeConnection {
   fromNode    Node     @relation("FromNode", fields: [fromNodeId], references: [id], onDelete: Cascade)
   toNodeId    String
   toNode      Node     @relation("ToNode", fields: [toNodeId], references: [id], onDelete: Cascade)
-  
+
   distance    Int      // Travel time in seconds
   dangerLevel Int      @default(0)  // 0-100
   roadType    RoadType @default(DIRT)
-  
+
   @@unique([fromNodeId, toNodeId])
   @@index([fromNodeId])
   @@index([toNodeId])
@@ -358,26 +363,26 @@ model Building {
   id            String       @id @default(cuid())
   typeId        String       // References config file
   tier          Int          @default(1)
-  
+
   // Health
   health        Int
   maxHealth     Int
-  
+
   // Position within node (grid coordinates)
   gridX         Int
   gridY         Int
-  
+
   // State
   isActive      Boolean      @default(true)
   isConstructing Boolean     @default(false)
   constructionEnd DateTime?
-  
+
   // Production queue for factories
   productionQueue Json?
-  
+
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
-  
+
   // Relations
   nodeId        String
   node          Node         @relation(fields: [nodeId], references: [id], onDelete: Cascade)
@@ -392,29 +397,29 @@ model Unit {
   id            String     @id @default(cuid())
   typeId        String     // References config file
   name          String?    // Custom name (optional)
-  
+
   // Stats
   health        Int
   maxHealth     Int
   experience    Int        @default(0)
   veterancy     Veterancy  @default(ROOKIE)
-  
+
   // State
   status        UnitStatus @default(IDLE)
-  
+
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
-  
+
   // Owner
   playerId      String
   player        Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  
+
   // Location (one of these)
   nodeId        String?
   node          Node?      @relation(fields: [nodeId], references: [id], onDelete: SetNull)
   caravanId     String?
   caravan       Caravan?   @relation(fields: [caravanId], references: [id], onDelete: SetNull)
-  
+
   // Equipment
   equipment     Json       @default("[]")
 
@@ -430,19 +435,19 @@ model Item {
   typeId        String   // References config file
   name          String
   rarity        Rarity
-  
+
   // Stats
   baseStats     Json
   upgrades      Json     @default("[]")
   upgradeSlots  Int
-  
+
   // Owner
   playerId      String
   player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  
+
   // Location
   nodeStorageId String?
-  
+
   createdAt     DateTime @default(now())
 
   @@index([playerId])
@@ -453,41 +458,41 @@ model Item {
 
 model Battle {
   id            String       @id @default(cuid())
-  
+
   // Location
   nodeId        String
   node          Node         @relation(fields: [nodeId], references: [id])
-  
+
   // Participants
   attackerId    String
   attacker      Player       @relation("Attacker", fields: [attackerId], references: [id])
   defenderId    String?
   defender      Player?      @relation("Defender", fields: [defenderId], references: [id])
-  
+
   // Origin (where attackers came from, for retreat)
   originNodeId  String
-  
+
   // Snapshots of forces at battle start
   attackForce   Json
   defenseState  Json
-  
+
   // Timing - Preparation Phase
   initiatedAt   DateTime     @default(now())  // When attack was declared
   prepEndsAt    DateTime     // Random: initiatedAt + 20-28 hours
   forcesLockedAt DateTime?   // prepEndsAt - 1 hour (no more changes)
-  
-  // Timing - Combat Phase  
+
+  // Timing - Combat Phase
   combatStartedAt DateTime?  // When combat actually began
   combatEndsAt    DateTime?  // combatStartedAt + 30 minutes
   resolvedAt      DateTime?  // When battle ended
-  
+
   // State
   status        BattleStatus @default(PREP_PHASE)
   result        BattleResult?
-  
+
   // Battle log
   events        Json         @default("[]")
-  
+
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
@@ -503,27 +508,27 @@ model Battle {
 model MarketOrder {
   id            String      @id @default(cuid())
   type          OrderType
-  
+
   // What's being traded
   resourceType  String
   quantity      Int
   pricePerUnit  Int
-  
+
   // Filled amount
   filledQty     Int         @default(0)
-  
+
   // Owner
   playerId      String
   player        Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  
+
   // Location
   nodeId        String
   node          Node        @relation(fields: [nodeId], references: [id])
-  
+
   // State
   status        OrderStatus @default(OPEN)
   expiresAt     DateTime?
-  
+
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -536,15 +541,15 @@ model MarketOrder {
 model Caravan {
   id              String        @id @default(cuid())
   vehicleType     String        // References config file
-  
+
   // Cargo
   cargo           Json          // { resourceType: quantity }
   capacity        Int
-  
+
   // Owner
   playerId        String
   player          Player        @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  
+
   // Route
   originId        String
   origin          Node          @relation("CaravanOrigin", fields: [originId], references: [id])
@@ -555,17 +560,17 @@ model Caravan {
   route           Json          // Array of node IDs
   routeProgress   Int           @default(0)  // Index in route
   edgeProgress    Float         @default(0)  // 0-1 on current edge
-  
+
   // State
   status          CaravanStatus @default(LOADING)
-  
+
   // Timing
   departedAt      DateTime?
   estimatedArrival DateTime?
-  
+
   // Escorts
   escorts         Unit[]
-  
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -577,14 +582,14 @@ model Caravan {
 
 model ResearchQueue {
   id            String   @id @default(cuid())
-  
+
   playerId      String
   player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  
+
   techId        String   // References config file
   progress      Float    @default(0)  // 0-1
   completesAt   DateTime
-  
+
   createdAt     DateTime @default(now())
 
   @@index([playerId])
@@ -597,16 +602,16 @@ model Corporation {
   name          String   @unique
   tag           String   @unique  // 3-5 character tag
   description   String?
-  
+
   // Resources
   bank          Json     @default("{\"credits\": 0}")
-  
+
   // Stats
   influence     Int      @default(0)
-  
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  
+
   // Relations
   members       CorpMember[]
   territories   Node[]
@@ -616,17 +621,17 @@ model Corporation {
 
 model CorpMember {
   id            String   @id @default(cuid())
-  
+
   playerId      String   @unique
   player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  
+
   corpId        String
   corporation   Corporation @relation(fields: [corpId], references: [id], onDelete: Cascade)
-  
+
   rank          CorpRank
   permissions   Json     @default("[]")
   contribution  Int      @default(0)
-  
+
   joinedAt      DateTime @default(now())
 
   @@index([corpId])
@@ -634,15 +639,15 @@ model CorpMember {
 
 model CorpDiplomacy {
   id            String         @id @default(cuid())
-  
+
   sourceCorpId  String
   sourceCorp    Corporation    @relation("SourceCorp", fields: [sourceCorpId], references: [id], onDelete: Cascade)
   targetCorpId  String
   targetCorp    Corporation    @relation("TargetCorp", fields: [targetCorpId], references: [id], onDelete: Cascade)
-  
+
   type          DiplomacyType
   expiresAt     DateTime?
-  
+
   createdAt     DateTime       @default(now())
 
   @@unique([sourceCorpId, targetCorpId])
@@ -654,27 +659,27 @@ model NPCThreat {
   id            String     @id @default(cuid())
   typeId        String     // References config file
   name          String
-  
+
   // Stats
   strength      Int
   health        Int
   maxHealth     Int
-  
+
   // Location
   currentNodeId String?
   targetNodeId  String?
-  
+
   // Behavior
   behavior      Json
   route         Json?
-  
+
   // Loot
   lootTable     Json
-  
+
   // Timing
   spawnedAt     DateTime   @default(now())
   expiresAt     DateTime?
-  
+
   status        ThreatStatus @default(ROAMING)
 
   @@index([currentNodeId])
@@ -686,21 +691,21 @@ model NPCThreat {
 model EnvironmentZone {
   id            String   @id @default(cuid())
   name          String
-  
+
   // Affected region
   regionId      String
-  
+
   // Current state
   stability     StabilityLevel @default(STABLE)
   activeEvent   String?        // Event type ID
   eventEndsAt   DateTime?
-  
+
   // Upkeep modifier (1.0 = normal)
   upkeepMod     Float    @default(1.0)
-  
+
   // Next state change
   nextChangeAt  DateTime
-  
+
   updatedAt     DateTime @updatedAt
 }
 
@@ -827,15 +832,15 @@ enum StabilityLevel {
 
 ### Timeline Overview (13 Weeks)
 
-| Phase | Duration | Focus |
-|-------|----------|-------|
-| Phase 0 | Week 1-2 | Foundation, Auth, Infrastructure |
-| Phase 1 | Week 3-4 | World Map, Nodes, Zoom Levels |
-| Phase 2 | Week 5-6 | Economy, Resources, Upkeep |
-| Phase 3 | Week 7-8 | Buildings, Construction |
-| Phase 4 | Week 9-11 | Combat System |
-| Phase 5 | Week 12 | Trading, Caravans |
-| Phase 6 | Week 13 | Polish, Testing, MVP Launch |
+| Phase   | Duration  | Focus                            |
+| ------- | --------- | -------------------------------- |
+| Phase 0 | Week 1-2  | Foundation, Auth, Infrastructure |
+| Phase 1 | Week 3-4  | World Map, Nodes, Zoom Levels    |
+| Phase 2 | Week 5-6  | Economy, Resources, Upkeep       |
+| Phase 3 | Week 7-8  | Buildings, Construction          |
+| Phase 4 | Week 9-11 | Combat System                    |
+| Phase 5 | Week 12   | Trading, Caravans                |
+| Phase 6 | Week 13   | Polish, Testing, MVP Launch      |
 
 ---
 
@@ -843,60 +848,63 @@ enum StabilityLevel {
 
 ### 0.1 Project Setup
 
-- [ ] **Initialize monorepo with pnpm workspaces**
+- [x] **Initialize monorepo with pnpm workspaces**
+
   ```bash
   mkdir nova-fall && cd nova-fall
   pnpm init
   # Create pnpm-workspace.yaml
   ```
 
-- [ ] **Create workspace structure**
-  - [ ] `apps/web` - Vue 3 frontend
-  - [ ] `apps/api` - Fastify backend
-  - [ ] `apps/ws-server` - WebSocket server
-  - [ ] `apps/worker` - Game worker
-  - [ ] `packages/shared` - Shared types/constants
-  - [ ] `packages/game-logic` - Core game logic
+- [x] **Create workspace structure**
+  - [x] `apps/web` - Vue 3 frontend
+  - [x] `apps/api` - Fastify backend
+  - [x] `apps/ws-server` - WebSocket server
+  - [x] `apps/worker` - Game worker
+  - [x] `packages/shared` - Shared types/constants
+  - [x] `packages/game-logic` - Core game logic
 
-- [ ] **Configure TypeScript**
-  - [ ] Create `tsconfig.base.json` with strict settings
-  - [ ] Configure path aliases for packages
-  - [ ] Set up incremental builds
+- [x] **Configure TypeScript**
+  - [x] Create `tsconfig.base.json` with strict settings
+  - [x] Configure path aliases for packages
+  - [x] Set up incremental builds
 
-- [ ] **Configure ESLint & Prettier**
-  - [ ] Shared config for all packages
-  - [ ] Vue-specific rules
-  - [ ] Pre-commit hooks with husky
+- [x] **Configure ESLint & Prettier**
+  - [x] Shared config for all packages
+  - [x] Vue-specific rules
+  - [x] Pre-commit hooks with husky
 
 ### 0.2 Frontend Setup (apps/web)
 
-- [ ] **Initialize Vue 3 project**
+- [x] **Initialize Vue 3 project**
+
   ```bash
   cd apps/web
   pnpm create vite . --template vue-ts
   ```
 
-- [ ] **Install core dependencies**
-  - [ ] Vue Router
-  - [ ] Pinia
-  - [ ] PixiJS
-  - [ ] Socket.io-client
-  - [ ] Axios
-  - [ ] TailwindCSS
+- [x] **Install core dependencies**
+  - [x] Vue Router
+  - [x] Pinia
+  - [x] PixiJS
+  - [x] Socket.io-client
+  - [x] Axios
+  - [x] TailwindCSS
 
-- [ ] **Configure Vite**
-  - [ ] Proxy API requests in dev
-  - [ ] Environment variables
-  - [ ] Build optimization
+- [x] **Configure Vite**
+  - [x] Proxy API requests in dev
+  - [x] Environment variables
+  - [x] Build optimization
 
-- [ ] **Create base layout**
-  - [ ] App shell with navigation
-  - [ ] Loading states
-  - [ ] Error boundaries
+- [x] **Create base layout**
+  - [x] App shell with navigation
+  - [x] Loading states
+  - [x] Error boundaries
 
 ### 0.3 Backend Setup (apps/api)
 
 - [ ] **Initialize Fastify project**
+
   ```bash
   cd apps/api
   pnpm init
@@ -980,6 +988,7 @@ enum StabilityLevel {
   - [ ] Database migrations on deploy
 
 ### Phase 0 Deliverable
+
 ✓ User can log in with Discord, account persists, basic dashboard visible
 
 ---
@@ -1093,6 +1102,7 @@ enum StabilityLevel {
   - [ ] Cannot be abandoned
 
 ### Phase 1 Deliverable
+
 ✓ Players can view world map, zoom in/out, claim initial territory
 
 ---
@@ -1102,6 +1112,7 @@ enum StabilityLevel {
 ### 2.1 Resource System
 
 - [ ] **Define resource types**
+
   ```typescript
   // packages/shared/src/config/resources.ts
   export const RESOURCES = {
@@ -1145,10 +1156,11 @@ enum StabilityLevel {
 ### 2.3 Upkeep System
 
 - [ ] **Calculate upkeep costs**
+
   ```typescript
   function calculateUpkeep(node: Node, player: Player): number {
     const baseCost = NODE_BASE_UPKEEP[node.type];
-    const distanceMod = 1 + (0.15 * getDistanceFromHQ(node, player));
+    const distanceMod = 1 + 0.15 * getDistanceFromHQ(node, player);
     const buildingMod = sumBuildingUpkeep(node.buildings);
     return Math.floor(baseCost * distanceMod * buildingMod);
   }
@@ -1203,6 +1215,7 @@ enum StabilityLevel {
   - [ ] View pending transfers
 
 ### Phase 2 Deliverable
+
 ✓ Nodes generate resources, upkeep costs money, basic trading works
 
 ---
@@ -1212,6 +1225,7 @@ enum StabilityLevel {
 ### 3.1 Building Configuration
 
 - [ ] **Define building types**
+
   ```typescript
   // packages/shared/src/config/structures.ts
   export const STRUCTURES = {
@@ -1310,6 +1324,7 @@ enum StabilityLevel {
   - [ ] Increase node capacity
 
 ### Phase 3 Deliverable
+
 ✓ Players can construct buildings, see them on the map, buildings affect gameplay
 
 ---
@@ -1383,6 +1398,7 @@ enum StabilityLevel {
 ### 4.4 Battle System - Phases
 
 #### Attack Phase Overview
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           ATTACK TIMELINE                                   │
@@ -1535,6 +1551,7 @@ enum StabilityLevel {
   - [ ] No manual interventions
 
 ### Phase 4 Deliverable
+
 ✓ Full combat loop works: schedule attack, real-time battle, resolution
 
 ---
@@ -1544,6 +1561,7 @@ enum StabilityLevel {
 ### 5.1 Caravan System
 
 - [ ] **Vehicle types**
+
   ```typescript
   export const VEHICLES = {
     cargo_hauler: {
@@ -1595,6 +1613,7 @@ enum StabilityLevel {
   - [ ] Release escorts
 
 ### Phase 5 Deliverable
+
 ✓ Players can send trade caravans between nodes with risk/reward
 
 ---
@@ -1681,6 +1700,7 @@ enum StabilityLevel {
   - [ ] Deployment guide
 
 ### Phase 6 Deliverable
+
 ✓ MVP ready for alpha testing with core gameplay loop complete
 
 ---
@@ -1688,18 +1708,21 @@ enum StabilityLevel {
 ## 7. Post-MVP Features
 
 ### Priority 1 (Month 4)
+
 - [ ] Corporation system
 - [ ] Full player-to-player market
 - [ ] Additional unit types (4 more)
 - [ ] Additional structure types (4 more)
 
 ### Priority 2 (Month 5)
+
 - [ ] Environmental hazard system
 - [ ] Item upgrade system
 - [ ] More NPC threat types
 - [ ] Corporation wars
 
 ### Priority 3 (Month 6)
+
 - [ ] Subscription system
 - [ ] Advanced research tree
 - [ ] Anomaly events
@@ -1710,6 +1733,7 @@ enum StabilityLevel {
 ## 8. Asset Sources
 
 ### Free Asset Packs
+
 - **Kenney.nl** - CC0 licensed game assets
   - Sci-fi UI pack
   - RTS buildings pack
@@ -1721,12 +1745,14 @@ enum StabilityLevel {
 - **Game-icons.net** - CC BY 3.0 icons
 
 ### AI Generation
+
 - Unit portraits
 - Building illustrations
 - Backgrounds
 - Icons (with post-processing)
 
 ### Style Guide
+
 - Color palette: Deep space blues, industrial grays, accent oranges
 - UI: Clean, minimal, sci-fi inspired
 - Consistent post-processing filters to unify assets
@@ -1736,6 +1762,7 @@ enum StabilityLevel {
 ## 9. Configuration Files
 
 ### Structure Definition Template
+
 ```typescript
 // packages/shared/src/config/structures.ts
 export interface StructureDefinition {
@@ -1760,6 +1787,7 @@ export interface StructureDefinition {
 ```
 
 ### Unit Definition Template
+
 ```typescript
 // packages/shared/src/config/units.ts
 export interface UnitDefinition {
@@ -1789,6 +1817,7 @@ export interface UnitDefinition {
 ```
 
 ### Environment Variables
+
 ```env
 # Database
 DATABASE_URL=postgresql://user:pass@host:5432/nova_fall
@@ -1859,17 +1888,20 @@ railway logs              # View logs
 ## Daily Development Checklist
 
 Before starting:
+
 - [ ] Pull latest changes
 - [ ] Check for dependency updates
 - [ ] Review current phase tasks
 
 Before committing:
+
 - [ ] Run linter (`pnpm lint`)
 - [ ] Run type check (`pnpm typecheck`)
 - [ ] Run tests (`pnpm test`)
 - [ ] Update documentation if needed
 
 Before deploying:
+
 - [ ] Test locally end-to-end
 - [ ] Check environment variables
 - [ ] Run database migrations
@@ -1877,5 +1909,5 @@ Before deploying:
 
 ---
 
-*Last Updated: January 2026*
-*Version: 1.0.0-MVP*
+_Last Updated: January 2026_
+_Version: 1.0.0-MVP_

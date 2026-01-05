@@ -1,4 +1,5 @@
 # NOVA FALL
+
 ## Game Design Document
 
 **Version:** 1.0  
@@ -40,13 +41,13 @@ Nova Fall is a browser-based multiplayer territory control game set on a newly c
 
 ### 1.2 Key Differentiators
 
-| Feature | Description |
-|---------|-------------|
-| **Hybrid Combat System** | Real-time tower defense with offensive army mechanics |
-| **Risk-Reward Trading** | Physical transport of goods across dangerous territory |
+| Feature                    | Description                                             |
+| -------------------------- | ------------------------------------------------------- |
+| **Hybrid Combat System**   | Real-time tower defense with offensive army mechanics   |
+| **Risk-Reward Trading**    | Physical transport of goods across dangerous territory  |
 | **Environmental Pressure** | Dynamic planetary conditions force strategic adaptation |
-| **Meaningful Upkeep** | Territory and army costs prevent unchecked expansion |
-| **Horizontal Progression** | Research unlocks options, not raw power |
+| **Meaningful Upkeep**      | Territory and army costs prevent unchecked expansion    |
+| **Horizontal Progression** | Research unlocks options, not raw power                 |
 
 ---
 
@@ -58,16 +59,16 @@ The game takes place on Kepler-442b, a newly discovered habitable planet in the 
 
 ### 2.2 Thematic Elements
 
-| Element | Description |
-|---------|-------------|
-| Outposts/Colonies | Player-controlled territorial nodes representing settlements |
-| Mining Stations | Resource extraction facilities for raw materials |
-| Research Labs | Technology advancement and blueprint discovery |
-| Cargo Transports | Hover trucks, cargo drones, armored convoys |
-| Hostile Fauna | Alien creatures that attack settlements |
-| Pirates/Raiders | NPC factions that intercept trade routes |
-| Environmental Events | Ion storms, seismic shifts, radiation zones |
-| Corporations | Player-formed alliances competing for dominance |
+| Element              | Description                                                  |
+| -------------------- | ------------------------------------------------------------ |
+| Outposts/Colonies    | Player-controlled territorial nodes representing settlements |
+| Mining Stations      | Resource extraction facilities for raw materials             |
+| Research Labs        | Technology advancement and blueprint discovery               |
+| Cargo Transports     | Hover trucks, cargo drones, armored convoys                  |
+| Hostile Fauna        | Alien creatures that attack settlements                      |
+| Pirates/Raiders      | NPC factions that intercept trade routes                     |
+| Environmental Events | Ion storms, seismic shifts, radiation zones                  |
+| Corporations         | Player-formed alliances competing for dominance              |
 
 ### 2.3 Currency: Credits
 
@@ -83,16 +84,16 @@ The game world consists of 100 interconnected nodes representing locations on th
 
 #### Node Types
 
-| Node Type | Primary Output | Strategic Value | Upkeep Modifier |
-|-----------|----------------|-----------------|-----------------|
-| Mining Station | Raw Ores, Minerals | Foundation of production | 1.0x (Base) |
-| Refinery | Refined Materials | Mid-chain value add | 1.2x |
-| Research Lab | Research Points | Tech advancement | 1.5x |
-| Trade Hub | Passive Credits | Market fee reduction | 1.3x |
-| Fortress | Defense Bonus | Chokepoint control | 1.8x |
-| Colony HQ | All (reduced) | Command center | 2.0x |
-| Agricultural | Food, Organics | Sustains population | 0.8x |
-| Power Plant | Energy Credits | Powers operations | 1.1x |
+| Node Type      | Primary Output     | Strategic Value          | Upkeep Modifier |
+| -------------- | ------------------ | ------------------------ | --------------- |
+| Mining Station | Raw Ores, Minerals | Foundation of production | 1.0x (Base)     |
+| Refinery       | Refined Materials  | Mid-chain value add      | 1.2x            |
+| Research Lab   | Research Points    | Tech advancement         | 1.5x            |
+| Trade Hub      | Passive Credits    | Market fee reduction     | 1.3x            |
+| Fortress       | Defense Bonus      | Chokepoint control       | 1.8x            |
+| Colony HQ      | All (reduced)      | Command center           | 2.0x            |
+| Agricultural   | Food, Organics     | Sustains population      | 0.8x            |
+| Power Plant    | Energy Credits     | Powers operations        | 1.1x            |
 
 ### 3.2 Zoom Levels
 
@@ -118,21 +119,21 @@ Hourly Upkeep = Base Cost × Node Modifier × (1 + 0.15 × Distance) × Building
 
 #### Upkeep Components
 
-| Component | Description |
-|-----------|-------------|
-| Base Cost | 50 Credits per hour for standard nodes |
-| Node Modifier | Varies by node type (0.8x to 2.0x) |
-| Distance Penalty | +15% per node distance from your HQ |
+| Component           | Description                              |
+| ------------------- | ---------------------------------------- |
+| Base Cost           | 50 Credits per hour for standard nodes   |
+| Node Modifier       | Varies by node type (0.8x to 2.0x)       |
+| Distance Penalty    | +15% per node distance from your HQ      |
 | Building Multiplier | Sum of all building upkeep rates in node |
 
 #### Upkeep Failure Consequences
 
-| Phase | Duration | Effect |
-|-------|----------|--------|
-| Warning | 0-12 hours | Visual indicator, production reduced 25% |
-| Decay | 12-36 hours | Defenses degraded 50%, some units desert |
-| Collapse | 36-48 hours | Production halted, buildings take damage |
-| Abandonment | 48+ hours | Node reverts to neutral, 50% buildings destroyed |
+| Phase       | Duration    | Effect                                           |
+| ----------- | ----------- | ------------------------------------------------ |
+| Warning     | 0-12 hours  | Visual indicator, production reduced 25%         |
+| Decay       | 12-36 hours | Defenses degraded 50%, some units desert         |
+| Collapse    | 36-48 hours | Production halted, buildings take damage         |
+| Abandonment | 48+ hours   | Node reverts to neutral, 50% buildings destroyed |
 
 ---
 
@@ -149,15 +150,15 @@ INITIATION ──► PREPARATION ──► FORCES LOCKED ──► COMBAT ──
                 (20-28 hrs)      (final 1 hr)     (30 min)                   (3 days)
 ```
 
-| Phase | Duration | Description |
-|-------|----------|-------------|
-| Initiation | Instant | Attacker declares target, both sides notified |
-| Preparation | 20-28 hours (random) | Both sides prepare forces, upgrade, position |
-| Forces Locked | Final 1 hour | No changes allowed, countdown to combat |
-| Combat | 30 minutes | Real-time tower defense battle |
-| Resolution | Instant | Winner determined, units move, ownership transfers |
-| Immunity | 3 minutes | No attacks possible on this node |
-| Cooldown | 3 days | No player attacks (NPC attacks still possible) |
+| Phase         | Duration             | Description                                        |
+| ------------- | -------------------- | -------------------------------------------------- |
+| Initiation    | Instant              | Attacker declares target, both sides notified      |
+| Preparation   | 20-28 hours (random) | Both sides prepare forces, upgrade, position       |
+| Forces Locked | Final 1 hour         | No changes allowed, countdown to combat            |
+| Combat        | 30 minutes           | Real-time tower defense battle                     |
+| Resolution    | Instant              | Winner determined, units move, ownership transfers |
+| Immunity      | 3 minutes            | No attacks possible on this node                   |
+| Cooldown      | 3 days               | No player attacks (NPC attacks still possible)     |
 
 ### 4.3 Initiating an Attack
 
@@ -170,12 +171,14 @@ INITIATION ──► PREPARATION ──► FORCES LOCKED ──► COMBAT ──
 ### 4.4 Preparation Mode (20-28 Hours)
 
 **Attacker Options:**
+
 - Add or remove units from attack force
 - Assign consumable items
 - View defender's visible defenses
 - Cancel attack (forfeit any deposit)
 
 **Defender Options:**
+
 - Move garrison units from other nodes
 - Build or upgrade defenses (if time permits)
 - Position defensive structures
@@ -190,23 +193,23 @@ When combat begins, the tactical view activates. Attacking units spawn at entry 
 
 #### Attacker Actions (Real-Time)
 
-| Action | Description |
-|--------|-------------|
-| Deploy Units | Choose when and where to spawn units from available pool |
-| Issue Commands | Direct units to specific targets or waypoints |
-| Use Abilities | Activate unit special abilities (cooldown-based) |
+| Action             | Description                                              |
+| ------------------ | -------------------------------------------------------- |
+| Deploy Units       | Choose when and where to spawn units from available pool |
+| Issue Commands     | Direct units to specific targets or waypoints            |
+| Use Abilities      | Activate unit special abilities (cooldown-based)         |
 | Deploy Consumables | Use items like EMP bombs, shield boosters, repair drones |
-| Call Retreat | Withdraw surviving units early to preserve forces |
+| Call Retreat       | Withdraw surviving units early to preserve forces        |
 
 #### Defender Actions (Real-Time)
 
-| Action | Description |
-|--------|-------------|
-| Tower Targeting | Override auto-targeting to prioritize specific threats |
-| Activate Defenses | Trigger traps, shields, emergency protocols |
-| Deploy Garrison | Send garrison units to intercept attackers |
-| Use Consumables | Repair kits, reinforcement calls, area denial |
-| Relocate Units | Move garrison units between defense positions |
+| Action            | Description                                            |
+| ----------------- | ------------------------------------------------------ |
+| Tower Targeting   | Override auto-targeting to prioritize specific threats |
+| Activate Defenses | Trigger traps, shields, emergency protocols            |
+| Deploy Garrison   | Send garrison units to intercept attackers             |
+| Use Consumables   | Repair kits, reinforcement calls, area denial          |
+| Relocate Units    | Move garrison units between defense positions          |
 
 ### 4.6 Absent Player Handling
 
@@ -215,6 +218,7 @@ If a player is not present when combat begins, their forces operate on autopilot
 ### 4.7 Battle Resolution
 
 **Attacker Wins:**
+
 - All surviving defending mobile units withdraw to random adjacent friendly node
 - If no adjacent friendly node exists, units are captured or destroyed
 - All infrastructure (buildings) transfers to attacker ownership
@@ -222,41 +226,43 @@ If a player is not present when combat begins, their forces operate on autopilot
 - Node storage contents transfer to attacker
 
 **Defender Wins:**
+
 - All surviving attack units auto-withdraw to origin node
 - Defender retains full control of the node
 - All infrastructure remains intact
 
 **Post-Battle Cooldown:**
+
 - 3-minute immunity window (no attacks possible)
 - 3-day cooldown from player attacks
 - NPC attacks can still occur during cooldown
 
 ### 4.8 Defensive Structures
 
-| Structure | Role | Special | Tech Tier | Upkeep/hr |
-|-----------|------|---------|-----------|-----------|
-| Pulse Turret | Anti-infantry | Rapid fire, low damage | Tier 1 | 5 |
-| Railgun Tower | Anti-armor | High damage, slow | Tier 2 | 15 |
-| Missile Battery | Area denial | Splash damage | Tier 2 | 20 |
-| Shield Pylon | Protection | Area shield bubble | Tier 3 | 25 |
-| EMP Tower | Disable | Stuns vehicles | Tier 3 | 30 |
-| Plasma Cannon | Heavy assault | Devastating damage | Tier 4 | 50 |
-| Energy Wall | Barrier | Blocks movement | Tier 1 | 3 |
-| Minefield | Trap | One-time damage | Tier 1 | 2 |
+| Structure       | Role          | Special                | Tech Tier | Upkeep/hr |
+| --------------- | ------------- | ---------------------- | --------- | --------- |
+| Pulse Turret    | Anti-infantry | Rapid fire, low damage | Tier 1    | 5         |
+| Railgun Tower   | Anti-armor    | High damage, slow      | Tier 2    | 15        |
+| Missile Battery | Area denial   | Splash damage          | Tier 2    | 20        |
+| Shield Pylon    | Protection    | Area shield bubble     | Tier 3    | 25        |
+| EMP Tower       | Disable       | Stuns vehicles         | Tier 3    | 30        |
+| Plasma Cannon   | Heavy assault | Devastating damage     | Tier 4    | 50        |
+| Energy Wall     | Barrier       | Blocks movement        | Tier 1    | 3         |
+| Minefield       | Trap          | One-time damage        | Tier 1    | 2         |
 
 ### 4.9 Military Units
 
-| Unit | Role | Special | Tech Tier | Upkeep/hr |
-|------|------|---------|-----------|-----------|
-| Marines | Basic infantry | Cheap, numerous | Tier 1 | 2 |
-| Rangers | Scout/recon | Fast, reveals traps | Tier 1 | 3 |
-| Heavy Troopers | Armored infantry | High HP, slow | Tier 2 | 5 |
-| Engineers | Support | Repairs, disables | Tier 2 | 4 |
-| Assault Mech | Heavy assault | High damage dealer | Tier 3 | 15 |
-| Siege Tank | Structure killer | Anti-building | Tier 3 | 20 |
-| Drone Swarm | Harassment | Many weak units | Tier 2 | 8 |
-| Commando | Specialist | Stealth, sabotage | Tier 4 | 25 |
-| Titan Walker | Super-heavy | Ultimate unit | Tier 5 | 100 |
+| Unit           | Role             | Special             | Tech Tier | Upkeep/hr |
+| -------------- | ---------------- | ------------------- | --------- | --------- |
+| Marines        | Basic infantry   | Cheap, numerous     | Tier 1    | 2         |
+| Rangers        | Scout/recon      | Fast, reveals traps | Tier 1    | 3         |
+| Heavy Troopers | Armored infantry | High HP, slow       | Tier 2    | 5         |
+| Engineers      | Support          | Repairs, disables   | Tier 2    | 4         |
+| Assault Mech   | Heavy assault    | High damage dealer  | Tier 3    | 15        |
+| Siege Tank     | Structure killer | Anti-building       | Tier 3    | 20        |
+| Drone Swarm    | Harassment       | Many weak units     | Tier 2    | 8         |
+| Commando       | Specialist       | Stealth, sabotage   | Tier 4    | 25        |
+| Titan Walker   | Super-heavy      | Ultimate unit       | Tier 5    | 100       |
 
 ---
 
@@ -264,16 +270,16 @@ If a player is not present when combat begins, their forces operate on autopilot
 
 ### 5.1 Resource Types
 
-| Resource | Source | Primary Use | Rarity |
-|----------|--------|-------------|--------|
-| Credits | Trade Hubs, Sales | Universal currency | Common |
-| Iron Ore | Mining Stations | Basic construction | Common |
-| Rare Minerals | Deep Mining | Advanced tech | Uncommon |
-| Energy Cells | Power Plants | Operations, combat | Common |
-| Composites | Refineries | Advanced building | Uncommon |
-| Tech Components | Factories | Unit production | Uncommon |
-| Xenotech | Anomalies, Events | Top-tier upgrades | Rare |
-| Research Data | Research Labs | Tech advancement | Variable |
+| Resource        | Source            | Primary Use        | Rarity   |
+| --------------- | ----------------- | ------------------ | -------- |
+| Credits         | Trade Hubs, Sales | Universal currency | Common   |
+| Iron Ore        | Mining Stations   | Basic construction | Common   |
+| Rare Minerals   | Deep Mining       | Advanced tech      | Uncommon |
+| Energy Cells    | Power Plants      | Operations, combat | Common   |
+| Composites      | Refineries        | Advanced building  | Uncommon |
+| Tech Components | Factories         | Unit production    | Uncommon |
+| Xenotech        | Anomalies, Events | Top-tier upgrades  | Rare     |
+| Research Data   | Research Labs     | Tech advancement   | Variable |
 
 ### 5.2 Market System
 
@@ -291,22 +297,22 @@ Physical transport of goods creates risk/reward decisions and emergent gameplay 
 
 #### Transport Vehicles
 
-| Vehicle | Capacity | Speed | Defense | Cost |
-|---------|----------|-------|---------|------|
-| Scout Crawler | 50 units | Very Fast | None | 500 Credits |
-| Cargo Hauler | 200 units | Medium | Light | 2,000 Credits |
-| Armored Convoy | 300 units | Slow | Heavy | 5,000 Credits |
-| Hover Transport | 150 units | Fast | Medium | 8,000 Credits |
-| Dropship | 100 units | Very Fast | Light | 15,000 Credits |
+| Vehicle         | Capacity  | Speed     | Defense | Cost           |
+| --------------- | --------- | --------- | ------- | -------------- |
+| Scout Crawler   | 50 units  | Very Fast | None    | 500 Credits    |
+| Cargo Hauler    | 200 units | Medium    | Light   | 2,000 Credits  |
+| Armored Convoy  | 300 units | Slow      | Heavy   | 5,000 Credits  |
+| Hover Transport | 150 units | Fast      | Medium  | 8,000 Credits  |
+| Dropship        | 100 units | Very Fast | Light   | 15,000 Credits |
 
 #### Trade Route Risks
 
-| Risk | Description |
-|------|-------------|
-| NPC Raiders | Random encounters based on route danger level |
-| Player Interception | Other players can attack caravans in neutral/contested zones |
-| Environmental Hazards | Storms and anomalies can damage or delay shipments |
-| Toll Zones | Some routes pass through controlled territory requiring fees |
+| Risk                  | Description                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| NPC Raiders           | Random encounters based on route danger level                |
+| Player Interception   | Other players can attack caravans in neutral/contested zones |
+| Environmental Hazards | Storms and anomalies can damage or delay shipments           |
+| Toll Zones            | Some routes pass through controlled territory requiring fees |
 
 ---
 
@@ -344,13 +350,13 @@ Equipment and structures can be upgraded to improve their effectiveness.
 
 Units gain experience through combat, increasing their effectiveness and unlocking specializations.
 
-| Veterancy | XP Required | Bonus | Unlock |
-|-----------|-------------|-------|--------|
-| Rookie | 0 | None | Base abilities |
-| Regular | 100 | +10% HP | None |
-| Veteran | 500 | +15% Damage | Specialization choice |
-| Elite | 2,000 | +20% All Stats | Advanced ability |
-| Legendary | 10,000 | +30% All Stats | Unique ability |
+| Veterancy | XP Required | Bonus          | Unlock                |
+| --------- | ----------- | -------------- | --------------------- |
+| Rookie    | 0           | None           | Base abilities        |
+| Regular   | 100         | +10% HP        | None                  |
+| Veteran   | 500         | +15% Damage    | Specialization choice |
+| Elite     | 2,000       | +20% All Stats | Advanced ability      |
+| Legendary | 10,000      | +30% All Stats | Unique ability        |
 
 ---
 
@@ -360,25 +366,25 @@ Corporations are player-formed organizations that provide collective benefits, s
 
 ### 7.1 Corporation Features
 
-| Feature | Description |
-|---------|-------------|
-| Shared Territory | Connected member nodes form corporate domain with shared bonuses |
-| Corporate Bank | Shared resource pool for collective projects and emergencies |
-| Research Sharing | Members benefit from shared tech discoveries (partial) |
-| Diplomacy | Alliances, non-aggression pacts, trade agreements with other corps |
-| Corporate Wars | Organized conflicts with victory conditions and rewards |
-| Rank System | Configurable hierarchy with permissions per rank |
-| Corporate Projects | Large-scale constructions requiring collective investment |
+| Feature            | Description                                                        |
+| ------------------ | ------------------------------------------------------------------ |
+| Shared Territory   | Connected member nodes form corporate domain with shared bonuses   |
+| Corporate Bank     | Shared resource pool for collective projects and emergencies       |
+| Research Sharing   | Members benefit from shared tech discoveries (partial)             |
+| Diplomacy          | Alliances, non-aggression pacts, trade agreements with other corps |
+| Corporate Wars     | Organized conflicts with victory conditions and rewards            |
+| Rank System        | Configurable hierarchy with permissions per rank                   |
+| Corporate Projects | Large-scale constructions requiring collective investment          |
 
 ### 7.2 Corporation Ranks
 
-| Rank | Default Permissions | Notes |
-|------|---------------------|-------|
-| CEO | All permissions, cannot be removed | Corporation founder/owner |
-| Director | Manage members, bank access, diplomacy | Senior leadership |
-| Manager | Invite members, limited bank access | Operational leadership |
-| Veteran | Corp chat, shared research access | Trusted members |
-| Associate | Corp chat, basic benefits | New members |
+| Rank      | Default Permissions                    | Notes                     |
+| --------- | -------------------------------------- | ------------------------- |
+| CEO       | All permissions, cannot be removed     | Corporation founder/owner |
+| Director  | Manage members, bank access, diplomacy | Senior leadership         |
+| Manager   | Invite members, limited bank access    | Operational leadership    |
+| Veteran   | Corp chat, shared research access      | Trusted members           |
+| Associate | Corp chat, basic benefits              | New members               |
 
 ### 7.3 Corporation Progression
 
@@ -396,13 +402,13 @@ Corporations earn Influence based on collective activities, unlocking organizati
 
 ### 8.1 Hostile Factions
 
-| Faction | Behavior | Rewards | Threat Level |
-|---------|----------|---------|--------------|
-| Feral Fauna | Roaming creatures, attack on contact | Organics, XP | Low |
-| Raider Gangs | Intercept caravans, raid outposts | Credits, Equipment | Medium |
-| Rogue Drones | Attack infrastructure, disable buildings | Tech components | Medium |
-| Xeno Hive | Periodic swarm attacks on regions | Xenotech, Rare mats | High |
-| Precursor Guardians | Defend anomaly sites | Legendary items | Very High |
+| Faction             | Behavior                                 | Rewards             | Threat Level |
+| ------------------- | ---------------------------------------- | ------------------- | ------------ |
+| Feral Fauna         | Roaming creatures, attack on contact     | Organics, XP        | Low          |
+| Raider Gangs        | Intercept caravans, raid outposts        | Credits, Equipment  | Medium       |
+| Rogue Drones        | Attack infrastructure, disable buildings | Tech components     | Medium       |
+| Xeno Hive           | Periodic swarm attacks on regions        | Xenotech, Rare mats | High         |
+| Precursor Guardians | Defend anomaly sites                     | Legendary items     | Very High    |
 
 ### 8.2 Environmental Pressure System
 
@@ -410,13 +416,13 @@ Dynamic environmental conditions create strategic pressure, preventing players f
 
 #### Environmental Events
 
-| Event | Effect | Mitigation | Duration |
-|-------|--------|------------|----------|
-| Ion Storm | Disables electronics, damages shields | Storm shelters, grounding | 4-12 hours |
-| Seismic Shift | Damages structures, reveals deposits | Reinforced foundations | 1-2 hours |
-| Radiation Surge | Damages unshielded units | Rad shielding research | 6-24 hours |
-| Dust Storm | Reduces visibility, slows movement | Sealed facilities | 12-48 hours |
-| Solar Flare | Communication blackout, bonus energy | Hardened electronics | 2-6 hours |
+| Event           | Effect                                | Mitigation                | Duration    |
+| --------------- | ------------------------------------- | ------------------------- | ----------- |
+| Ion Storm       | Disables electronics, damages shields | Storm shelters, grounding | 4-12 hours  |
+| Seismic Shift   | Damages structures, reveals deposits  | Reinforced foundations    | 1-2 hours   |
+| Radiation Surge | Damages unshielded units              | Rad shielding research    | 6-24 hours  |
+| Dust Storm      | Reduces visibility, slows movement    | Sealed facilities         | 12-48 hours |
+| Solar Flare     | Communication blackout, bonus energy  | Hardened electronics      | 2-6 hours   |
 
 #### Environmental Pressure Rules
 
@@ -435,16 +441,16 @@ Nova Fall uses a subscription model with a free-to-play option that limits acces
 
 ### 9.1 Tier Comparison
 
-| Feature | Free | Premium |
-|---------|------|---------|
-| Maximum Tech Tier | Tier 2 | All Tiers |
-| Node Limit | 5 nodes | Unlimited |
-| Corporation Features | Join only | Create & manage |
-| Market Access | Local only | Full access |
-| Research Queues | 1 queue | 3 queues |
-| Trade Routes | 3 active | Unlimited |
-| Storage Capacity | Base | +100% bonus |
-| Cosmetic Access | Basic | Full catalog |
+| Feature              | Free       | Premium         |
+| -------------------- | ---------- | --------------- |
+| Maximum Tech Tier    | Tier 2     | All Tiers       |
+| Node Limit           | 5 nodes    | Unlimited       |
+| Corporation Features | Join only  | Create & manage |
+| Market Access        | Local only | Full access     |
+| Research Queues      | 1 queue    | 3 queues        |
+| Trade Routes         | 3 active   | Unlimited       |
+| Storage Capacity     | Base       | +100% bonus     |
+| Cosmetic Access      | Basic      | Full catalog    |
 
 ### 9.2 Design Principles
 
@@ -459,18 +465,18 @@ Nova Fall uses a subscription model with a free-to-play option that limits acces
 
 ### 10.1 Technology Stack
 
-| Layer | Technology | Rationale |
-|-------|------------|-----------|
-| Frontend Framework | Vue 3 + TypeScript | Reactive UI, strong typing |
-| Game Renderer | PixiJS | Fast 2D WebGL, zoom levels |
-| State Management | Pinia | Vue-native, simple |
-| API Framework | Fastify | Fast Node.js, TypeScript |
-| ORM | Prisma | Type-safe database access |
-| Database | PostgreSQL | Complex queries, JSONB |
-| Cache/Realtime | Redis | Sessions, pub/sub |
-| WebSocket | Socket.io | Real-time communication |
-| Job Queue | BullMQ | Game tick processing |
-| Authentication | Passport.js + OAuth2 | Discord/Google login |
+| Layer              | Technology           | Rationale                  |
+| ------------------ | -------------------- | -------------------------- |
+| Frontend Framework | Vue 3 + TypeScript   | Reactive UI, strong typing |
+| Game Renderer      | PixiJS               | Fast 2D WebGL, zoom levels |
+| State Management   | Pinia                | Vue-native, simple         |
+| API Framework      | Fastify              | Fast Node.js, TypeScript   |
+| ORM                | Prisma               | Type-safe database access  |
+| Database           | PostgreSQL           | Complex queries, JSONB     |
+| Cache/Realtime     | Redis                | Sessions, pub/sub          |
+| WebSocket          | Socket.io            | Real-time communication    |
+| Job Queue          | BullMQ               | Game tick processing       |
+| Authentication     | Passport.js + OAuth2 | Discord/Google login       |
 
 ### 10.2 Railway Services
 
@@ -547,18 +553,21 @@ The Minimum Viable Product targets a 3-month development timeline with a single 
 ### 12.2 Post-MVP Features
 
 **Priority 1 (Month 4):**
+
 - Corporation system
 - Full player-to-player market
 - Additional unit types (4 more)
 - Additional structure types (4 more)
 
 **Priority 2 (Month 5):**
+
 - Environmental hazard system
 - Item upgrade system
 - More NPC threat types
 - Corporation wars
 
 **Priority 3 (Month 6):**
+
 - Subscription system
 - Advanced research tree
 - Anomaly events
@@ -568,23 +577,23 @@ The Minimum Viable Product targets a 3-month development timeline with a single 
 
 ## Appendix A: Key Values Quick Reference
 
-| Setting | Value |
-|---------|-------|
-| Map Size | 100 nodes |
-| Attack Prep Time | 24 hours ± 4 hours (random) |
-| Forces Lock | 1 hour before combat |
-| Combat Window | 30 minutes |
-| Post-Battle Immunity | 3 minutes |
-| Post-Battle Cooldown | 3 days (player attacks only) |
-| Starting Credits | 1,000 |
-| Starting Iron | 100 |
-| Starting Energy | 50 |
-| Base Node Upkeep | 50 Credits/hour |
-| Distance Upkeep Penalty | +15% per node from HQ |
-| Game Tick Interval | 5 seconds |
-| Free Tier Max Nodes | 5 |
-| Free Tier Max Tech | Tier 2 |
+| Setting                 | Value                        |
+| ----------------------- | ---------------------------- |
+| Map Size                | 100 nodes                    |
+| Attack Prep Time        | 24 hours ± 4 hours (random)  |
+| Forces Lock             | 1 hour before combat         |
+| Combat Window           | 30 minutes                   |
+| Post-Battle Immunity    | 3 minutes                    |
+| Post-Battle Cooldown    | 3 days (player attacks only) |
+| Starting Credits        | 1,000                        |
+| Starting Iron           | 100                          |
+| Starting Energy         | 50                           |
+| Base Node Upkeep        | 50 Credits/hour              |
+| Distance Upkeep Penalty | +15% per node from HQ        |
+| Game Tick Interval      | 5 seconds                    |
+| Free Tier Max Nodes     | 5                            |
+| Free Tier Max Tech      | Tier 2                       |
 
 ---
 
-*End of Game Design Document*
+_End of Game Design Document_

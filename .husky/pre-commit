@@ -1,0 +1,3 @@
+# Disabled: Windows/WSL environment mismatch
+# Run "pnpm lint" manually before committing from WSL
+exit 0
