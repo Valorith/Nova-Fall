@@ -18,7 +18,8 @@
       "Bash(pnpm --filter @nova-fall/shared build:*)",
       "Bash(pnpm --filter @nova-fall/api typecheck:*)",
       "Bash(pnpm --filter @nova-fall/web typecheck:*)",
-      "Bash(pnpm lint:fix:*)"
+      "Bash(pnpm lint:fix:*)",
+      "Bash(npx eslint:*)"
     ]
   }
 }

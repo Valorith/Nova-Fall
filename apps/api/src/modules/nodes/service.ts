@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma.js';
+import { publishNodeClaimed } from '../../lib/events.js';
 import type { NodeStatus, NodeType } from '@prisma/client';
 import type {
   MapNodeResponse,
@@ -286,8 +287,8 @@ export async function claimNode(
     },
   });
 
-  // Update player stats
-  await prisma.player.update({
+  // Update player stats and get player name
+  const player = await prisma.player.update({
     where: { id: playerId },
     data: {
       totalNodes: { increment: 1 },
@@ -297,7 +298,30 @@ export async function claimNode(
   // Get updated node details
   const updatedNode = await getNodeById(nodeId);
 
+  // Publish real-time event
   if (updatedNode) {
+    const nodePayload: MapNodeResponse = {
+      id: updatedNode.id,
+      name: updatedNode.name,
+      type: updatedNode.type,
+      tier: updatedNode.tier,
+      positionX: updatedNode.positionX,
+      positionY: updatedNode.positionY,
+      regionId: updatedNode.regionId,
+      ownerId: updatedNode.ownerId,
+      status: updatedNode.status,
+    };
+    if (updatedNode.ownerName) {
+      nodePayload.ownerName = updatedNode.ownerName;
+    }
+
+    await publishNodeClaimed({
+      nodeId,
+      node: nodePayload,
+      playerId,
+      playerName: player.displayName,
+    });
+
     return { success: true, node: updatedNode };
   }
   return { success: true };

@@ -192,10 +192,10 @@ Examples:
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
 | **Current Phase**  | Phase 1 - World & Nodes                   |
-| **Phase Progress** | Sections 1.1-1.4 (mostly complete)        |
-| **Current Task**   | Section 1.4 - Real-time updates (pending) |
+| **Phase Progress** | Sections 1.1-1.4 complete                 |
+| **Current Task**   | Section 1.5 - HQ placement & special rules|
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 7 - 2026-01-05                    |
+| **Last Session**   | Session 8 - 2026-01-05                    |
 | **Last Updated**   | 2026-01-05                                |
 
 ---

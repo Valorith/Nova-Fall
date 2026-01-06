@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 const envSchema = z.object({
   // Server
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -24,9 +26,13 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
 
-  // URLs
-  FRONTEND_URL: z.string().url().default('http://localhost:5173'),
-  API_URL: z.string().url().default('http://localhost:3000'),
+  // URLs - Required in production, defaults in development
+  FRONTEND_URL: isDev
+    ? z.string().url().default('http://localhost:5173')
+    : z.string().url({ message: 'FRONTEND_URL is required in production' }),
+  API_URL: isDev
+    ? z.string().url().default('http://localhost:3000')
+    : z.string().url({ message: 'API_URL is required in production' }),
 
   // Game Settings
   GAME_TICK_INTERVAL: z.coerce.number().default(5000),

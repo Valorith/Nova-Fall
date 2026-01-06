@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from 'vue';
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData } from '../game';
 import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, type MapNode } from '@nova-fall/shared';
+import { useGameStore } from '@/stores/game';
+
+const gameStore = useGameStore();
 
 const gameContainer = ref<HTMLDivElement | null>(null);
 const engine = ref<GameEngine | null>(null);
 const currentZoomLevel = ref<ZoomLevel>('strategic');
 const showControls = ref(true);
 const selectedNodeIds = ref<string[]>([]);
-const allNodes = ref<MapNode[]>([]);
+const useMockData = ref(false); // Set to true to use mock data for development
 
 // Get the selected nodes data
 const selectedNodes = computed(() => {
   return selectedNodeIds.value
-    .map(id => allNodes.value.find(n => n.id === id))
+    .map(id => gameStore.getNode(id))
     .filter((n): n is MapNode => n !== undefined);
 });
 
@@ -92,7 +95,7 @@ function generateMockMapData(): { nodes: MapNode[]; connections: ConnectionData[
   return { nodes, connections };
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (!gameContainer.value) return;
 
   // Initialize the game engine
@@ -111,18 +114,59 @@ onMounted(() => {
     selectedNodeIds.value = ids;
   };
 
-  // Load mock map data
-  const { nodes, connections } = generateMockMapData();
-  allNodes.value = nodes;
-  engine.value.loadMapData(nodes, connections);
+  // Load map data - use mock data if API not available or useMockData is true
+  if (useMockData.value) {
+    const { nodes, connections } = generateMockMapData();
+    // Store mock nodes in the game store
+    for (const node of nodes) {
+      gameStore.setNode(node);
+    }
+    engine.value.loadMapData(nodes, connections);
+  } else {
+    try {
+      // Connect to WebSocket for real-time updates
+      gameStore.connectSocket();
+
+      // Load from API
+      await gameStore.loadMapData();
+      engine.value.loadMapData(gameStore.nodeList, gameStore.connections);
+    } catch (err) {
+      console.warn('Failed to load from API, falling back to mock data:', err);
+      // Fallback to mock data
+      const { nodes, connections } = generateMockMapData();
+      for (const node of nodes) {
+        gameStore.setNode(node);
+      }
+      engine.value.loadMapData(nodes, connections);
+    }
+  }
 });
 
 onUnmounted(() => {
+  // Disconnect from WebSocket
+  gameStore.disconnectSocket();
+
   if (engine.value) {
     engine.value.destroy();
     engine.value = null;
   }
 });
+
+// Watch for node updates from WebSocket and update the renderer
+watch(
+  () => gameStore.recentlyUpdatedNodes.size,
+  () => {
+    if (!engine.value) return;
+
+    // Update any recently changed nodes in the renderer
+    for (const nodeId of gameStore.recentlyUpdatedNodes) {
+      const node = gameStore.getNode(nodeId);
+      if (node) {
+        engine.value.updateNode(nodeId, node);
+      }
+    }
+  }
+);
 
 function handleZoomIn() {
   engine.value?.zoomIn();

@@ -1137,11 +1137,11 @@ function getConnectionFace(fromNode, toNode): number {
   - [x] `GET /nodes/:id/connections` - Adjacent nodes
   - [x] `POST /nodes/:id/claim` - Claim neutral node
 
-- [ ] **Real-time updates**
-  - [ ] WebSocket connection setup
-  - [ ] Subscribe to node changes
-  - [ ] Update local state
-  - [ ] Visual change indicators
+- [x] **Real-time updates**
+  - [x] WebSocket connection setup (socket.io-client service)
+  - [x] Subscribe to node changes (game store WebSocket handlers)
+  - [x] Update local state (reactive node updates from events)
+  - [x] Visual change indicators (recentlyUpdatedNodes tracking)
 
 ### 1.5 Node Claiming
 
