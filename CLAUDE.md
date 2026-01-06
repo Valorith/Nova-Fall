@@ -191,11 +191,11 @@ Examples:
 
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
-| **Current Phase**  | Phase 0 Complete → Phase 1 Ready          |
-| **Phase Progress** | Sections 0.1-0.5 complete (22/22 tasks)   |
-| **Current Task**   | Phase 1.1 - World Map Data                |
-| **Blockers**       | Railway manual setup (optional)           |
-| **Last Session**   | Session 4 - 2026-01-05                    |
+| **Current Phase**  | Phase 1 - World & Nodes                   |
+| **Phase Progress** | Phase 0 complete, Phase 1 starting        |
+| **Current Task**   | Section 1.1 - Map Data Structure          |
+| **Blockers**       | None                                      |
+| **Last Session**   | Session 5 - 2026-01-05                    |
 | **Last Updated**   | 2026-01-05                                |
 
 ---

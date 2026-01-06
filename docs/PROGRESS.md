@@ -11,9 +11,9 @@
 | ---------------------- | --------------------- |
 | **Project Start Date** | 2026-01-04            |
 | **Current Phase**      | Phase 0 - Foundation  |
-| **Overall Progress**   | ~30% (Phase 0 code complete) |
+| **Overall Progress**   | Phase 0 Complete - Deployed |
 | **MVP Target Date**    | 2026-04-04 (3 months) |
-| **Total Sessions**     | 4                     |
+| **Total Sessions**     | 5                     |
 
 ---
 
@@ -21,7 +21,7 @@
 
 | Phase                             | Status         | Start Date | End Date | Duration |
 | --------------------------------- | -------------- | ---------- | -------- | -------- |
-| Phase 0: Foundation               | 🔵 In Progress | 2026-01-04 | -        | -        |
+| Phase 0: Foundation               | 🟢 Complete    | 2026-01-04 | 2026-01-05 | 2 days   |
 | Phase 1: World & Nodes            | ⚪ Pending     | -          | -        | -        |
 | Phase 2: Economy & Resources      | ⚪ Pending     | -          | -        | -        |
 | Phase 3: Buildings & Construction | ⚪ Pending     | -          | -        | -        |
@@ -314,6 +314,56 @@ All code for Phase 0 is complete. Manual Railway setup steps remain.
 
 ---
 
+## Session 5 - 2026-01-05
+
+**Duration:** ~30 minutes
+**Phase:** Phase 0 - Foundation
+**Focus:** Railway Deployment Fixes (0.5)
+
+### Completed Tasks
+
+**Section 0.5 - Railway Deployment (Fixes):**
+- [x] Debugged Railway deployment failures
+- [x] Removed problematic deployment files (Dockerfile, nixpacks.toml, railway.toml)
+- [x] Configured services via Railway dashboard instead
+- [x] Verified both API and Frontend services build successfully
+
+### Files Deleted
+
+- `apps/api/Dockerfile` - Caused monorepo context issues
+- `apps/api/nixpacks.toml` - Not needed with dashboard config
+- `apps/api/railway.toml` - Not needed with dashboard config
+
+### Issue Resolved
+
+The original Dockerfile failed because it tried to copy `packages/` directory but the Root Directory was set to `apps/api`, making the packages inaccessible. Solution: use Railway dashboard configuration with empty Root Directory and pnpm filter commands.
+
+### Railway Dashboard Configuration
+
+**API Service:**
+- Root Directory: *(empty)*
+- Build Command: `pnpm install --frozen-lockfile && pnpm --filter @nova-fall/api db:generate && pnpm --filter @nova-fall/api build`
+- Start Command: `pnpm --filter @nova-fall/api db:migrate && pnpm --filter @nova-fall/api start`
+
+**Frontend Service:**
+- Root Directory: *(empty)*
+- Build Command: `pnpm install --frozen-lockfile && pnpm --filter @nova-fall/web build`
+- Start Command: `npx serve apps/web/dist -s -l ${PORT:-3000}`
+
+### Notes
+
+- Both services now building successfully on Railway
+- Phase 0 code complete and deployed
+- Ready to proceed to Phase 1: World & Nodes
+
+### Next Session Plan
+
+1. Section 1.1 - Map Data Structure
+2. Section 1.2 - World Map Rendering
+3. Section 1.3 - Node Claiming
+
+---
+
 ---
 
 ## Blockers Log
@@ -467,4 +517,4 @@ All code for Phase 0 is complete. Manual Railway setup steps remain.
 
 ---
 
-_Last Updated: 2026-01-04_
+_Last Updated: 2026-01-05_
