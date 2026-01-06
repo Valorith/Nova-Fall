@@ -41,14 +41,18 @@ export async function authRoutes(app: FastifyInstance) {
       throw AppError.badRequest('Discord OAuth not configured');
     }
 
+    // Mark response as sent so Fastify doesn't try to send another
+    reply.hijack();
+
     // Passport redirects directly to Discord, bypassing Fastify's response handling
     passport.authenticate('discord', {
       session: false,
       scope: ['identify', 'email'],
-    })(request.raw, reply.raw, () => {});
-
-    // Mark response as sent so Fastify doesn't try to send another
-    reply.hijack();
+    })(request.raw, reply.raw, (err: Error | null) => {
+      if (err) {
+        app.log.error({ err }, 'Discord OAuth redirect error');
+      }
+    });
   });
 
   app.get('/auth/discord/callback', async (request, reply) => {
