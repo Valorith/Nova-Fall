@@ -997,25 +997,25 @@ enum StabilityLevel {
 
 ### 1.1 World Map Data
 
-- [ ] **Define map configuration**
-  - [ ] Node type definitions in `packages/shared`
-  - [ ] Map seed data structure
-  - [ ] Region definitions
+- [x] **Define map configuration**
+  - [x] Node type definitions in `packages/shared`
+  - [x] Map seed data structure
+  - [x] Region definitions
 
-- [ ] **Create initial map**
-  - [ ] Design 100 node map (hybrid: procedural regions + hand-crafted key locations)
-  - [ ] Define node positions (spread across map regions)
-  - [ ] Create node connections (average 3-4 connections per node)
-  - [ ] Assign node types (balanced distribution)
-  - [ ] Set initial resources per node type
-  - [ ] Define 5-8 distinct regions for environmental zones
-  - [ ] Place key locations (central trade hub, resource-rich areas, chokepoints)
+- [x] **Create initial map**
+  - [x] Design 100 node map (hybrid: procedural regions + hand-crafted key locations)
+  - [x] Define node positions (spread across map regions)
+  - [x] Create node connections (average 3-4 connections per node)
+  - [x] Assign node types (balanced distribution)
+  - [x] Set initial resources per node type
+  - [x] Define 5-8 distinct regions for environmental zones
+  - [x] Place key locations (central trade hub, resource-rich areas, chokepoints)
 
-- [ ] **Seed database**
-  - [ ] Create seed script
-  - [ ] Insert nodes
-  - [ ] Insert connections
-  - [ ] Insert environment zones
+- [x] **Seed database**
+  - [x] Create seed script
+  - [x] Insert nodes
+  - [x] Insert connections
+  - [x] Insert environment zones
 
 ### 1.2 PixiJS Integration
 

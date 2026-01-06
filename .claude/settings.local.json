@@ -14,7 +14,9 @@
       "Bash(pnpm build:*)",
       "Bash(pnpm db:generate:*)",
       "Bash(pnpm lint:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(pnpm --filter @nova-fall/shared build:*)",
+      "Bash(pnpm --filter @nova-fall/api typecheck:*)"
     ]
   }
 }
