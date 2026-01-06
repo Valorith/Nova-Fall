@@ -1040,27 +1040,27 @@ enum StabilityLevel {
 
 ### 1.3 Map Rendering
 
-- [ ] **Create render layers**
-  - [ ] Background layer
-  - [ ] Connection lines layer
-  - [ ] Node icons layer
-  - [ ] UI overlay layer
+- [x] **Create render layers**
+  - [x] Background layer
+  - [x] Connection lines layer
+  - [x] Node icons layer
+  - [x] UI overlay layer
 
-- [ ] **Render node connections**
-  - [ ] Line rendering with road types
-  - [ ] Danger level coloring
-  - [ ] Distance labels
+- [x] **Render node connections**
+  - [x] Line rendering with road types
+  - [x] Danger level coloring
+  - [~] Distance labels (deferred - not essential for MVP)
 
-- [ ] **Render nodes**
-  - [ ] Node type icons
-  - [ ] Ownership colors
-  - [ ] Status indicators
-  - [ ] Name labels
+- [x] **Render nodes**
+  - [x] Node type icons
+  - [x] Ownership colors
+  - [x] Status indicators
+  - [x] Name labels
 
-- [ ] **Implement culling**
-  - [ ] Only render visible elements
-  - [ ] LOD system for zoom levels
-  - [ ] Object pooling
+- [x] **Implement culling**
+  - [x] Only render visible elements
+  - [x] LOD system for zoom levels
+  - [~] Object pooling (deferred - optimize if needed)
 
 ### 1.4 Node Interaction
 

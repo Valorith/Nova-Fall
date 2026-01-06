@@ -1,6 +1,7 @@
 import { Application, Container } from 'pixi.js';
 import { Camera, CameraOptions } from './Camera';
-import { MAP_BOUNDS } from '@nova-fall/shared';
+import { MAP_BOUNDS, MapNode, RoadType } from '@nova-fall/shared';
+import { WorldRenderer } from '../rendering/WorldRenderer';
 
 export interface GameEngineOptions {
   container: HTMLElement;
@@ -26,10 +27,20 @@ export const ZOOM_LEVELS: ZoomLevelConfig[] = [
   { level: 'combat', minScale: 1.2, maxScale: 3.0, label: 'Combat View' },
 ];
 
+export interface ConnectionData {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  roadType: RoadType;
+  dangerLevel: number;
+}
+
 export class GameEngine {
   private app: Application;
   private camera: Camera;
   private worldContainer: Container;
+  private worldRenderer: WorldRenderer;
   private resizeObserver: ResizeObserver | null = null;
   private animationFrameId: number | null = null;
   private _isDestroyed = false;
@@ -37,6 +48,7 @@ export class GameEngine {
 
   // Event callbacks
   public onZoomLevelChange?: (level: ZoomLevel) => void;
+  public onNodeClick?: (node: MapNode) => void;
 
   constructor(options: GameEngineOptions) {
     const { container, width, height, backgroundColor = 0x0a0a0f } = options;
@@ -47,6 +59,10 @@ export class GameEngine {
     // Create world container (this gets panned/zoomed)
     this.worldContainer = new Container();
     this.worldContainer.label = 'world';
+
+    // Create world renderer
+    this.worldRenderer = new WorldRenderer();
+    this.worldRenderer.addToContainer(this.worldContainer);
 
     // Create camera
     const cameraOptions = options.camera ?? {};
@@ -104,6 +120,9 @@ export class GameEngine {
     // Initial camera position (center of map)
     this.camera.setPosition(MAP_BOUNDS.width / 2, MAP_BOUNDS.height / 2);
     this.camera.setViewportSize(width, height);
+
+    // Pass camera to renderer for culling
+    this.worldRenderer.setCamera(this.camera);
   }
 
   private setupInputHandlers() {
@@ -114,12 +133,19 @@ export class GameEngine {
 
     // Track drag state
     let isDragging = false;
+    let hasMoved = false;
+    let startX = 0;
+    let startY = 0;
     let lastX = 0;
     let lastY = 0;
+    const DRAG_THRESHOLD = 5;
 
     // Mouse/touch down
     const onPointerDown = (e: PointerEvent) => {
       isDragging = true;
+      hasMoved = false;
+      startX = e.clientX;
+      startY = e.clientY;
       lastX = e.clientX;
       lastY = e.clientY;
       canvas.setPointerCapture(e.pointerId);
@@ -132,6 +158,13 @@ export class GameEngine {
       const deltaX = e.clientX - lastX;
       const deltaY = e.clientY - lastY;
 
+      // Check if we've moved enough to consider it a drag
+      const totalDeltaX = e.clientX - startX;
+      const totalDeltaY = e.clientY - startY;
+      if (Math.abs(totalDeltaX) > DRAG_THRESHOLD || Math.abs(totalDeltaY) > DRAG_THRESHOLD) {
+        hasMoved = true;
+      }
+
       // Pan the camera (inverse movement for natural dragging)
       this.camera.pan(-deltaX / this.camera.scale, -deltaY / this.camera.scale);
 
@@ -141,8 +174,21 @@ export class GameEngine {
 
     // Mouse/touch up
     const onPointerUp = (e: PointerEvent) => {
+      const wasClick = !hasMoved && isDragging;
       isDragging = false;
       canvas.releasePointerCapture(e.pointerId);
+
+      // Handle click (not drag)
+      if (wasClick) {
+        const rect = canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        const worldPos = this.screenToWorld(screenX, screenY);
+        const node = this.worldRenderer.getNodeAtPosition(worldPos.x, worldPos.y);
+        if (node && this.onNodeClick) {
+          this.onNodeClick(node);
+        }
+      }
     };
 
     // Mouse wheel zoom
@@ -198,6 +244,9 @@ export class GameEngine {
       this.worldContainer.y = -this.camera.y * this.camera.scale + this.app.screen.height / 2;
       this.worldContainer.scale.set(this.camera.scale);
 
+      // Update visibility (culling)
+      this.worldRenderer.updateVisibility();
+
       this.animationFrameId = requestAnimationFrame(update);
     };
 
@@ -223,6 +272,7 @@ export class GameEngine {
 
     if (newLevel !== this._currentZoomLevel) {
       this._currentZoomLevel = newLevel;
+      this.worldRenderer.setZoomLevel(newLevel);
       this.onZoomLevelChange?.(newLevel);
     }
   }
@@ -329,5 +379,20 @@ export class GameEngine {
     const screenX = (worldX - this.camera.x) * this.camera.scale + this.app.screen.width / 2;
     const screenY = (worldY - this.camera.y) * this.camera.scale + this.app.screen.height / 2;
     return { x: screenX, y: screenY };
+  }
+
+  // Load map data
+  public loadMapData(nodes: MapNode[], connections: ConnectionData[]) {
+    this.worldRenderer.setMapData(nodes, connections);
+  }
+
+  // Update a single node (for real-time updates)
+  public updateNode(nodeId: string, data: Partial<MapNode>) {
+    this.worldRenderer.updateNode(nodeId, data);
+  }
+
+  // Highlight a node
+  public highlightNode(nodeId: string, highlight: boolean) {
+    this.worldRenderer.highlightNode(nodeId, highlight);
   }
 }
