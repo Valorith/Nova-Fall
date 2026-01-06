@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 1 - World & Nodes    |
 | **Overall Progress**   | Phase 1.1-1.4 complete     |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 9                          |
+| **Total Sessions**     | 10                         |
 
 ---
 
@@ -622,6 +622,72 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 
 ---
 
+## Session 10 - 2026-01-06
+
+**Duration:** ~2 hours
+**Phase:** Phase 1 - World & Nodes (paused)
+**Focus:** Landing page animation revitalization
+
+### Completed Tasks
+
+**Landing Page Animation:**
+- [x] Created looping 18-second spaceship landing animation
+- [x] Implemented starfield background with twinkling stars
+- [x] SVG spaceship with engine thrust effects descending to planet
+- [x] Planet surface with landing pad and atmospheric glow
+- [x] Progressive space complex construction (7 rings of buildings)
+- [x] Central hub, habitat modules, solar panels, communication antenna, reactor
+- [x] Glass dome structures with growing plants
+- [x] Construction cranes with swinging arms and hooks
+- [x] Laser defense turret (aims and fires at enemy ships)
+- [x] Missile battery (launches missiles at enemy ships)
+- [x] Two enemy spaceships that approach and flee when engaged
+- [x] Laser beam attached to turret barrel (rotates with cannon)
+- [x] Missiles point in direction of travel
+- [x] Enemy ships move at reasonable speed
+
+**Bug Fixes:**
+- [x] Fixed TypeScript error in socket.ts (`delete` instead of `undefined` assignment)
+- [x] Fixed turret rotation direction (positive = clockwise = upward aim)
+- [x] Fixed laser beam origin to match cannon barrel
+- [x] Fixed missile rotation to point nose-first
+- [x] Fixed animation loop reset (structures don't disappear prematurely)
+
+### Files Modified
+
+- `apps/web/src/views/HomeView.vue` - Complete landing page animation (~1900 lines)
+- `apps/web/src/services/socket.ts` - Fixed TypeScript error on line 119
+
+### Animation Timeline (18 seconds)
+
+| Time | Event |
+|------|-------|
+| 0-44% | Spaceship descends through starfield |
+| 44% | Ship lands on pad |
+| 50-85% | Complex buildings construct progressively (7 rings) |
+| 85-87% | Defense systems appear |
+| 78-98% | Left enemy ship approaches, laser fires, ship flees |
+| 79-99% | Right enemy ship approaches, missiles launch, ship flees |
+| 93-100% | Animation fades, loop restarts |
+
+### Notes
+
+- Animation uses pure CSS keyframes (no JavaScript animation libraries)
+- All buildings are CSS shapes with gradients and box-shadows
+- Enemy ships are SVG with detailed design (engine pods, hostile markings)
+- Laser beam is `::after` pseudo-element on turret cannon for automatic rotation
+- Complex container is 900px wide to accommodate 7 rings of structures
+
+### Next Session Plan
+
+1. Test WebSocket connection end-to-end (local)
+2. Section 1.5 - HQ placement and special rules
+3. Seed production database with map data
+4. Connect frontend to real API
+5. Test node claiming end-to-end
+
+---
+
 ---
 
 ## Blockers Log
@@ -785,4 +851,4 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 
 ---
 
-_Last Updated: 2026-01-05_
+_Last Updated: 2026-01-06_
