@@ -342,7 +342,7 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 
 **API Service:**
 - Root Directory: *(empty)*
-- Build Command: `pnpm install --frozen-lockfile && pnpm --filter @nova-fall/api db:generate && pnpm --filter @nova-fall/api build`
+- Build Command: `pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm --filter @nova-fall/game-logic build && pnpm --filter @nova-fall/api db:generate && pnpm --filter @nova-fall/api build`
 - Start Command: `pnpm --filter @nova-fall/api db:migrate && pnpm --filter @nova-fall/api start`
 
 **Frontend Service:**
@@ -1333,6 +1333,7 @@ regionMultiplier = region.upkeepModifier  // 1.0-1.5 based on region
 | 'tsx' not recognized | Dependencies installed from WSL, Windows needs .cmd binaries | User ran `pnpm install` from Windows PowerShell |
 | Prisma binary mismatch | Generated for debian-openssl-3.0.x, Windows needs native | Added `binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]` to schema.prisma |
 | Redis ECONNREFUSED in ws-server | ws-server not loading .env file | Added `import 'dotenv/config'` and dotenv dependency |
+| Production crash: shared module not found | Railway build didn't build workspace packages | Updated build command to include shared and game-logic builds |
 
 ### Files Modified
 
@@ -1345,6 +1346,11 @@ regionMultiplier = region.upkeepModifier  // 1.0-1.5 based on region
 - Development environment must use `pnpm install` from Windows PowerShell, not WSL
 - After installing from PowerShell, run `npx prisma generate` in apps/api to regenerate client
 - All services now connect to Railway Redis and PostgreSQL from Windows
+
+**Railway API Build Command (updated):**
+```
+pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm --filter @nova-fall/game-logic build && pnpm --filter @nova-fall/api db:generate && pnpm --filter @nova-fall/api build
+```
 
 ### Next Steps
 
