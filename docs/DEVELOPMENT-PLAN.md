@@ -1019,24 +1019,24 @@ enum StabilityLevel {
 
 ### 1.2 PixiJS Integration
 
-- [ ] **Set up game engine**
-  - [ ] Create `GameEngine` class
-  - [ ] Initialize PixiJS application
-  - [ ] Handle canvas resize
-  - [ ] Set up render loop
+- [x] **Set up game engine**
+  - [x] Create `GameEngine` class
+  - [x] Initialize PixiJS application
+  - [x] Handle canvas resize
+  - [x] Set up render loop
 
-- [ ] **Create camera system**
-  - [ ] Pan controls (drag)
-  - [ ] Zoom controls (wheel, pinch)
-  - [ ] Smooth interpolation
-  - [ ] Bounds limiting
+- [x] **Create camera system**
+  - [x] Pan controls (drag)
+  - [x] Zoom controls (wheel, pinch)
+  - [x] Smooth interpolation
+  - [x] Bounds limiting
 
-- [ ] **Implement zoom levels**
-  - [ ] Level 1: Strategic (all nodes visible)
-  - [ ] Level 2: Regional (node clusters)
-  - [ ] Level 3: Node detail (building grid)
-  - [ ] Level 4: Combat (battle view) - placeholder
-  - [ ] Automatic level switching on zoom
+- [x] **Implement zoom levels**
+  - [x] Level 1: Strategic (all nodes visible)
+  - [x] Level 2: Regional (node clusters)
+  - [x] Level 3: Node detail (building grid)
+  - [x] Level 4: Combat (battle view) - placeholder
+  - [x] Automatic level switching on zoom
 
 ### 1.3 Map Rendering
 
