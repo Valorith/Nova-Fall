@@ -95,6 +95,45 @@ The game world consists of 100 interconnected nodes representing locations on th
 | Agricultural   | Food, Organics     | Sustains population      | 0.8x            |
 | Power Plant    | Energy Credits     | Powers operations        | 1.1x            |
 
+#### Node Visual Design
+
+Nodes are rendered as **hexagons** with 6 connection faces, providing visual clarity for route planning:
+
+```
+        Face 0 (North)
+            /\
+      5(NW)/  \1(NE)
+          |    |
+      4(SW)\  /2(SE)
+            \/
+        Face 3 (South)
+```
+
+**Visual Layers** (inside to outside):
+1. **Inner Fill**: Color-coded by node type (Mining=brown, Research=blue, etc.)
+2. **Border Ring**: Indicates ownership status
+   - Gray: Neutral/unclaimed
+   - Player Color: Claimed by player
+   - Orange: Contested
+   - Red Pulse: Under attack
+3. **Selection Ring**: Green glow when selected
+4. **Tier Indicators**: Small gold dots around edge (1-3 based on tier)
+5. **Connection Anchors**: Small markers on faces with active connections
+
+**Connection Lines**:
+- Connect face-to-face between hexagons
+- Style varies by road type:
+  - **Dirt**: Brown dashed line
+  - **Paved**: Gray solid line
+  - **Highway**: Gold thick line
+  - **Hazardous**: Red pulsing line with danger overlay
+
+**Map Organization**:
+- Nodes have organic placement (not a strict hex grid)
+- Each node can have 1-6 connections (typically 3-4)
+- Connection direction calculated from relative node positions
+- Regional boundaries shown as subtle colored overlays
+
 ### 3.2 Zoom Levels
 
 The game features four distinct zoom levels:

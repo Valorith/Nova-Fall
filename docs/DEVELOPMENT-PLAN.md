@@ -1057,7 +1057,61 @@ enum StabilityLevel {
   - [x] Status indicators
   - [~] Name labels (disabled due to PixiJS v8 text rendering bug - TODO)
 
-> **Design Note**: Nodes should be rendered as hexagons with 6 clear connection faces. Each face can connect to an adjacent node, making connections visually intuitive. This will be implemented when refining the node graphics.
+#### Hexagon Node Design Specification
+
+Nodes are rendered as hexagons with 6 connection faces for visual clarity:
+
+```
+        Face 0 (N)
+          /\
+    5(NW)/  \1(NE)
+        |    |
+    4(SW)\  /2(SE)
+          \/
+        Face 3 (S)
+```
+
+**Visual Structure:**
+- **Shape**: Flat-top hexagon (pointy sides)
+- **Size**: ~36px radius at node zoom level, scales with zoom
+- **Layers** (inside to outside):
+  1. Inner fill: Node type color
+  2. Border ring: Ownership/status color
+  3. Selection ring: Green glow when selected
+  4. Connection anchors: Small dots on active faces
+
+**Connection Rendering:**
+- Lines connect from face center to face center
+- Road type determines line style:
+  - Dirt: Brown dashed (#8b7355)
+  - Paved: Gray solid (#a0a0a0)
+  - Highway: Gold thick (#ffd700)
+  - Hazardous: Red pulsing (#ff4500)
+- Danger level adds red overlay (0-100 → 0%-50% alpha)
+
+**Map Layout:**
+- Nodes are NOT on a strict hex grid (organic placement)
+- Connections are explicit (stored in database)
+- Each node can have 1-6 connections (average ~3.5)
+- Connection faces are calculated based on angle to neighbor
+
+**Face Calculation:**
+```typescript
+function getConnectionFace(fromNode, toNode): number {
+  const angle = Math.atan2(
+    toNode.positionY - fromNode.positionY,
+    toNode.positionX - fromNode.positionX
+  );
+  // Convert angle to face (0-5), 0 = North
+  return Math.round(((angle + Math.PI) / Math.PI * 3) + 3) % 6;
+}
+```
+
+**Implementation Priority:**
+1. [ ] Update node graphics from circle to hexagon
+2. [ ] Add face anchor points for connections
+3. [ ] Update connection lines to use anchors
+4. [ ] Add visual indicators for used/unused faces
 
 - [x] **Implement culling**
   - [x] Only render visible elements
@@ -1091,15 +1145,15 @@ enum StabilityLevel {
 
 ### 1.5 Node Claiming
 
-- [ ] **Claiming mechanics**
-  - [ ] Validate player can claim
-  - [ ] Check node is neutral
-  - [ ] Check adjacency requirement
-  - [ ] Deduct claiming cost
-  - [ ] Update ownership
+- [~] **Claiming mechanics** (partially implemented via POST /nodes/:id/claim)
+  - [x] Validate player can claim
+  - [x] Check node is neutral
+  - [x] Check adjacency requirement
+  - [~] Deduct claiming cost (TODO - skipped for MVP testing)
+  - [x] Update ownership
 
 - [ ] **HQ placement**
-  - [ ] First node becomes HQ
+  - [~] First node becomes HQ (identified but not marked as HQ type)
   - [ ] Special HQ rules
   - [ ] Cannot be abandoned
 

@@ -536,6 +536,7 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 | 2025-01-04 | Pre-dev | 30 min combat window       | Battle duration set |
 | 2025-01-04 | Pre-dev | 3-day post-battle cooldown | Anti-grief mechanic |
 | 2025-01-04 | Pre-dev | Discord + Google OAuth     | Auth providers set  |
+| 2026-01-05 | 7       | Hexagon nodes with faces   | Visual clarity      |
 
 ---
 
@@ -543,10 +544,10 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 
 | Milestone                       | Target Date | Actual Date | Status |
 | ------------------------------- | ----------- | ----------- | ------ |
-| Project Setup Complete          | Week 1      | -           | ⚪     |
-| Auth Working (Discord + Google) | Week 2      | -           | ⚪     |
-| World Map Viewable              | Week 4      | -           | ⚪     |
-| First Node Claimed              | Week 4      | -           | ⚪     |
+| Project Setup Complete          | Week 1      | 2026-01-05  | 🟢     |
+| Auth Working (Discord + Google) | Week 2      | 2026-01-06  | 🟢     |
+| World Map Viewable              | Week 4      | -           | 🔵     |
+| First Node Claimed              | Week 4      | -           | 🔵     |
 | First Building Constructed      | Week 8      | -           | ⚪     |
 | First Combat Completed          | Week 11     | -           | ⚪     |
 | First Trade Caravan Sent        | Week 12     | -           | ⚪     |
@@ -562,6 +563,8 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 | ID  | Date Added | Description                                    | Priority | Resolved |
 | --- | ---------- | ---------------------------------------------- | -------- | -------- |
 | TD1 | 2026-01-06 | PixiJS v8 text rendering disabled (canvas bug) | Medium   | No       |
+| TD2 | 2026-01-05 | Node claiming cost not deducted (skipped MVP)  | Low      | No       |
+| TD3 | 2026-01-05 | HQ special rules not implemented               | Medium   | No       |
 
 ---
 
@@ -579,11 +582,11 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 
 ### Phase 1: World & Nodes
 
-- [ ] World map renders all 100 nodes
-- [ ] Zoom levels transition smoothly
-- [ ] Node selection works
-- [ ] Node details panel displays correctly
-- [ ] Node claiming works
+- [~] World map renders all 100 nodes (mock data works, real API pending)
+- [x] Zoom levels transition smoothly
+- [x] Node selection works
+- [x] Node details panel displays correctly
+- [~] Node claiming works (API ready, frontend not connected)
 - [ ] Real-time updates work between clients
 
 ### Phase 2: Economy & Resources
