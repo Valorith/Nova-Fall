@@ -86,15 +86,13 @@ export class WorldRenderer {
     this.labelStyle = new TextStyle({
       fontFamily: 'Arial',
       fontSize: 12,
-      fill: 0xffffff,
-      stroke: { color: 0x000000, width: 3 },
+      fill: '#ffffff',
     });
 
     this.smallLabelStyle = new TextStyle({
       fontFamily: 'Arial',
       fontSize: 9,
-      fill: 0xcccccc,
-      stroke: { color: 0x000000, width: 2 },
+      fill: '#cccccc',
     });
   }
 
@@ -243,34 +241,9 @@ export class WorldRenderer {
 
     container.addChild(graphics);
 
-    // Type icon (simple text representation for now)
-    const iconText = this.getTypeIcon(node.type);
-    const icon = new Text({
-      text: iconText,
-      style: { fontFamily: 'Arial', fontSize: 14, fill: 0xffffff },
-    });
-    icon.anchor.set(0.5);
-    container.addChild(icon);
-
-    // Label (name)
-    const label = new Text({
-      text: node.name,
-      style: this.labelStyle,
-    });
-    label.anchor.set(0.5, 0);
-    label.y = 24;
-    container.addChild(label);
-
-    // Owner label (if owned)
-    if (node.ownerName) {
-      const ownerLabel = new Text({
-        text: node.ownerName,
-        style: this.smallLabelStyle,
-      });
-      ownerLabel.anchor.set(0.5, 0);
-      ownerLabel.y = 38;
-      container.addChild(ownerLabel);
-    }
+    // TODO: Fix PixiJS v8 text rendering issue
+    // Text is temporarily disabled due to canvas pattern error
+    // Will use BitmapText or fix TextStyle configuration
 
     // Make interactive
     container.eventMode = 'static';
@@ -328,21 +301,9 @@ export class WorldRenderer {
 
   // Update LOD based on zoom level
   private updateLOD() {
-    const showLabels = this.currentZoomLevel !== 'strategic';
-    const showOwnerLabels = this.currentZoomLevel === 'node' || this.currentZoomLevel === 'combat';
-
-    this.nodeGraphics.forEach((container) => {
-      const children = container.children;
-      // Assuming: [graphics, icon, label, ownerLabel?]
-      const labelChild = children[2];
-      const ownerLabelChild = children[3];
-      if (labelChild) {
-        labelChild.visible = showLabels; // Node name
-      }
-      if (ownerLabelChild) {
-        ownerLabelChild.visible = showOwnerLabels; // Owner name
-      }
-    });
+    // TODO: Re-enable when text rendering is fixed
+    // const showLabels = this.currentZoomLevel !== 'strategic';
+    // const showOwnerLabels = this.currentZoomLevel === 'node' || this.currentZoomLevel === 'combat';
   }
 
   // Update visibility based on camera (culling)

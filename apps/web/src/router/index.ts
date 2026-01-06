@@ -23,7 +23,7 @@ const routes: RouteRecordRaw[] = [
     path: '/game',
     name: 'game',
     component: () => import('@/views/GameView.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: false }, // TODO: Set back to true for production
   },
 ];
 

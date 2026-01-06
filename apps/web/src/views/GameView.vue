@@ -1,11 +1,79 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
-import { GameEngine, ZOOM_LEVELS, type ZoomLevel } from '../game';
+import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData } from '../game';
+import { NodeType, NodeStatus, RoadType, type MapNode } from '@nova-fall/shared';
 
 const gameContainer = ref<HTMLDivElement | null>(null);
 const engine = ref<GameEngine | null>(null);
 const currentZoomLevel = ref<ZoomLevel>('strategic');
 const showControls = ref(true);
+const selectedNode = ref<MapNode | null>(null);
+
+// Generate mock map data for testing
+function generateMockMapData(): { nodes: MapNode[]; connections: ConnectionData[] } {
+  const nodes: MapNode[] = [];
+  const connections: ConnectionData[] = [];
+
+  // Seeded random for consistent results
+  let seed = 42;
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+
+  const nodeTypes = Object.values(NodeType).filter(t => t !== NodeType.CAPITAL);
+  const statuses = [NodeStatus.NEUTRAL, NodeStatus.CLAIMED, NodeStatus.NEUTRAL, NodeStatus.NEUTRAL];
+
+  // Generate 100 nodes
+  for (let i = 0; i < 100; i++) {
+    const type = nodeTypes[Math.floor(random() * nodeTypes.length)] as NodeType;
+    const status = statuses[Math.floor(random() * statuses.length)] as NodeStatus;
+
+    nodes.push({
+      id: `node-${i.toString().padStart(3, '0')}`,
+      name: `Node ${i}`,
+      type,
+      tier: Math.floor(random() * 3) + 1,
+      positionX: 100 + random() * 1800,
+      positionY: 100 + random() * 1800,
+      regionId: 'central-plains',
+      ownerId: status === NodeStatus.CLAIMED ? 'player-1' : null,
+      ownerName: status === NodeStatus.CLAIMED ? 'Player One' : undefined,
+      status,
+    });
+  }
+
+  // Generate connections (each node connects to 2-4 nearest neighbors)
+  const connected = new Set<string>();
+  for (const node of nodes) {
+    const nearby = nodes
+      .filter(n => n.id !== node.id)
+      .map(n => ({
+        node: n,
+        dist: Math.sqrt((n.positionX - node.positionX) ** 2 + (n.positionY - node.positionY) ** 2),
+      }))
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, Math.floor(random() * 3) + 2);
+
+    for (const { node: other, dist } of nearby) {
+      const key = [node.id, other.id].sort().join('-');
+      if (connected.has(key)) continue;
+      connected.add(key);
+
+      const roadTypes = [RoadType.DIRT, RoadType.PAVED, RoadType.HIGHWAY];
+      connections.push({
+        fromX: node.positionX,
+        fromY: node.positionY,
+        toX: other.positionX,
+        toY: other.positionY,
+        roadType: roadTypes[Math.floor(random() * roadTypes.length)] as RoadType,
+        dangerLevel: Math.floor(random() * 50),
+      });
+    }
+  }
+
+  return { nodes, connections };
+}
 
 onMounted(() => {
   if (!gameContainer.value) return;
@@ -20,6 +88,16 @@ onMounted(() => {
   engine.value.onZoomLevelChange = (level) => {
     currentZoomLevel.value = level;
   };
+
+  // Listen for node clicks
+  engine.value.onNodeClick = (node) => {
+    selectedNode.value = node;
+    console.log('Node clicked:', node);
+  };
+
+  // Load mock map data
+  const { nodes, connections } = generateMockMapData();
+  engine.value.loadMapData(nodes, connections);
 });
 
 onUnmounted(() => {

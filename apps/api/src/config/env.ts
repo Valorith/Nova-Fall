@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { z } from 'zod';
 
 const envSchema = z.object({
@@ -10,7 +11,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
 
   // Redis
-  REDIS_URL: z.string().url(),
+  REDIS_URL: z.string().startsWith('redis://'),
 
   // Session
   SESSION_SECRET: z.string().min(32),

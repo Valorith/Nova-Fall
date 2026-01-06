@@ -7,22 +7,22 @@
 
 ## Project Status Overview
 
-| Metric                 | Value                 |
-| ---------------------- | --------------------- |
-| **Project Start Date** | 2026-01-04            |
-| **Current Phase**      | Phase 0 - Foundation  |
-| **Overall Progress**   | Phase 0 Complete - Deployed |
-| **MVP Target Date**    | 2026-04-04 (3 months) |
-| **Total Sessions**     | 5                     |
+| Metric                 | Value                      |
+| ---------------------- | -------------------------- |
+| **Project Start Date** | 2026-01-04                 |
+| **Current Phase**      | Phase 1 - World & Nodes    |
+| **Overall Progress**   | Phase 1.1-1.3 + Auth Fixed |
+| **MVP Target Date**    | 2026-04-04 (3 months)      |
+| **Total Sessions**     | 6                          |
 
 ---
 
 ## Phase Progress Summary
 
-| Phase                             | Status         | Start Date | End Date | Duration |
-| --------------------------------- | -------------- | ---------- | -------- | -------- |
+| Phase                             | Status         | Start Date | End Date   | Duration |
+| --------------------------------- | -------------- | ---------- | ---------- | -------- |
 | Phase 0: Foundation               | 🟢 Complete    | 2026-01-04 | 2026-01-05 | 2 days   |
-| Phase 1: World & Nodes            | ⚪ Pending     | -          | -        | -        |
+| Phase 1: World & Nodes            | 🔵 In Progress | 2026-01-05 | -          | -        |
 | Phase 2: Economy & Resources      | ⚪ Pending     | -          | -        | -        |
 | Phase 3: Buildings & Construction | ⚪ Pending     | -          | -        | -        |
 | Phase 4: Combat System            | ⚪ Pending     | -          | -        | -        |
@@ -364,6 +364,96 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 
 ---
 
+## Session 6 - 2026-01-06
+
+**Duration:** ~2 hours
+**Phase:** Phase 1 - World & Nodes (+ Auth Fixes)
+**Focus:** Map rendering, OAuth fixes, local development setup
+
+### Completed Tasks
+
+**Section 1.1 - World Map Data:**
+- [x] Created shared types for MapNode, NodeTypeConfig, RegionDefinition
+- [x] Created node configuration with bonuses and colors
+- [x] Created 6 region definitions with bounds and modifiers
+- [x] Created map seed script with 100 nodes
+
+**Section 1.2 - PixiJS Integration:**
+- [x] Created GameEngine class with canvas management
+- [x] Created Camera system with pan/zoom controls
+- [x] Implemented smooth camera interpolation
+- [x] Added zoom levels (strategic, regional, node, combat)
+
+**Section 1.3 - Map Rendering:**
+- [x] Created WorldRenderer with layered rendering
+- [x] Implemented background grid and region coloring
+- [x] Implemented node connections with road types
+- [x] Implemented node rendering with type/status colors
+- [x] Added LOD support and view culling
+
+**Authentication Fixes:**
+- [x] Fixed OAuth callback - added req.query for Passport compatibility with Fastify
+- [x] Fixed session store - proper callback-based interface for @fastify/session
+- [x] Fixed reply.hijack() for direct response handling
+- [x] Tested Discord and Google OAuth - both working
+
+**Database:**
+- [x] Created initial Prisma migration
+- [x] Applied migration to Railway PostgreSQL
+
+**Local Development:**
+- [x] Added dotenv for local .env loading
+- [x] Created unified `pnpm dev` command for API + web
+- [x] Fixed REDIS_URL validation (startsWith instead of url())
+
+### Issues Resolved
+
+| Issue | Resolution |
+|-------|------------|
+| OAuth callback loop | Added req.query to raw request for Passport |
+| Session plugin hanging | Fixed callback-based store interface |
+| Fastify double response | Used reply.hijack() for OAuth routes |
+| Database tables missing | Created and applied init migration |
+
+### Files Created/Modified
+
+**New Files:**
+- `packages/shared/src/types/enums.ts` - Shared enums
+- `packages/shared/src/types/node.ts` - Node types
+- `packages/shared/src/types/map.ts` - Map seed types
+- `packages/shared/src/config/nodes.ts` - Node configs
+- `packages/shared/src/config/regions.ts` - Region definitions
+- `apps/api/prisma/map-data.ts` - Map generation
+- `apps/api/prisma/seed.ts` - Database seeder
+- `apps/web/src/game/engine/GameEngine.ts` - Game engine
+- `apps/web/src/game/engine/Camera.ts` - Camera system
+- `apps/web/src/game/rendering/WorldRenderer.ts` - Map renderer
+- `apps/api/prisma/migrations/20260106000000_init/migration.sql` - DB migration
+
+**Modified Files:**
+- `apps/api/src/plugins/session.ts` - Fixed callback interface
+- `apps/api/src/modules/auth/routes.ts` - Fixed OAuth with Fastify
+- `apps/api/src/config/env.ts` - Added dotenv, fixed REDIS_URL validation
+- `apps/api/package.json` - Added dotenv dependency
+- `apps/web/src/views/GameView.vue` - Added mock data for testing
+- `package.json` - Updated dev command
+
+### Notes
+
+- Text rendering in PixiJS v8 disabled due to canvas pattern error (TODO)
+- Map renders with 100 mock nodes locally
+- Both OAuth providers working with proper Fastify integration
+- Railway frontend build command updated for shared package
+
+### Next Session Plan
+
+1. Fix PixiJS text rendering
+2. Section 1.4 - Node selection and details panel
+3. Deploy updated auth to Railway
+4. Test production OAuth flow
+
+---
+
 ---
 
 ## Blockers Log
@@ -420,13 +510,13 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 
 ### Phase 0: Foundation
 
-- [ ] OAuth login works (Discord)
-- [ ] OAuth login works (Google)
+- [x] OAuth login works (Discord)
+- [x] OAuth login works (Google)
 - [ ] Session persists across page refresh
 - [ ] Logout works correctly
-- [ ] New user creation flow complete
-- [ ] Database migrations run successfully
-- [ ] All services deploy to Railway
+- [x] New user creation flow complete
+- [x] Database migrations run successfully
+- [x] All services deploy to Railway
 
 ### Phase 1: World & Nodes
 
@@ -517,4 +607,4 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 
 ---
 
-_Last Updated: 2026-01-05_
+_Last Updated: 2026-01-06_

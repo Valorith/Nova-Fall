@@ -4,7 +4,7 @@ import { config } from '../../config/index.js';
 import { verifyAccessToken } from '../../lib/jwt.js';
 import { AppError } from '../../plugins/error-handler.js';
 import * as authService from './service.js';
-import type { AuthUser } from './types.js';
+import type { AuthUser, OAuthProfile } from './types.js';
 
 export async function authRoutes(app: FastifyInstance) {
   // Middleware to verify JWT token
@@ -41,47 +41,58 @@ export async function authRoutes(app: FastifyInstance) {
       throw AppError.badRequest('Discord OAuth not configured');
     }
 
-    return new Promise<void>((resolve, reject) => {
-      passport.authenticate('discord', {
-        session: false,
-      })(request.raw, reply.raw, (err: Error) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    // Passport redirects directly to Discord, bypassing Fastify's response handling
+    passport.authenticate('discord', {
+      session: false,
+      scope: ['identify', 'email'],
+    })(request.raw, reply.raw, () => {});
+
+    // Mark response as sent so Fastify doesn't try to send another
+    reply.hijack();
   });
 
   app.get('/auth/discord/callback', async (request, reply) => {
-    return new Promise<void>((resolve, reject) => {
-      passport.authenticate('discord', {
-        session: false,
-        failureRedirect: `${config.urls.frontend}/login?error=discord_failed`,
-      })(request.raw, reply.raw, async (err: Error) => {
-        if (err) {
-          return reject(err);
-        }
+    reply.hijack();
 
-        try {
-          const profile = app.getPendingOAuthProfile();
-          if (!profile) {
-            return reply.redirect(`${config.urls.frontend}/login?error=no_profile`);
-          }
+    // Passport expects Express-style req.query - add it to raw request
+    const rawReq = request.raw as typeof request.raw & { query: Record<string, string> };
+    rawReq.query = request.query as Record<string, string>;
 
-          const user = await authService.findOrCreateUser(profile);
-          const tokens = await authService.createSession(user);
+    passport.authenticate('discord', {
+      session: false,
+    }, async (err: Error | null, user: OAuthProfile | false) => {
+      const res = reply.raw;
 
-          // Redirect to frontend with tokens
-          const redirectUrl = new URL(`${config.urls.frontend}/auth/callback`);
-          redirectUrl.searchParams.set('accessToken', tokens.accessToken);
-          redirectUrl.searchParams.set('refreshToken', tokens.refreshToken);
+      if (err) {
+        app.log.error({ err }, 'Discord OAuth error');
+        res.writeHead(302, { Location: `${config.urls.frontend}/login?error=discord_failed` });
+        res.end();
+        return;
+      }
 
-          reply.redirect(redirectUrl.toString());
-          resolve();
-        } catch (error) {
-          reject(error);
-        }
-      });
-    });
+      if (!user) {
+        app.log.warn('Discord OAuth - no user returned');
+        res.writeHead(302, { Location: `${config.urls.frontend}/login?error=discord_failed` });
+        res.end();
+        return;
+      }
+
+      try {
+        const dbUser = await authService.findOrCreateUser(user);
+        const tokens = await authService.createSession(dbUser);
+
+        const redirectUrl = new URL(`${config.urls.frontend}/auth/callback`);
+        redirectUrl.searchParams.set('accessToken', tokens.accessToken);
+        redirectUrl.searchParams.set('refreshToken', tokens.refreshToken);
+
+        res.writeHead(302, { Location: redirectUrl.toString() });
+        res.end();
+      } catch (error) {
+        app.log.error({ error }, 'Discord OAuth callback error');
+        res.writeHead(302, { Location: `${config.urls.frontend}/login?error=discord_failed` });
+        res.end();
+      }
+    })(rawReq, reply.raw, () => {});
   });
 
   // ==================== Google OAuth ====================
@@ -91,48 +102,60 @@ export async function authRoutes(app: FastifyInstance) {
       throw AppError.badRequest('Google OAuth not configured');
     }
 
-    return new Promise<void>((resolve, reject) => {
-      passport.authenticate('google', {
-        session: false,
-        scope: ['profile', 'email'],
-      })(request.raw, reply.raw, (err: Error) => {
-        if (err) reject(err);
-        else resolve();
-      });
+    reply.hijack();
+
+    passport.authenticate('google', {
+      session: false,
+      scope: ['profile', 'email'],
+    })(request.raw, reply.raw, (err: Error | null) => {
+      if (err) {
+        app.log.error({ err }, 'Google OAuth redirect error');
+      }
     });
   });
 
   app.get('/auth/google/callback', async (request, reply) => {
-    return new Promise<void>((resolve, reject) => {
-      passport.authenticate('google', {
-        session: false,
-        failureRedirect: `${config.urls.frontend}/login?error=google_failed`,
-      })(request.raw, reply.raw, async (err: Error) => {
-        if (err) {
-          return reject(err);
-        }
+    reply.hijack();
 
-        try {
-          const profile = app.getPendingOAuthProfile();
-          if (!profile) {
-            return reply.redirect(`${config.urls.frontend}/login?error=no_profile`);
-          }
+    // Passport expects Express-style req.query - add it to raw request
+    const rawReq = request.raw as typeof request.raw & { query: Record<string, string> };
+    rawReq.query = request.query as Record<string, string>;
 
-          const user = await authService.findOrCreateUser(profile);
-          const tokens = await authService.createSession(user);
+    passport.authenticate('google', {
+      session: false,
+    }, async (err: Error | null, user: OAuthProfile | false) => {
+      const res = reply.raw;
 
-          // Redirect to frontend with tokens
-          const redirectUrl = new URL(`${config.urls.frontend}/auth/callback`);
-          redirectUrl.searchParams.set('accessToken', tokens.accessToken);
-          redirectUrl.searchParams.set('refreshToken', tokens.refreshToken);
+      if (err) {
+        app.log.error({ err }, 'Google OAuth error');
+        res.writeHead(302, { Location: `${config.urls.frontend}/login?error=google_failed` });
+        res.end();
+        return;
+      }
 
-          reply.redirect(redirectUrl.toString());
-          resolve();
-        } catch (error) {
-          reject(error);
-        }
-      });
-    });
+      if (!user) {
+        app.log.warn('Google OAuth - no user returned');
+        res.writeHead(302, { Location: `${config.urls.frontend}/login?error=google_failed` });
+        res.end();
+        return;
+      }
+
+      try {
+        const dbUser = await authService.findOrCreateUser(user);
+        const tokens = await authService.createSession(dbUser);
+
+        const redirectUrl = new URL(`${config.urls.frontend}/auth/callback`);
+        redirectUrl.searchParams.set('accessToken', tokens.accessToken);
+        redirectUrl.searchParams.set('refreshToken', tokens.refreshToken);
+
+        res.writeHead(302, { Location: redirectUrl.toString() });
+        res.end();
+      } catch (error) {
+        app.log.error({ error }, 'Google OAuth callback error');
+        res.writeHead(302, { Location: `${config.urls.frontend}/login?error=google_failed` });
+        res.end();
+      }
+    })(rawReq, reply.raw, () => {});
   });
 
   // ==================== Token Management ====================
