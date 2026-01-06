@@ -1,4 +1,4 @@
-import type { NodeType, NodeStatus, RoadType } from '@prisma/client';
+import type { NodeType, NodeStatus, RoadType, UpkeepStatus } from '@prisma/client';
 
 // Node data for map display (minimal)
 export interface MapNodeResponse {
@@ -12,6 +12,8 @@ export interface MapNodeResponse {
   ownerId: string | null;
   ownerName?: string;
   status: NodeStatus;
+  isHQ?: boolean;
+  upkeepStatus?: UpkeepStatus;
 }
 
 // Full node details
@@ -19,11 +21,13 @@ export interface NodeDetailResponse extends MapNodeResponse {
   storage: Record<string, number>;
   claimedAt: string | null;
   upkeepDue: string | null;
+  upkeepPaid: string | null;
   buildingCount: number;
   garrisonCount: number;
   attackCooldownUntil: string | null;
   attackImmunityUntil: string | null;
   connections: NodeConnectionResponse[];
+  isHQ: boolean;
 }
 
 // Node connection info

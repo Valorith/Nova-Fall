@@ -71,3 +71,24 @@ export enum CaravanStatus {
   INTERCEPTED = 'INTERCEPTED',
   DESTROYED = 'DESTROYED',
 }
+
+// Upkeep status for tracking payment failures
+export enum UpkeepStatus {
+  PAID = 'PAID',           // Upkeep is current
+  WARNING = 'WARNING',     // 0-12h unpaid - warning phase
+  DECAY = 'DECAY',         // 12-36h unpaid - structures start decaying
+  COLLAPSE = 'COLLAPSE',   // 36-48h unpaid - collapse phase, major damage
+  ABANDONED = 'ABANDONED', // 48h+ unpaid - node reverts to neutral
+}
+
+// Terrain types for non-node hex cells
+export enum TerrainType {
+  PLAINS = 'PLAINS', // Basic passable terrain
+  FOREST = 'FOREST', // Slows movement, provides cover
+  MOUNTAIN = 'MOUNTAIN', // Impassable
+  WATER = 'WATER', // Impassable (deep water)
+  MARSH = 'MARSH', // Difficult terrain
+  DESERT = 'DESERT', // Hot, increases upkeep
+  TUNDRA = 'TUNDRA', // Cold, increases upkeep
+  WASTELAND = 'WASTELAND', // Irradiated, hazardous
+}

@@ -1,11 +1,8 @@
 // Game constants and settings
 
-// Starting resources for new players
-export const STARTING_RESOURCES = {
-  credits: 1000,
-  iron: 100,
-  energy: 50,
-} as const;
+// Starting resources moved to config/resources.ts
+// Re-export for backwards compatibility
+export { STARTING_RESOURCES } from '../config/resources';
 
 // Upkeep settings
 export const UPKEEP = {

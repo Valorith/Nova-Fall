@@ -1,8 +1,13 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { MapNode, RoadType } from '@nova-fall/shared';
+import type { MapNode, RoadType, ResourceStorage } from '@nova-fall/shared';
 import { api } from '@/services/api';
-import { gameSocket, type NodeClaimedEvent, type NodeUpdateEvent } from '@/services/socket';
+import {
+  gameSocket,
+  type NodeClaimedEvent,
+  type NodeUpdateEvent,
+  type ResourcesUpdateEvent,
+} from '@/services/socket';
 
 // API response types
 interface MapNodeApiResponse extends MapNode {
@@ -31,6 +36,8 @@ export interface ConnectionData {
 export const useGameStore = defineStore('game', () => {
   const nodes = ref<Map<string, MapNode>>(new Map());
   const connections = ref<ConnectionData[]>([]);
+  const nodeStorage = ref<Map<string, ResourceStorage>>(new Map());
+  const currentTick = ref(0);
   const isLoading = ref(false);
   const error = ref<string | null>(null);
   const isSocketConnected = ref(false);
@@ -88,6 +95,13 @@ export const useGameStore = defineStore('game', () => {
     markNodeAsUpdated(node.id);
   }
 
+  // Batch load nodes without triggering update notifications (for initial load)
+  function loadNodesBatch(nodeList: MapNode[]): void {
+    for (const node of nodeList) {
+      nodes.value.set(node.id, node);
+    }
+  }
+
   // Mark a node as recently updated (for visual feedback)
   function markNodeAsUpdated(nodeId: string): void {
     recentlyUpdatedNodes.value.add(nodeId);
@@ -115,6 +129,23 @@ export const useGameStore = defineStore('game', () => {
     setNode(event.node);
   }
 
+  function handleResourcesUpdate(event: ResourcesUpdateEvent): void {
+    currentTick.value = event.tick;
+    for (const update of event.updates) {
+      nodeStorage.value.set(update.nodeId, update.storage);
+    }
+  }
+
+  // Get storage for a node
+  function getNodeStorage(nodeId: string): ResourceStorage | undefined {
+    return nodeStorage.value.get(nodeId);
+  }
+
+  // Update storage for a node (for mock data)
+  function setNodeStorage(nodeId: string, storage: ResourceStorage): void {
+    nodeStorage.value.set(nodeId, storage);
+  }
+
   // Connect to WebSocket and set up handlers
   function connectSocket(): void {
     gameSocket.on('connect', () => {
@@ -127,6 +158,7 @@ export const useGameStore = defineStore('game', () => {
 
     gameSocket.on('node:update', handleNodeUpdate);
     gameSocket.on('node:claimed', handleNodeClaimed);
+    gameSocket.on('resources:update', handleResourcesUpdate);
 
     gameSocket.connect();
   }
@@ -137,6 +169,7 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.off('disconnect');
     gameSocket.off('node:update');
     gameSocket.off('node:claimed');
+    gameSocket.off('resources:update');
     gameSocket.disconnect();
     isSocketConnected.value = false;
   }
@@ -145,6 +178,8 @@ export const useGameStore = defineStore('game', () => {
     // State
     nodes,
     connections,
+    nodeStorage,
+    currentTick,
     isLoading,
     error,
     isSocketConnected,
@@ -157,7 +192,10 @@ export const useGameStore = defineStore('game', () => {
     loadMapData,
     updateNode,
     setNode,
+    loadNodesBatch,
     getNode,
+    getNodeStorage,
+    setNodeStorage,
     isNodeRecentlyUpdated,
     connectSocket,
     disconnectSocket,

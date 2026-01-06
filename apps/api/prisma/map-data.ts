@@ -1,5 +1,5 @@
-// Nova Prime - The main 100-node map for Nova Fall
-// Hybrid design: Hand-crafted key locations + procedural distribution
+// Nova Prime - The main 1000-node map for Nova Fall
+// 4-player map with capitals at corners + hex grid layout
 
 import type {
   NodeSeed,
@@ -9,12 +9,61 @@ import type {
 import {
   NodeType,
   RoadType,
-  StabilityLevel,
   REGIONS,
-  MAP_BOUNDS
 } from '@nova-fall/shared';
 
-// Seeded random number generator for reproducible maps
+// ============================================
+// Hex Grid Utilities (matching frontend)
+// ============================================
+
+interface HexCoord {
+  q: number;
+  r: number;
+}
+
+interface PixelCoord {
+  x: number;
+  y: number;
+}
+
+// Hex size configuration (must match frontend)
+const HEX_SIZE = 28;
+const GRID_OFFSET_X = 100;
+const GRID_OFFSET_Y = 100;
+
+// Convert axial hex coordinates to pixel coordinates
+function hexToPixel(hex: HexCoord): PixelCoord {
+  const x = HEX_SIZE * (3 / 2) * hex.q + GRID_OFFSET_X;
+  const y = HEX_SIZE * (Math.sqrt(3) / 2 * hex.q + Math.sqrt(3) * hex.r) + GRID_OFFSET_Y;
+  return { x, y };
+}
+
+// Get the 6 neighboring hex coordinates
+function hexNeighbors(hex: HexCoord): HexCoord[] {
+  const directions: HexCoord[] = [
+    { q: 1, r: 0 },   // East
+    { q: 1, r: -1 },  // Northeast
+    { q: 0, r: -1 },  // Northwest
+    { q: -1, r: 0 },  // West
+    { q: -1, r: 1 },  // Southwest
+    { q: 0, r: 1 },   // Southeast
+  ];
+
+  return directions.map((dir) => ({
+    q: hex.q + dir.q,
+    r: hex.r + dir.r,
+  }));
+}
+
+// Create a hex coordinate key for Map/Set usage
+function hexKey(hex: HexCoord): string {
+  return `${hex.q},${hex.r}`;
+}
+
+// ============================================
+// Seeded Random Number Generator
+// ============================================
+
 function seededRandom(seed: number): () => number {
   return function () {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
@@ -22,12 +71,10 @@ function seededRandom(seed: number): () => number {
   };
 }
 
-// Distance between two points
-function distance(x1: number, y1: number, x2: number, y2: number): number {
-  return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-}
+// ============================================
+// Region Assignment
+// ============================================
 
-// Get region ID for a position
 function getRegionId(x: number, y: number): string {
   for (const region of REGIONS) {
     if (
@@ -42,8 +89,11 @@ function getRegionId(x: number, y: number): string {
   return 'central-plains';
 }
 
-// Generate node name based on type and index
-function generateNodeName(type: NodeType, index: number, isKeyLocation: boolean): string {
+// ============================================
+// Node Name Generation
+// ============================================
+
+function generateNodeName(type: NodeType, index: number): string {
   const prefixes: Record<NodeType, string[]> = {
     [NodeType.MINING]: ['Iron Ridge', 'Deep Mine', 'Ore Pit', 'Crystal Vein', 'Stone Quarry'],
     [NodeType.REFINERY]: ['Smelter', 'Foundry', 'Processing Hub', 'Alloy Works', 'Metal Forge'],
@@ -59,44 +109,13 @@ function generateNodeName(type: NodeType, index: number, isKeyLocation: boolean)
   const names = prefixes[type];
   const baseName = names[index % names.length];
 
-  if (isKeyLocation) {
-    return `${baseName} Prime`;
-  }
-
   return `${baseName} ${suffixes[index % suffixes.length]}`;
 }
 
-// Key locations - hand-crafted positions
-const KEY_LOCATIONS: {
-  x: number;
-  y: number;
-  type: NodeType;
-  name: string;
-  tier: number;
-}[] = [
-  // Central Trade Hub
-  { x: 1000, y: 1000, type: NodeType.TRADE_HUB, name: 'Central Exchange', tier: 3 },
+// ============================================
+// Node Type Distribution
+// ============================================
 
-  // Regional capitals / key nodes
-  { x: 500, y: 300, type: NodeType.MINING, name: 'Northern Mines', tier: 2 },
-  { x: 1500, y: 300, type: NodeType.MINING, name: 'Frost Quarry', tier: 2 },
-  { x: 1700, y: 1000, type: NodeType.POWER_PLANT, name: 'Eastern Grid', tier: 2 },
-  { x: 300, y: 1000, type: NodeType.FORTRESS, name: 'Frontier Bastion', tier: 2 },
-  { x: 1000, y: 1700, type: NodeType.RESEARCH, name: 'Marsh Observatory', tier: 2 },
-
-  // Chokepoints
-  { x: 650, y: 650, type: NodeType.FORTRESS, name: 'Western Gate', tier: 2 },
-  { x: 1350, y: 650, type: NodeType.FORTRESS, name: 'Eastern Gate', tier: 2 },
-  { x: 650, y: 1350, type: NodeType.FORTRESS, name: 'Southern Gate', tier: 2 },
-  { x: 1350, y: 1350, type: NodeType.FORTRESS, name: 'Trade Gate', tier: 2 },
-
-  // Resource hotspots
-  { x: 200, y: 200, type: NodeType.REFINERY, name: 'Deadzone Refinery', tier: 3 },
-  { x: 800, y: 1800, type: NodeType.RESEARCH, name: 'Crystal Labs', tier: 2 },
-  { x: 1800, y: 800, type: NodeType.POWER_PLANT, name: 'Highland Reactor', tier: 2 },
-];
-
-// Node type distribution by region
 const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
   'central-plains': {
     [NodeType.MINING]: 1,
@@ -160,7 +179,6 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
   },
 };
 
-// Select node type based on region weights
 function selectNodeType(regionId: string, random: () => number): NodeType {
   const weights = REGION_TYPE_WEIGHTS[regionId] || REGION_TYPE_WEIGHTS['central-plains'];
   const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
@@ -176,182 +194,231 @@ function selectNodeType(regionId: string, random: () => number): NodeType {
   return NodeType.AGRICULTURAL;
 }
 
-// Generate the map
+// ============================================
+// Map Generation
+// ============================================
+
 export function generateMap(seed = 42): MapSeed {
   const random = seededRandom(seed);
   const nodes: NodeSeed[] = [];
   const connections: ConnectionSeed[] = [];
-  const MIN_NODE_DISTANCE = 80;
-  const MAX_CONNECTION_DISTANCE = 350;
+  const nodeCount = 1000;
 
-  // Add key locations first
-  KEY_LOCATIONS.forEach((loc, index) => {
-    nodes.push({
-      id: `node-${index.toString().padStart(3, '0')}`,
-      name: loc.name,
-      type: loc.type,
-      tier: loc.tier,
-      positionX: loc.x,
-      positionY: loc.y,
-      regionId: getRegionId(loc.x, loc.y),
-      isKeyLocation: true,
-    });
-  });
+  // Grid bounds in pixel space (matching frontend)
+  const GRID_PADDING = 150;
+  const GRID_SIZE_PX = 1600;
+  const minPx = GRID_PADDING;
+  const maxPx = GRID_PADDING + GRID_SIZE_PX;
 
-  // Generate remaining nodes to reach 100
-  const targetCount = 100;
-  let attempts = 0;
-  const maxAttempts = 10000;
-  let nodeIndex = nodes.length;
+  // Helper to check if a hex is within square pixel bounds
+  const isInSquareBounds = (hex: HexCoord): boolean => {
+    const pixel = hexToPixel(hex);
+    return pixel.x >= minPx && pixel.x <= maxPx && pixel.y >= minPx && pixel.y <= maxPx;
+  };
 
-  while (nodes.length < targetCount && attempts < maxAttempts) {
-    attempts++;
+  // Phase 1: Generate ALL hex positions within the square bounds via flood-fill
+  const allPositions: HexCoord[] = [];
+  const visited = new Set<string>();
+  const frontier: HexCoord[] = [];
 
-    const x = random() * MAP_BOUNDS.width;
-    const y = random() * MAP_BOUNDS.height;
+  const startHex = { q: 20, r: 15 }; // Approximate center
+  allPositions.push(startHex);
+  visited.add(hexKey(startHex));
+  frontier.push(...hexNeighbors(startHex).filter(n => isInSquareBounds(n)));
 
-    let tooClose = false;
-    for (const node of nodes) {
-      if (distance(x, y, node.positionX, node.positionY) < MIN_NODE_DISTANCE) {
-        tooClose = true;
-        break;
+  // Fill the entire square with hexes
+  while (frontier.length > 0) {
+    const hex = frontier.pop()!;
+    const key = hexKey(hex);
+    if (visited.has(key)) continue;
+    visited.add(key);
+
+    if (isInSquareBounds(hex)) {
+      allPositions.push(hex);
+      for (const neighbor of hexNeighbors(hex)) {
+        if (!visited.has(hexKey(neighbor))) {
+          frontier.push(neighbor);
+        }
       }
     }
+  }
 
-    if (tooClose) continue;
+  // Phase 2: Find corner hexes for capital nodes (player starting positions)
+  const positionsWithPixels = allPositions.map(hex => ({
+    hex,
+    pixel: hexToPixel(hex)
+  }));
 
-    const regionId = getRegionId(x, y);
-    const type = selectNodeType(regionId, random);
+  // Find min/max x and y values
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const { pixel } of positionsWithPixels) {
+    minX = Math.min(minX, pixel.x);
+    maxX = Math.max(maxX, pixel.x);
+    minY = Math.min(minY, pixel.y);
+    maxY = Math.max(maxY, pixel.y);
+  }
 
-    nodes.push({
-      id: `node-${nodeIndex.toString().padStart(3, '0')}`,
-      name: generateNodeName(type, nodeIndex, false),
+  // Find corner hexes
+  const yTolerance = 50;
+  const topRow = positionsWithPixels.filter(p => p.pixel.y <= minY + yTolerance);
+  const bottomRow = positionsWithPixels.filter(p => p.pixel.y >= maxY - yTolerance);
+
+  const topLeft = topRow.reduce((best, curr) =>
+    curr.pixel.x < best.pixel.x ? curr : best
+  );
+  const topRight = topRow.reduce((best, curr) =>
+    curr.pixel.x > best.pixel.x ? curr : best
+  );
+  const bottomLeft = bottomRow.reduce((best, curr) =>
+    curr.pixel.x < best.pixel.x ? curr : best
+  );
+  const bottomRight = bottomRow.reduce((best, curr) =>
+    curr.pixel.x > best.pixel.x ? curr : best
+  );
+
+  const cornerHexes = [topLeft, topRight, bottomLeft, bottomRight];
+  const cornerHexKeys = new Set<string>(cornerHexes.map(c => hexKey(c.hex)));
+  const capitalNames = ['Solaris Prime', 'Frosthold Station', 'Ironworks Hub', 'Shadowport'];
+
+  // Phase 3: Shuffle positions, but ensure corners are included
+  const nonCornerPositions = allPositions.filter(h => !cornerHexKeys.has(hexKey(h)));
+  const cornerPositions = cornerHexes.map(c => c.hex);
+
+  // Shuffle non-corner positions
+  const shuffled = [...nonCornerPositions];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+  }
+
+  // Take corners + enough shuffled positions to reach nodeCount
+  const nodePositions = [...cornerPositions, ...shuffled.slice(0, nodeCount - cornerPositions.length)];
+  const nodeHexKeys = new Set<string>(nodePositions.map(h => hexKey(h)));
+
+  console.log(`Generated ${allPositions.length} total hex positions, using ${nodePositions.length} for nodes`);
+
+  // Build node lookup map
+  const hexToNode = new Map<string, NodeSeed>();
+  const nodeTypes = Object.values(NodeType).filter(t => t !== NodeType.CAPITAL);
+  let nodeIndex = 0;
+  let capitalIndex = 0;
+
+  // Calculate map center for tier calculation
+  const mapCenterX = (minPx + maxPx) / 2; // ~950
+  const mapCenterY = (minPx + maxPx) / 2; // ~950
+  const maxDistanceFromCenter = Math.sqrt(
+    Math.pow(maxPx - mapCenterX, 2) + Math.pow(maxPx - mapCenterY, 2)
+  ); // Distance from center to corner
+
+  // Calculate tier based on distance from center (1-3, higher near center)
+  function calculateTier(x: number, y: number): number {
+    const distFromCenter = Math.sqrt(
+      Math.pow(x - mapCenterX, 2) + Math.pow(y - mapCenterY, 2)
+    );
+    const normalizedDist = distFromCenter / maxDistanceFromCenter; // 0 = center, 1 = corner
+
+    // Tier 3 in center (0-33%), Tier 2 in middle (33-66%), Tier 1 at edges (66-100%)
+    if (normalizedDist < 0.33) return 3;
+    if (normalizedDist < 0.66) return 2;
+    return 1;
+  }
+
+  // Generate nodes at hex positions
+  for (const hex of nodePositions) {
+    const pixel = hexToPixel(hex);
+    const key = hexKey(hex);
+    const isCorner = cornerHexKeys.has(key);
+
+    // Corner nodes are CAPITAL type, others use region weights
+    const regionId = getRegionId(pixel.x, pixel.y);
+    const type = isCorner ? NodeType.CAPITAL : selectNodeType(regionId, random);
+    const name = isCorner
+      ? (capitalNames[capitalIndex++] ?? `Capital ${capitalIndex}`)
+      : generateNodeName(type, nodeIndex);
+
+    // Capitals are tier 3, others based on distance from center
+    const tier = isCorner ? 3 : calculateTier(pixel.x, pixel.y);
+
+    const node: NodeSeed = {
+      id: `node-${nodeIndex.toString().padStart(4, '0')}`,
+      name,
       type,
-      tier: 1,
-      positionX: Math.round(x),
-      positionY: Math.round(y),
+      tier,
+      positionX: Math.round(pixel.x),
+      positionY: Math.round(pixel.y),
       regionId,
-      isKeyLocation: false,
-    });
+      isKeyLocation: isCorner,
+    };
 
+    nodes.push(node);
+    hexToNode.set(key, node);
     nodeIndex++;
   }
 
-  // Generate connections
+  // Generate connections between adjacent hexes only
   const connectionSet = new Set<string>();
+  const roadTypes = [RoadType.DIRT, RoadType.PAVED, RoadType.HIGHWAY];
 
-  for (const node of nodes) {
-    const nearby = nodes
-      .filter((n) => n.id !== node.id)
-      .map((n) => ({
-        node: n,
-        dist: distance(node.positionX, node.positionY, n.positionX, n.positionY),
-      }))
-      .filter((n) => n.dist <= MAX_CONNECTION_DISTANCE)
-      .sort((a, b) => a.dist - b.dist);
+  for (const hex of nodePositions) {
+    const node = hexToNode.get(hexKey(hex));
+    if (!node) continue;
 
-    const connectionCount = Math.floor(random() * 4) + 2;
-    let connected = 0;
+    const neighbors = hexNeighbors(hex);
 
-    for (const { node: other, dist } of nearby) {
-      if (connected >= connectionCount) break;
+    for (const neighborHex of neighbors) {
+      const neighborKey = hexKey(neighborHex);
+      if (!nodeHexKeys.has(neighborKey)) continue;
 
-      const key1 = `${node.id}-${other.id}`;
-      const key2 = `${other.id}-${node.id}`;
+      const neighborNode = hexToNode.get(neighborKey);
+      if (!neighborNode) continue;
 
-      if (connectionSet.has(key1) || connectionSet.has(key2)) continue;
+      // Create unique connection key (sorted to avoid duplicates)
+      const connKey = [node.id, neighborNode.id].sort().join('-');
+      if (connectionSet.has(connKey)) continue;
+      connectionSet.add(connKey);
 
-      let roadType = RoadType.DIRT;
-      if (node.isKeyLocation || other.isKeyLocation) {
-        roadType = dist < 200 ? RoadType.HIGHWAY : RoadType.PAVED;
-      } else if (dist < 150) {
+      // Determine road type based on node importance
+      let roadType: RoadType;
+      if (node.isKeyLocation || neighborNode.isKeyLocation) {
+        roadType = RoadType.HIGHWAY;
+      } else if (node.tier >= 2 || neighborNode.tier >= 2) {
         roadType = RoadType.PAVED;
+      } else {
+        roadType = roadTypes[Math.floor(random() * roadTypes.length)] as RoadType;
       }
 
-      if (node.regionId === 'deadzone' || other.regionId === 'deadzone') {
+      // Hazardous roads in deadzone
+      if (node.regionId === 'deadzone' || neighborNode.regionId === 'deadzone') {
         roadType = RoadType.HAZARDOUS;
       }
 
-      const baseTime = Math.round(dist / 10);
-      const travelTime = Math.round(
-        baseTime *
-          (roadType === RoadType.HIGHWAY
-            ? 0.5
-            : roadType === RoadType.PAVED
-              ? 0.75
-              : roadType === RoadType.HAZARDOUS
-                ? 1.5
-                : 1.0)
-      );
-
+      // Calculate danger level
       let dangerLevel = Math.round(random() * 20);
-      if (node.regionId === 'deadzone' || other.regionId === 'deadzone') {
+      if (node.regionId === 'deadzone' || neighborNode.regionId === 'deadzone') {
         dangerLevel += 50;
-      } else if (node.regionId === 'western-frontier' || other.regionId === 'western-frontier') {
+      } else if (node.regionId === 'western-frontier' || neighborNode.regionId === 'western-frontier') {
         dangerLevel += 30;
-      } else if (node.regionId === 'northern-wastes' || other.regionId === 'northern-wastes') {
+      } else if (node.regionId === 'northern-wastes' || neighborNode.regionId === 'northern-wastes') {
         dangerLevel += 20;
       }
       dangerLevel = Math.min(100, dangerLevel);
 
       connections.push({
         fromNodeId: node.id,
-        toNodeId: other.id,
-        distance: travelTime,
+        toNodeId: neighborNode.id,
+        distance: 1, // All adjacent hexes have distance 1
         dangerLevel,
         roadType,
       });
-
-      connectionSet.add(key1);
-      connected++;
     }
   }
 
-  // Ensure all nodes are reachable
-  const connectedNodes = new Set<string>();
-  const queue = [nodes[0].id];
-  connectedNodes.add(nodes[0].id);
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    for (const conn of connections) {
-      if (conn.fromNodeId === current && !connectedNodes.has(conn.toNodeId)) {
-        connectedNodes.add(conn.toNodeId);
-        queue.push(conn.toNodeId);
-      }
-      if (conn.toNodeId === current && !connectedNodes.has(conn.fromNodeId)) {
-        connectedNodes.add(conn.fromNodeId);
-        queue.push(conn.fromNodeId);
-      }
-    }
-  }
-
-  // Connect isolated nodes
-  for (const node of nodes) {
-    if (!connectedNodes.has(node.id)) {
-      let nearestConnected: NodeSeed | null = null;
-      let nearestDist = Infinity;
-
-      for (const other of nodes) {
-        if (connectedNodes.has(other.id)) {
-          const dist = distance(node.positionX, node.positionY, other.positionX, other.positionY);
-          if (dist < nearestDist) {
-            nearestDist = dist;
-            nearestConnected = other;
-          }
-        }
-      }
-
-      if (nearestConnected) {
-        connections.push({
-          fromNodeId: node.id,
-          toNodeId: nearestConnected.id,
-          distance: Math.round(nearestDist / 10),
-          dangerLevel: Math.round(random() * 30),
-          roadType: RoadType.DIRT,
-        });
-        connectedNodes.add(node.id);
-      }
+  console.log(`Generated ${nodes.length} nodes with ${connections.length} connections`);
+  console.log(`Capital positions:`);
+  for (let i = 0; i < 4; i++) {
+    const node = nodes[i];
+    if (node) {
+      console.log(`  ${node.name}: (${node.positionX}, ${node.positionY})`);
     }
   }
 
@@ -368,7 +435,7 @@ export function generateMap(seed = 42): MapSeed {
     version: '1.0.0',
     name: 'Nova Prime',
     description:
-      'The primary map for Nova Fall. 100 nodes across 6 distinct regions with varied terrain and resources.',
+      'The primary 4-player map for Nova Fall. 1000 nodes across 6 distinct regions with 4 corner capitals.',
     regions: REGIONS,
     nodes,
     connections,

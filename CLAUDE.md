@@ -191,11 +191,11 @@ Examples:
 
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
-| **Current Phase**  | Phase 1 - World & Nodes                   |
-| **Phase Progress** | Sections 1.1-1.4 complete                 |
-| **Current Task**   | Section 1.5 - HQ placement & special rules|
+| **Current Phase**  | Phase 2 - Economy & Resources             |
+| **Phase Progress** | Sections 2.1-2.3 complete                 |
+| **Current Task**   | Section 2.4 (Basic Market)                |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 10 - 2026-01-06                   |
+| **Last Session**   | Session 20 - 2026-01-06                   |
 | **Last Updated**   | 2026-01-06                                |
 
 ---
@@ -219,6 +219,18 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-04 | Husky + lint-staged for pre-commit        | Industry standard, ensures code quality            | Claude      |
 | 2026-01-05 | Hexagon nodes with connection faces       | Visual clarity for node connections                | User        |
 | 2026-01-04 | vue-tsc 2.2.0                             | Compatible with TypeScript 5.9+                    | Claude      |
+| 2026-01-06 | Section-level verification tasks          | Lightweight testing before moving to next feature  | User        |
+| 2026-01-06 | Hex grid with terrain tiles               | Full hex map, nodes + terrain, no whitespace       | User        |
+| 2026-01-06 | RenderTexture caching for map rendering   | 1000+ objects → 2 sprites, critical for performance| Claude      |
+| 2026-01-06 | 1000 nodes for development testing        | Stress test rendering, user requested scale        | User        |
+| 2026-01-06 | Default map is 4-player (1000 nodes)      | Capitals at corners, balanced starting positions   | User        |
+| 2026-01-06 | Future maps: variable sizes/player counts | Different configurations for 2, 6, 8+ players      | User        |
+| 2026-01-06 | Node color shows ownership only           | Clear territory visualization, type in panel       | User        |
+| 2026-01-06 | Capitals at grid corners                  | Fair starting positions, max distance between HQs  | User        |
+| 2026-01-06 | ~15 starting nodes per player             | BFS from HQ, enough to develop with room to expand | User        |
+| 2026-01-06 | Golden ratio hash for player colors       | Ensures distinct colors even for similar IDs       | Claude      |
+| 2026-01-06 | Default zoom 0.55 (Regional View)         | Map fills viewport on load, better first impression| User        |
+| 2026-01-06 | Thematic faction names                    | Sci-fi colonization theme (Helios, Cryo, etc.)     | User        |
 
 ---
 

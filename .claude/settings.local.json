@@ -19,7 +19,16 @@
       "Bash(pnpm --filter @nova-fall/api typecheck:*)",
       "Bash(pnpm --filter @nova-fall/web typecheck:*)",
       "Bash(pnpm lint:fix:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(pnpm --filter @nova-fall/api db:generate:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm db:reset:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm db:seed:*)",
+      "Bash(pnpm --filter @nova-fall/game-logic build:*)",
+      "Bash(pnpm --filter @nova-fall/worker typecheck:*)",
+      "Bash(npx prisma:*)"
     ]
   }
 }

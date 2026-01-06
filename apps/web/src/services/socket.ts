@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
-import type { MapNode } from '@nova-fall/shared';
+import type { MapNode, ResourceStorage } from '@nova-fall/shared';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:3002';
 
@@ -30,12 +30,24 @@ export interface BattleUpdateEvent {
   data: Record<string, unknown>;
 }
 
+export interface ResourceUpdateItem {
+  nodeId: string;
+  storage: ResourceStorage;
+  produced: ResourceStorage;
+}
+
+export interface ResourcesUpdateEvent {
+  updates: ResourceUpdateItem[];
+  tick: number;
+}
+
 // Socket event handlers
 interface EventHandlers {
   'node:update': (event: NodeUpdateEvent) => void;
   'node:claimed': (event: NodeClaimedEvent) => void;
   'battle:start': (event: BattleStartEvent) => void;
   'battle:update': (event: BattleUpdateEvent) => void;
+  'resources:update': (event: ResourcesUpdateEvent) => void;
   connect: () => void;
   disconnect: (reason: string) => void;
   connect_error: (error: Error) => void;
@@ -100,6 +112,14 @@ class GameSocket {
     this.socket.on('battle:update', (data: BattleUpdateEvent) => {
       console.log('[Socket] Battle update:', data.battleId, data.status);
       this.handlers['battle:update']?.(data);
+    });
+
+    this.socket.on('resources:update', (data: ResourcesUpdateEvent) => {
+      // Only log occasionally to avoid spam
+      if (data.tick % 12 === 0) {
+        console.log('[Socket] Resources update tick:', data.tick, 'nodes:', data.updates.length);
+      }
+      this.handlers['resources:update']?.(data);
     });
   }
 

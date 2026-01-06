@@ -42,7 +42,7 @@ export const REGIONS: RegionDefinition[] = [
     color: '#556B2F',
     defaultStability: StabilityLevel.UNSTABLE,
     upkeepModifier: 1.2,
-    resourceModifiers: { credits: 1.0, iron: 0.8, energy: 1.0, crystals: 1.75 },
+    resourceModifiers: { credits: 1.0, iron: 0.8, energy: 1.0, minerals: 1.75 },
     bounds: { minX: 400, maxX: 1600, minY: 1400, maxY: 2000 },
   },
   {
@@ -62,7 +62,7 @@ export const REGIONS: RegionDefinition[] = [
     color: '#8B0000',
     defaultStability: StabilityLevel.EXTREME,
     upkeepModifier: 1.5,
-    resourceModifiers: { credits: 0.5, iron: 0.5, energy: 0.5, alloys: 2.0, crystals: 2.0 },
+    resourceModifiers: { credits: 0.5, iron: 0.5, energy: 0.5, composites: 2.0, minerals: 2.0 },
     bounds: { minX: 0, maxX: 400, minY: 0, maxY: 400 },
   },
 ];
@@ -79,12 +79,14 @@ export function getRegionAtPosition(x: number, y: number): RegionDefinition | un
   );
 }
 
-// Map dimensions
+// Map dimensions (expanded to allow panning at all zoom levels)
+// Game content is 1600x1600 centered at (950, 950) with padding
+// Bounds set very large to never restrict panning on wide viewports
 export const MAP_BOUNDS = {
-  minX: 0,
-  maxX: 2000,
-  minY: 0,
-  maxY: 2000,
-  width: 2000,
-  height: 2000,
+  minX: -2000,
+  maxX: 4000,
+  minY: -2000,
+  maxY: 4000,
+  width: 6000,
+  height: 6000,
 };

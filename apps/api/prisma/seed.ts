@@ -1,6 +1,15 @@
 // Database seed script for Nova Fall
 // Seeds the world map with nodes, connections, and environment zones
 
+import { config } from 'dotenv';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+// Load .env from apps/api directory
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+config({ path: resolve(__dirname, '../.env') });
+
 import { PrismaClient } from '@prisma/client';
 import { NOVA_PRIME_MAP } from './map-data';
 import { getNodeTypeConfig } from '@nova-fall/shared';
@@ -57,9 +66,19 @@ async function main() {
   }
   console.log('✅ Nodes created');
 
-  // Seed connections
+  // Seed connections (skip duplicates)
   console.log(`🔗 Creating ${connections.length} connections...`);
+  const seenConnections = new Set<string>();
+  let createdCount = 0;
+
   for (const conn of connections) {
+    // Create a unique key for this connection (sorted to catch both directions)
+    const key = [conn.fromNodeId, conn.toNodeId].sort().join('-');
+    if (seenConnections.has(key)) {
+      continue; // Skip duplicate
+    }
+    seenConnections.add(key);
+
     await prisma.nodeConnection.create({
       data: {
         fromNodeId: conn.fromNodeId,
@@ -69,8 +88,9 @@ async function main() {
         roadType: conn.roadType,
       },
     });
+    createdCount++;
   }
-  console.log('✅ Connections created');
+  console.log(`✅ Connections created (${createdCount} unique, ${connections.length - createdCount} duplicates skipped)`);
 
   // Summary
   console.log('\n📊 Seed Summary:');

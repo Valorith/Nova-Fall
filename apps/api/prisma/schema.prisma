@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -53,6 +54,9 @@ model Player {
   // Unlocked research
   research      Json     @default("[]")
 
+  // HQ (Headquarters) - first claimed node
+  hqNodeId      String?  @unique  // Player's headquarters node
+
   // Stats
   reputation    Int      @default(0)
   totalNodes    Int      @default(0)
@@ -94,10 +98,11 @@ model Node {
   claimedAt   DateTime?
 
   // State
-  storage     Json      @default("{}")  // Resources stored here
-  upkeepPaid  DateTime?
-  upkeepDue   DateTime?
-  status      NodeStatus @default(NEUTRAL)
+  storage       Json         @default("{}")  // Resources stored here
+  upkeepPaid    DateTime?    // When upkeep was last successfully paid
+  upkeepDue     DateTime?    // When next upkeep payment is due
+  upkeepStatus  UpkeepStatus @default(PAID)  // Current upkeep payment status
+  status        NodeStatus   @default(NEUTRAL)
 
   // Attack cooldowns
   lastAttackedAt      DateTime?  // When last attack resolved
@@ -513,6 +518,14 @@ enum NodeStatus {
   CLAIMED
   CONTESTED
   UNDER_ATTACK
+}
+
+enum UpkeepStatus {
+  PAID
+  WARNING
+  DECAY
+  COLLAPSE
+  ABANDONED
 }
 
 enum RoadType {

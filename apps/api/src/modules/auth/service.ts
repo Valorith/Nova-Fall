@@ -1,10 +1,79 @@
 import { prisma } from '../../lib/prisma.js';
 import { redis } from '../../lib/redis.js';
 import { createTokenPair, verifyRefreshToken } from '../../lib/jwt.js';
+import { publishNodeClaimed } from '../../lib/events.js';
+import { NodeType, NodeStatus } from '@nova-fall/shared';
 import type { OAuthProfile, AuthUser, TokenPair } from './types.js';
 
 const REFRESH_TOKEN_PREFIX = 'refresh:';
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
+
+// Find an unclaimed capital node for a new player's HQ
+async function findAvailableHQ(): Promise<string | null> {
+  // Find a CAPITAL node that isn't owned by anyone
+  const availableCapital = await prisma.node.findFirst({
+    where: {
+      type: NodeType.CAPITAL,
+      ownerId: null,
+      status: NodeStatus.NEUTRAL,
+    },
+    orderBy: {
+      // Order by position to assign in consistent order (top-left first)
+      positionY: 'asc',
+    },
+  });
+
+  return availableCapital?.id ?? null;
+}
+
+// Assign HQ to a player and claim the node
+async function assignHQToPlayer(playerId: string, playerName: string, nodeId: string): Promise<void> {
+  // Update both the player's hqNodeId and the node's ownership in a transaction
+  await prisma.$transaction(async (tx) => {
+    // Claim the node for the player
+    await tx.node.update({
+      where: { id: nodeId },
+      data: {
+        ownerId: playerId,
+        status: NodeStatus.CLAIMED,
+      },
+    });
+
+    // Set this as the player's HQ and increment node count
+    await tx.player.update({
+      where: { id: playerId },
+      data: {
+        hqNodeId: nodeId,
+        totalNodes: 1,
+      },
+    });
+  });
+
+  // Publish the claim event for WebSocket broadcast
+  const node = await prisma.node.findUnique({
+    where: { id: nodeId },
+  });
+
+  if (node) {
+    await publishNodeClaimed({
+      nodeId,
+      node: {
+        id: node.id,
+        name: node.name,
+        type: node.type,
+        tier: node.tier,
+        positionX: node.positionX,
+        positionY: node.positionY,
+        regionId: node.regionId,
+        ownerId: playerId,
+        status: NodeStatus.CLAIMED,
+        ownerName: playerName,
+      },
+      playerId,
+      playerName,
+    });
+  }
+}
 
 export async function findOrCreateUser(profile: OAuthProfile): Promise<AuthUser> {
   // Check if user exists with this OAuth provider
@@ -19,6 +88,14 @@ export async function findOrCreateUser(profile: OAuthProfile): Promise<AuthUser>
   });
 
   if (user) {
+    // Check if existing player needs an HQ assigned
+    if (user.player && !user.player.hqNodeId) {
+      const availableHQId = await findAvailableHQ();
+      if (availableHQId) {
+        await assignHQToPlayer(user.player.id, user.player.displayName, availableHQId);
+      }
+    }
+
     return {
       id: user.id,
       email: user.email,
@@ -57,6 +134,9 @@ export async function findOrCreateUser(profile: OAuthProfile): Promise<AuthUser>
     };
   }
 
+  // Find an available HQ before creating the player
+  const availableHQId = await findAvailableHQ();
+
   // Create new user with player
   const newUser = await prisma.user.create({
     data: {
@@ -78,6 +158,11 @@ export async function findOrCreateUser(profile: OAuthProfile): Promise<AuthUser>
     },
     include: { player: true },
   });
+
+  // Assign HQ to the new player if one is available
+  if (newUser.player && availableHQId) {
+    await assignHQToPlayer(newUser.player.id, profile.username, availableHQId);
+  }
 
   return {
     id: newUser.id,

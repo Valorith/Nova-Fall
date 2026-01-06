@@ -105,4 +105,31 @@ export async function nodeRoutes(app: FastifyInstance) {
 
     return { node: result.node };
   });
+
+  // POST /nodes/:id/abandon - Abandon an owned node
+  app.post('/nodes/:id/abandon', {
+    preHandler: requireAuth,
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const userId = (request as FastifyRequest & { userId: string }).userId;
+
+    // Get player ID from user
+    const { prisma } = await import('../../lib/prisma.js');
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { player: true },
+    });
+
+    if (!user?.player) {
+      throw AppError.badRequest('No player profile found');
+    }
+
+    const result = await nodeService.abandonNode(id, user.player.id);
+
+    if (!result.success) {
+      throw AppError.badRequest(result.error ?? 'Failed to abandon node');
+    }
+
+    return { success: true };
+  });
 }

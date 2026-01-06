@@ -63,3 +63,11 @@ export const authApi = {
   logout: () => api.post('/auth/logout'),
   updateUsername: (username: string) => api.patch('/auth/username', { username }),
 };
+
+// Nodes API
+export const nodesApi = {
+  getAll: () => api.get('/nodes'),
+  getById: (id: string) => api.get(`/nodes/${id}`),
+  claim: (id: string) => api.post(`/nodes/${id}/claim`),
+  abandon: (id: string) => api.post(`/nodes/${id}/abandon`),
+};

@@ -1,16 +1,14 @@
-import type { NodeType, NodeStatus, RoadType } from './enums';
+import type { NodeType, NodeStatus, RoadType, UpkeepStatus } from './enums';
+import type { ResourceType as RT, ResourceStorage } from '../config/resources';
 
-// Resource types available in the game
-export type ResourceType = 'credits' | 'iron' | 'energy' | 'alloys' | 'crystals';
+// Re-export ResourceType from config for backwards compatibility
+export type { ResourceType, ResourceStorage } from '../config/resources';
 
-// Resources stored in a node
-export interface NodeResources {
-  credits: number;
-  iron: number;
-  energy: number;
-  alloys?: number;
-  crystals?: number;
-}
+// Resources stored in a node (using ResourceStorage from config)
+export type NodeResources = ResourceStorage;
+
+// Local alias for use within this file
+type ResourceType = RT;
 
 // Node data for map display (minimal data for rendering)
 export interface MapNode {
@@ -24,6 +22,18 @@ export interface MapNode {
   ownerId: string | null;
   ownerName?: string;
   status: NodeStatus;
+  isHQ?: boolean; // True if this is the owner's headquarters
+  upkeepStatus?: UpkeepStatus; // Current upkeep payment status
+}
+
+// Upkeep breakdown for display
+export interface UpkeepBreakdown {
+  base: number;
+  tierMultiplier: number;
+  distanceMultiplier: number;
+  regionMultiplier: number;
+  buildingCost: number;
+  total: number;
 }
 
 // Full node data (includes storage, buildings count, etc.)
@@ -31,6 +41,8 @@ export interface NodeDetail extends MapNode {
   storage: NodeResources;
   claimedAt: string | null;
   upkeepDue: string | null;
+  upkeepPaid: string | null;
+  upkeepCost?: UpkeepBreakdown; // Calculated upkeep cost
   buildingCount: number;
   garrisonCount: number;
   attackCooldownUntil: string | null;

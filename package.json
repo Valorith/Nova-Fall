@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Browser-based multiplayer territory control game",
   "scripts": {
-    "dev": "pnpm --filter @nova-fall/api --filter @nova-fall/web --parallel dev",
+    "dev": "pnpm --filter @nova-fall/api --filter @nova-fall/web --filter @nova-fall/ws-server --filter @nova-fall/worker --parallel dev",
     "dev:web": "pnpm --filter @nova-fall/web dev",
     "dev:api": "pnpm --filter @nova-fall/api dev",
     "dev:ws": "pnpm --filter @nova-fall/ws-server dev",

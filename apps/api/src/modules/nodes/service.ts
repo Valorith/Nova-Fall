@@ -35,7 +35,7 @@ export async function getNodes(query: NodeListQuery): Promise<PaginatedResponse<
       take: pageSize,
       include: {
         owner: {
-          select: { displayName: true },
+          select: { displayName: true, hqNodeId: true },
         },
       },
       orderBy: { name: 'asc' },
@@ -58,6 +58,9 @@ export async function getNodes(query: NodeListQuery): Promise<PaginatedResponse<
     if (node.owner?.displayName) {
       result.ownerName = node.owner.displayName;
     }
+    if (node.owner?.hqNodeId === node.id) {
+      result.isHQ = true;
+    }
     return result;
   });
 
@@ -75,7 +78,7 @@ export async function getAllNodes(): Promise<MapNodeResponse[]> {
   const nodes = await prisma.node.findMany({
     include: {
       owner: {
-        select: { displayName: true },
+        select: { displayName: true, hqNodeId: true },
       },
     },
   });
@@ -95,6 +98,14 @@ export async function getAllNodes(): Promise<MapNodeResponse[]> {
     if (node.owner?.displayName) {
       result.ownerName = node.owner.displayName;
     }
+    // Check if this node is the owner's HQ
+    if (node.owner?.hqNodeId === node.id) {
+      result.isHQ = true;
+    }
+    // Include upkeep status for owned nodes
+    if (node.ownerId) {
+      result.upkeepStatus = node.upkeepStatus;
+    }
     return result;
   });
 }
@@ -105,7 +116,7 @@ export async function getNodeById(nodeId: string): Promise<NodeDetailResponse | 
     where: { id: nodeId },
     include: {
       owner: {
-        select: { displayName: true },
+        select: { displayName: true, hqNodeId: true },
       },
       buildings: true,
       garrison: true,
@@ -127,6 +138,9 @@ export async function getNodeById(nodeId: string): Promise<NodeDetailResponse | 
   });
 
   if (!node) return null;
+
+  // Check if this node is the owner's HQ
+  const isHQ = node.owner?.hqNodeId === nodeId;
 
   // Combine both directions of connections
   const connections: NodeConnectionResponse[] = [
@@ -165,11 +179,14 @@ export async function getNodeById(nodeId: string): Promise<NodeDetailResponse | 
     storage: node.storage as Record<string, number>,
     claimedAt: node.claimedAt?.toISOString() ?? null,
     upkeepDue: node.upkeepDue?.toISOString() ?? null,
+    upkeepPaid: node.upkeepPaid?.toISOString() ?? null,
+    upkeepStatus: node.upkeepStatus,
     buildingCount: node.buildings.length,
     garrisonCount: node.garrison.length,
     attackCooldownUntil: node.attackCooldownUntil?.toISOString() ?? null,
     attackImmunityUntil: node.attackImmunityUntil?.toISOString() ?? null,
     connections,
+    isHQ,
   };
 
   if (node.owner?.displayName) {
@@ -287,12 +304,18 @@ export async function claimNode(
     },
   });
 
-  // Update player stats and get player name
+  // Update player stats and set HQ if first node
+  const playerUpdateData: { totalNodes: { increment: number }; hqNodeId?: string } = {
+    totalNodes: { increment: 1 },
+  };
+
+  if (isFirstNode) {
+    playerUpdateData.hqNodeId = nodeId;
+  }
+
   const player = await prisma.player.update({
     where: { id: playerId },
-    data: {
-      totalNodes: { increment: 1 },
-    },
+    data: playerUpdateData,
   });
 
   // Get updated node details
@@ -345,4 +368,58 @@ export async function getAllConnections() {
     roadType: conn.roadType,
     dangerLevel: conn.dangerLevel,
   }));
+}
+
+// Abandon a node (release ownership)
+export async function abandonNode(
+  nodeId: string,
+  playerId: string
+): Promise<{ success: boolean; error?: string }> {
+  // Get node to verify ownership
+  const node = await prisma.node.findUnique({
+    where: { id: nodeId },
+    select: { ownerId: true },
+  });
+
+  if (!node) {
+    return { success: false, error: 'Node not found' };
+  }
+
+  if (node.ownerId !== playerId) {
+    return { success: false, error: 'You do not own this node' };
+  }
+
+  // Check if this is the player's HQ
+  const player = await prisma.player.findUnique({
+    where: { id: playerId },
+    select: { hqNodeId: true },
+  });
+
+  if (player?.hqNodeId === nodeId) {
+    return { success: false, error: 'Cannot abandon your headquarters' };
+  }
+
+  // Abandon the node - reset to neutral
+  await prisma.node.update({
+    where: { id: nodeId },
+    data: {
+      ownerId: null,
+      status: 'NEUTRAL',
+      claimedAt: null,
+      upkeepPaid: null,
+      upkeepDue: null,
+    },
+  });
+
+  // Update player stats
+  await prisma.player.update({
+    where: { id: playerId },
+    data: {
+      totalNodes: { decrement: 1 },
+    },
+  });
+
+  // TODO: Publish node abandoned event for real-time updates
+
+  return { success: true };
 }

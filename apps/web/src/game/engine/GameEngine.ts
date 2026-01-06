@@ -46,15 +46,23 @@ export class GameEngine {
   private resizeObserver: ResizeObserver | null = null;
   private animationFrameId: number | null = null;
   private _isDestroyed = false;
+  private _isReady = false;
   private _currentZoomLevel: ZoomLevel = 'strategic';
+
+  // Pending data (if loadMapData called before ready)
+  private _pendingMapData: { nodes: MapNode[]; connections: ConnectionData[] } | null = null;
 
   // Selection state
   private _selectedNodeIds = new Set<string>();
+
+  // Hover state
+  private _hoveredNode: MapNode | null = null;
 
   // Event callbacks
   public onZoomLevelChange?: (level: ZoomLevel) => void;
   public onNodeClick?: (node: MapNode) => void;
   public onSelectionChange?: (selectedNodeIds: string[]) => void;
+  public onNodeHover?: (node: MapNode | null, screenX: number, screenY: number) => void;
 
   constructor(options: GameEngineOptions) {
     const { container, width, height, backgroundColor = 0x0a0a0f } = options;
@@ -74,6 +82,10 @@ export class GameEngine {
     const cameraOptions = options.camera ?? {};
     const firstZoom = ZOOM_LEVELS[0];
     const lastZoom = ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
+
+    // Default initial scale to fit map nicely in viewport (regional view)
+    const defaultInitialScale = 0.55;
+
     this.camera = new Camera({
       bounds: {
         minX: MAP_BOUNDS.minX,
@@ -83,8 +95,12 @@ export class GameEngine {
       },
       minScale: firstZoom?.minScale ?? 0.1,
       maxScale: lastZoom?.maxScale ?? 3.0,
+      initialScale: defaultInitialScale,
       ...cameraOptions,
     });
+
+    // Set initial zoom level based on default scale
+    this._currentZoomLevel = 'regional';
 
     // Initialize async
     this.init(container, width ?? container.clientWidth, height ?? container.clientHeight, backgroundColor);
@@ -107,6 +123,9 @@ export class GameEngine {
     // Add world container to stage
     this.app.stage.addChild(this.worldContainer);
 
+    // Pass app reference to renderer for texture caching
+    this.worldRenderer.setApp(this.app);
+
     // Set up resize observer
     this.resizeObserver = new ResizeObserver((entries) => {
       if (this._isDestroyed) return;
@@ -123,12 +142,21 @@ export class GameEngine {
     // Start render loop
     this.startRenderLoop();
 
-    // Initial camera position (center of map)
-    this.camera.setPosition(MAP_BOUNDS.width / 2, MAP_BOUNDS.height / 2);
+    // Initial camera position (center of square grid: 150 + 1600/2 = 950)
+    this.camera.setPosition(950, 950);
     this.camera.setViewportSize(width, height);
 
     // Pass camera to renderer for culling
     this.worldRenderer.setCamera(this.camera);
+
+    // Mark as ready
+    this._isReady = true;
+
+    // Process pending map data if any
+    if (this._pendingMapData) {
+      this.worldRenderer.setMapData(this._pendingMapData.nodes, this._pendingMapData.connections);
+      this._pendingMapData = null;
+    }
   }
 
   private setupInputHandlers() {
@@ -159,23 +187,51 @@ export class GameEngine {
 
     // Mouse/touch move
     const onPointerMove = (e: PointerEvent) => {
-      if (!isDragging) return;
+      const rect = canvas.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
 
-      const deltaX = e.clientX - lastX;
-      const deltaY = e.clientY - lastY;
+      if (isDragging) {
+        const deltaX = e.clientX - lastX;
+        const deltaY = e.clientY - lastY;
 
-      // Check if we've moved enough to consider it a drag
-      const totalDeltaX = e.clientX - startX;
-      const totalDeltaY = e.clientY - startY;
-      if (Math.abs(totalDeltaX) > DRAG_THRESHOLD || Math.abs(totalDeltaY) > DRAG_THRESHOLD) {
-        hasMoved = true;
+        // Check if we've moved enough to consider it a drag
+        const totalDeltaX = e.clientX - startX;
+        const totalDeltaY = e.clientY - startY;
+        if (Math.abs(totalDeltaX) > DRAG_THRESHOLD || Math.abs(totalDeltaY) > DRAG_THRESHOLD) {
+          hasMoved = true;
+          // Hide tooltip while dragging
+          if (this._hoveredNode) {
+            this._hoveredNode = null;
+            this.onNodeHover?.(null, screenX, screenY);
+          }
+        }
+
+        // Pan the camera (inverse movement for natural dragging)
+        this.camera.pan(-deltaX / this.camera.scale, -deltaY / this.camera.scale);
+
+        lastX = e.clientX;
+        lastY = e.clientY;
+      } else {
+        // Not dragging - check for hover
+        const worldPos = this.screenToWorld(screenX, screenY);
+        const node = this.worldRenderer.getNodeAtPosition(worldPos.x, worldPos.y);
+
+        if (node !== this._hoveredNode) {
+          // Hover changed
+          if (this._hoveredNode) {
+            this.worldRenderer.highlightNode(this._hoveredNode.id, false);
+          }
+          this._hoveredNode = node;
+          if (node) {
+            this.worldRenderer.highlightNode(node.id, true);
+          }
+          this.onNodeHover?.(node, screenX, screenY);
+        } else if (node) {
+          // Same node, but update position for tooltip tracking
+          this.onNodeHover?.(node, screenX, screenY);
+        }
       }
-
-      // Pan the camera (inverse movement for natural dragging)
-      this.camera.pan(-deltaX / this.camera.scale, -deltaY / this.camera.scale);
-
-      lastX = e.clientX;
-      lastY = e.clientY;
     };
 
     // Mouse/touch up
@@ -222,10 +278,21 @@ export class GameEngine {
       this.updateZoomLevel();
     };
 
+    // Pointer leave - clear hover
+    const onPointerLeave = (e: PointerEvent) => {
+      onPointerUp(e);
+      // Clear hover state
+      if (this._hoveredNode) {
+        this.worldRenderer.highlightNode(this._hoveredNode.id, false);
+        this._hoveredNode = null;
+        this.onNodeHover?.(null, 0, 0);
+      }
+    };
+
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerup', onPointerUp);
-    canvas.addEventListener('pointerleave', onPointerUp);
+    canvas.addEventListener('pointerleave', onPointerLeave);
     canvas.addEventListener('wheel', onWheel, { passive: false });
 
     // Store handlers for cleanup
@@ -233,6 +300,7 @@ export class GameEngine {
       onPointerDown,
       onPointerMove,
       onPointerUp,
+      onPointerLeave,
       onWheel,
     };
   }
@@ -241,6 +309,7 @@ export class GameEngine {
     onPointerDown: (e: PointerEvent) => void;
     onPointerMove: (e: PointerEvent) => void;
     onPointerUp: (e: PointerEvent) => void;
+    onPointerLeave: (e: PointerEvent) => void;
     onWheel: (e: WheelEvent) => void;
   } | null = null;
 
@@ -310,7 +379,7 @@ export class GameEngine {
       canvas.removeEventListener('pointerdown', this._inputHandlers.onPointerDown);
       canvas.removeEventListener('pointermove', this._inputHandlers.onPointerMove);
       canvas.removeEventListener('pointerup', this._inputHandlers.onPointerUp);
-      canvas.removeEventListener('pointerleave', this._inputHandlers.onPointerUp);
+      canvas.removeEventListener('pointerleave', this._inputHandlers.onPointerLeave);
       canvas.removeEventListener('wheel', this._inputHandlers.onWheel);
     }
 
@@ -395,7 +464,12 @@ export class GameEngine {
 
   // Load map data
   public loadMapData(nodes: MapNode[], connections: ConnectionData[]) {
-    this.worldRenderer.setMapData(nodes, connections);
+    if (this._isReady) {
+      this.worldRenderer.setMapData(nodes, connections);
+    } else {
+      // Queue for when ready
+      this._pendingMapData = { nodes, connections };
+    }
   }
 
   // Update a single node (for real-time updates)

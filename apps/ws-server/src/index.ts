@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { Redis } from 'ioredis';
@@ -38,13 +39,20 @@ const io = new Server(httpServer, {
 const redisSub = new Redis(REDIS_URL);
 
 // Subscribe to game event channels
-redisSub.subscribe('node:update', 'node:claimed', 'battle:start', 'battle:update', (err, count) => {
-  if (err) {
-    logger.error({ err }, 'Failed to subscribe to Redis channels');
-    process.exit(1);
+redisSub.subscribe(
+  'node:update',
+  'node:claimed',
+  'battle:start',
+  'battle:update',
+  'resources:update',
+  (err, count) => {
+    if (err) {
+      logger.error({ err }, 'Failed to subscribe to Redis channels');
+      process.exit(1);
+    }
+    logger.info({ count }, 'Subscribed to Redis channels');
   }
-  logger.info({ count }, 'Subscribed to Redis channels');
-});
+);
 
 // Handle Redis messages and broadcast to clients
 redisSub.on('message', (channel, message) => {
@@ -71,6 +79,11 @@ redisSub.on('message', (channel, message) => {
       case 'battle:update':
         // Broadcast battle state updates
         io.emit('battle:update', data);
+        break;
+
+      case 'resources:update':
+        // Broadcast resource updates from game tick
+        io.emit('resources:update', data);
         break;
 
       default:

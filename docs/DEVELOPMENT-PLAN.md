@@ -1091,10 +1091,11 @@ Nodes are rendered as hexagons with 6 connection faces for visual clarity:
 - Danger level adds red overlay (0-100 → 0%-50% alpha)
 
 **Map Layout:**
-- Nodes are NOT on a strict hex grid (organic placement)
-- Connections are explicit (stored in database)
-- Each node can have 1-6 connections (average ~3.5)
-- Connection faces are calculated based on angle to neighbor
+- Nodes are placed on a hex grid with terrain tiles filling gaps
+- ~100 nodes randomly distributed across ~170 hex cells (14x12 grid)
+- Non-node hexes are terrain (plains, forest, mountain, water, etc.)
+- Connections only between adjacent node hexes
+- Each node can have 1-6 connections to neighboring nodes
 
 **Face Calculation:**
 ```typescript
@@ -1109,10 +1110,10 @@ function getConnectionFace(fromNode, toNode): number {
 ```
 
 **Implementation Priority:**
-1. [ ] Update node graphics from circle to hexagon
-2. [ ] Add face anchor points for connections
-3. [ ] Update connection lines to use anchors
-4. [ ] Add visual indicators for used/unused faces
+1. [x] Update node graphics from circle to hexagon
+2. [x] Add face anchor points for connections
+3. [x] Update connection lines to use anchors
+4. [x] Add visual indicators for used/unused faces
 
 - [x] **Implement culling**
   - [x] Only render visible elements
@@ -1153,10 +1154,18 @@ function getConnectionFace(fromNode, toNode): number {
   - [~] Deduct claiming cost (TODO - skipped for MVP testing)
   - [x] Update ownership
 
-- [ ] **HQ placement**
-  - [~] First node becomes HQ (identified but not marked as HQ type)
-  - [ ] Special HQ rules
-  - [ ] Cannot be abandoned
+- [x] **HQ placement**
+  - [x] First node becomes HQ (hqNodeId field on Player)
+  - [x] Special HQ rules (isHQ flag in API response)
+  - [x] Cannot be abandoned (abandonNode rejects HQ)
+
+- [x] **Verify Section 1.5:** (Unit tests added for service layer)
+  - [x] Claim first node as new player → becomes HQ
+  - [x] Claim second node → must be adjacent to owned node
+  - [x] Attempt non-adjacent claim → fails with error
+  - [x] Attempt to abandon HQ → fails (cannot abandon)
+  - [x] HQ displays special indicator on map (golden star)
+  - [x] Claim button UI in node detail panel (shows for neutral nodes)
 
 ### Phase 1 Deliverable
 
@@ -1168,7 +1177,7 @@ function getConnectionFace(fromNode, toNode): number {
 
 ### 2.1 Resource System
 
-- [ ] **Define resource types**
+- [x] **Define resource types**
 
   ```typescript
   // packages/shared/src/config/resources.ts
@@ -1182,37 +1191,50 @@ function getConnectionFace(fromNode, toNode): number {
   };
   ```
 
-- [ ] **Player resource storage**
-  - [ ] Global inventory (JSON field)
-  - [ ] Helper methods for add/subtract
-  - [ ] Validation (non-negative)
+- [x] **Player resource storage**
+  - [x] Global inventory (JSON field - ResourceStorage type)
+  - [x] Helper methods for add/subtract (addResources, subtractResources, canAfford, deductCost)
+  - [x] Validation (non-negative - shortage tracking)
 
-- [ ] **Node storage**
-  - [ ] Per-node storage capacity
-  - [ ] Storage buildings increase cap
-  - [ ] Overflow prevention
+- [x] **Node storage**
+  - [x] Per-node storage capacity (NODE_BASE_STORAGE config)
+  - [ ] Storage buildings increase cap (Phase 3)
+  - [x] Overflow prevention (addResources with maxCapacity param)
+
+- [x] **Verify Section 2.1:**
+  - [x] Player resources display correctly in UI (PlayerResourcesPanel in top bar)
+  - [~] Add/subtract resources via API → values update (needs API endpoints - Phase 2.2)
+  - [x] Node storage shows current/max capacity (ResourceDisplay with capacity bar)
+  - [x] Cannot store more than capacity (overflow prevented - addResources helper)
+  - [x] Resource tooltips display descriptions (Tooltip component)
 
 ### 2.2 Game Tick System
 
-- [ ] **Set up BullMQ worker**
-  - [ ] Configure Redis connection
-  - [ ] Create repeating job (5-second tick)
-  - [ ] Job processing with error handling
+- [x] **Set up BullMQ worker**
+  - [x] Configure Redis connection
+  - [x] Create repeating job (5-second tick)
+  - [x] Job processing with error handling
 
-- [ ] **Resource generation**
-  - [ ] Calculate per-node production
-  - [ ] Apply research bonuses
-  - [ ] Add to node storage
-  - [ ] Emit updates via WebSocket
+- [x] **Resource generation**
+  - [x] Calculate per-node production
+  - [~] Apply research bonuses (deferred - no research system yet)
+  - [x] Add to node storage
+  - [x] Emit updates via WebSocket
 
-- [ ] **Batch processing**
-  - [ ] Process all nodes efficiently
-  - [ ] Use database transactions
-  - [ ] Minimize queries
+- [x] **Batch processing**
+  - [x] Process all nodes efficiently
+  - [x] Use database transactions
+  - [x] Minimize queries
+
+- [~] **Verify Section 2.2:**
+  - [ ] Worker starts and runs tick job every 5 seconds
+  - [ ] Owned node generates resources over time
+  - [ ] Resource generation appears in node storage
+  - [ ] WebSocket pushes update to connected clients
 
 ### 2.3 Upkeep System
 
-- [ ] **Calculate upkeep costs**
+- [x] **Calculate upkeep costs** (game-logic/economy/upkeep.ts)
 
   ```typescript
   function calculateUpkeep(node: Node, player: Player): number {
@@ -1223,23 +1245,30 @@ function getConnectionFace(fromNode, toNode): number {
   }
   ```
 
-- [ ] **Upkeep deduction job**
-  - [ ] Run hourly
-  - [ ] Calculate per-node costs
-  - [ ] Deduct from player credits
-  - [ ] Track payment status
+- [x] **Upkeep deduction job** (worker/jobs/upkeep.ts)
+  - [x] Run hourly
+  - [x] Calculate per-node costs
+  - [x] Deduct from player credits
+  - [x] Track payment status
 
-- [ ] **Failure consequences**
-  - [ ] Warning phase (12h)
-  - [ ] Decay phase (12-36h)
-  - [ ] Collapse phase (36-48h)
-  - [ ] Abandonment (48h+)
+- [x] **Failure consequences** (integrated into upkeep job)
+  - [x] Warning phase (12h)
+  - [x] Decay phase (12-36h)
+  - [x] Collapse phase (36-48h)
+  - [x] Abandonment (48h+)
 
-- [ ] **UI indicators**
-  - [ ] Upkeep summary panel
-  - [ ] Per-node cost display
-  - [ ] Warning alerts
-  - [ ] Projected runway
+- [x] **UI indicators**
+  - [~] Upkeep summary panel (tooltip shows base upkeep, full panel deferred)
+  - [x] Per-node cost display (in tooltip)
+  - [x] Warning alerts (upkeep status in tooltip with color-coded warnings)
+  - [~] Projected runway (deferred - needs player resources tracking)
+
+- [ ] **Verify Section 2.3:**
+  - [ ] Upkeep deducts from player credits hourly
+  - [ ] Distance from HQ increases upkeep cost
+  - [ ] UI shows upkeep breakdown per node
+  - [ ] Warning appears when credits low
+  - [ ] Node enters decay state when upkeep unpaid
 
 ### 2.4 Basic Market
 
@@ -1259,6 +1288,13 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] `POST /market/buy` - Buy resources
   - [ ] `POST /market/sell` - Sell resources
 
+- [ ] **Verify Section 2.4:**
+  - [ ] Market UI shows resource prices
+  - [ ] Buy resources → credits decrease, resource increases
+  - [ ] Sell resources → resource decreases, credits increase
+  - [ ] 15% transaction fee applied correctly
+  - [ ] Cannot buy more than can afford
+
 ### 2.5 Resource Transfer
 
 - [ ] **Node-to-node transfer**
@@ -1270,6 +1306,13 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Select source/destination
   - [ ] Choose resources and amounts
   - [ ] View pending transfers
+
+- [ ] **Verify Section 2.5:**
+  - [ ] Transfer resources between two adjacent owned nodes
+  - [ ] Transfer shows in pending list with ETA
+  - [ ] Resources arrive at destination after transfer time
+  - [ ] Cannot transfer to non-adjacent node
+  - [ ] Can cancel pending transfer
 
 ### Phase 2 Deliverable
 
@@ -1309,6 +1352,11 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Research (labs)
   - [ ] Command (HQ, barracks)
 
+- [ ] **Verify Section 3.1:**
+  - [ ] Building config loads correctly (check one from each category)
+  - [ ] Building stats match config values
+  - [ ] Tier requirements enforced
+
 ### 3.2 Node Grid System
 
 - [ ] **Grid implementation**
@@ -1321,6 +1369,12 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Highlight valid placements
   - [ ] Show occupied cells
   - [ ] Preview building on hover
+
+- [ ] **Verify Section 3.2:**
+  - [ ] Zoom to level 3 on owned node → grid visible
+  - [ ] Valid placement cells highlighted green
+  - [ ] Occupied cells show existing buildings
+  - [ ] Hover shows building preview at cursor
 
 ### 3.3 Construction System
 
@@ -1347,6 +1401,13 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] `DELETE /buildings/:id` - Demolish
   - [ ] `POST /buildings/:id/cancel` - Cancel construction
 
+- [ ] **Verify Section 3.3:**
+  - [ ] Start building construction → resources deducted
+  - [ ] Building appears in CONSTRUCTING state on grid
+  - [ ] Progress timer counts down
+  - [ ] Building completes and becomes active
+  - [ ] Queue second building while first constructs
+
 ### 3.4 Building UI
 
 - [ ] **Building placement mode**
@@ -1366,6 +1427,13 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Time remaining
   - [ ] Queue display
 
+- [ ] **Verify Section 3.4:**
+  - [ ] Click build button → placement mode activates
+  - [ ] Place building on valid cell → construction starts
+  - [ ] Click existing building → info panel shows stats
+  - [ ] Demolish button removes building
+  - [ ] Construction progress bar updates in real-time
+
 ### 3.5 Building Effects
 
 - [ ] **Defense buildings**
@@ -1379,6 +1447,12 @@ function getConnectionFace(fromNode, toNode): number {
 
 - [ ] **Storage buildings**
   - [ ] Increase node capacity
+
+- [ ] **Verify Section 3.5:**
+  - [ ] Defense building shows range circle when selected
+  - [ ] Production building adds to node resource generation
+  - [ ] Storage building increases node storage capacity
+  - [ ] Building upkeep added to node upkeep cost
 
 ### Phase 3 Deliverable
 
@@ -1414,6 +1488,11 @@ function getConnectionFace(fromNode, toNode): number {
   };
   ```
 
+- [ ] **Verify Section 4.1:**
+  - [ ] Unit config loads correctly
+  - [ ] Unit stats accessible from shared package
+  - [ ] Multiple unit types defined (infantry, vehicle, etc.)
+
 ### 4.2 Unit Recruitment
 
 - [ ] **Barracks building**
@@ -1433,6 +1512,13 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Unit details panel
   - [ ] Disband option
 
+- [ ] **Verify Section 4.2:**
+  - [ ] Build barracks at owned node
+  - [ ] Recruit unit → resources deducted, training starts
+  - [ ] Training timer counts down
+  - [ ] Unit appears in garrison when complete
+  - [ ] Disband unit → unit removed
+
 ### 4.3 Unit Movement
 
 - [ ] **Movement orders**
@@ -1451,6 +1537,13 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Movement indicators
   - [ ] ETA display
   - [ ] Cancel movement
+
+- [ ] **Verify Section 4.3:**
+  - [ ] Select units and order move to adjacent owned node
+  - [ ] Units show as moving on map
+  - [ ] ETA displays correctly
+  - [ ] Units arrive at destination after travel time
+  - [ ] Cancel movement returns units to origin
 
 ### 4.4 Battle System - Phases
 
@@ -1502,6 +1595,14 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Switch both players to tactical view (if online)
   - [ ] Begin real-time simulation
 
+- [ ] **Verify Section 4.4:**
+  - [ ] Initiate attack on enemy node → Battle created with PREP_PHASE
+  - [ ] Prep timer shows 20-28 hour countdown
+  - [ ] Defender receives notification immediately
+  - [ ] Both sides can modify forces during prep
+  - [ ] Forces lock 1 hour before combat (no more changes)
+  - [ ] Combat mode starts automatically when timer ends
+
 ### 4.5 Battle System - Execution
 
 - [ ] **Combat view (PixiJS)**
@@ -1528,6 +1629,13 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Garrison unit deployment
   - [ ] Trap activation
 
+- [ ] **Verify Section 4.5:**
+  - [ ] Combat view renders with defense layout
+  - [ ] Attacker units spawn and move toward objective
+  - [ ] Defender towers auto-target attackers
+  - [ ] Units take damage and health bars update
+  - [ ] State syncs between server and clients
+
 ### 4.6 Combat Actions
 
 - [ ] **Attacker actions**
@@ -1550,6 +1658,13 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Repair drone (heal units/buildings)
   - [ ] Shield booster (temp defense)
   - [ ] Rally flag (buff nearby units)
+
+- [ ] **Verify Section 4.6:**
+  - [ ] Attacker can deploy units from reserve
+  - [ ] Attacker can issue move/attack commands
+  - [ ] Defender can retarget towers
+  - [ ] Consumable items can be activated
+  - [ ] Actions execute in real-time
 
 ### 4.7 Battle Resolution
 
@@ -1594,6 +1709,13 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Display cooldown timer in node info panel
   - [ ] NPC attacks bypass player cooldown
 
+- [ ] **Verify Section 4.7:**
+  - [ ] Attacker destroys Command Center → attacker wins
+  - [ ] Timer expires with Command Center intact → defender wins
+  - [ ] Winner determined correctly, node ownership transfers if attacker wins
+  - [ ] Surviving defender units retreat to adjacent node
+  - [ ] 3-day cooldown applies to node after battle
+
 ### 4.8 Absent Player AI
 
 - [ ] **Attacker AI (if absent)**
@@ -1606,6 +1728,11 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Tower auto-target: nearest
   - [ ] Deploy garrison automatically
   - [ ] No manual interventions
+
+- [ ] **Verify Section 4.8:**
+  - [ ] Battle proceeds when attacker is offline (AI deploys units)
+  - [ ] Battle proceeds when defender is offline (AI manages defense)
+  - [ ] Battle resolves correctly with no human intervention
 
 ### Phase 4 Deliverable
 
@@ -1639,6 +1766,12 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Load cargo
   - [ ] Assign escorts (optional)
 
+- [ ] **Verify Section 5.1:**
+  - [ ] Create caravan with cargo from owned node
+  - [ ] Vehicle type selected and capacity shown
+  - [ ] Resources deducted from origin storage
+  - [ ] Optional escorts assigned to caravan
+
 ### 5.2 Caravan Movement
 
 - [ ] **Route calculation**
@@ -1657,6 +1790,12 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Progress indicator
   - [ ] ETA countdown
 
+- [ ] **Verify Section 5.2:**
+  - [ ] Caravan appears on map moving along route
+  - [ ] Route line visible between origin and destination
+  - [ ] Progress indicator shows current position
+  - [ ] ETA updates as caravan travels
+
 ### 5.3 Interception
 
 - [ ] **NPC raiders**
@@ -1668,6 +1807,13 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Unload cargo to destination storage
   - [ ] Return vehicle to pool
   - [ ] Release escorts
+
+- [ ] **Verify Section 5.3:**
+  - [ ] Caravan on dangerous route encounters NPC raiders
+  - [ ] Mini-combat resolves (escorts fight raiders)
+  - [ ] Caravan arrives at destination with cargo intact
+  - [ ] Cargo deposited into destination storage
+  - [ ] Escorts return to garrison
 
 ### Phase 5 Deliverable
 
@@ -1694,6 +1840,12 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Research panel
   - [ ] Unlock notifications
 
+- [ ] **Verify Section 6.1:**
+  - [ ] Research tree displays with techs and prerequisites
+  - [ ] Start research → progress timer begins
+  - [ ] Research completes → tech unlocked notification
+  - [ ] Unlocked tech enables new buildings/units
+
 ### 6.2 NPC Threats (Basic)
 
 - [ ] **Raider spawning**
@@ -1705,6 +1857,12 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Use existing combat system
   - [ ] AI-controlled attacker
   - [ ] Loot drops on victory
+
+- [ ] **Verify Section 6.2:**
+  - [ ] NPC raiders spawn in unclaimed areas
+  - [ ] Raiders move toward player nodes
+  - [ ] Combat triggers when raiders reach node
+  - [ ] Defeating raiders drops loot
 
 ### 6.3 UI/UX Polish
 
@@ -1725,6 +1883,12 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] Transitions
   - [ ] Sound effects (optional)
   - [ ] Particle effects
+
+- [ ] **Verify Section 6.3:**
+  - [ ] New player sees tutorial on first login
+  - [ ] Tutorial guides through claiming first node
+  - [ ] Notifications appear for key events
+  - [ ] Loading screens display during transitions
 
 ### 6.4 Testing & Balance
 
@@ -1755,6 +1919,11 @@ function getConnectionFace(fromNode, toNode): number {
   - [ ] API documentation
   - [ ] Architecture overview
   - [ ] Deployment guide
+
+- [ ] **Verify Section 6.5:**
+  - [ ] Player documentation accessible in-game or via link
+  - [ ] Getting started guide covers basics
+  - [ ] API docs accurate and complete
 
 ### Phase 6 Deliverable
 
