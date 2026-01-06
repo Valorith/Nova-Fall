@@ -26,7 +26,8 @@
 12. [Phase 6: Polish & MVP Launch](#phase-6-polish--mvp-launch-week-13)
 13. [Post-MVP Features](#7-post-mvp-features)
 14. [Asset Sources](#8-asset-sources)
-15. [Configuration Files](#9-configuration-files)
+15. [Asset Acquisition Checklist](#81-asset-acquisition-checklist)
+16. [Configuration Files](#9-configuration-files)
 
 ---
 
@@ -1812,6 +1813,141 @@ function getConnectionFace(fromNode, toNode): number {
 - Color palette: Deep space blues, industrial grays, accent oranges
 - UI: Clean, minimal, sci-fi inspired
 - Consistent post-processing filters to unify assets
+
+---
+
+## 8.1 Asset Acquisition Checklist
+
+> Assets should be acquired/created BEFORE the phase that needs them.
+
+### Phase 1 Assets (World & Nodes)
+
+- [ ] **Node graphics**
+  - [ ] Hexagon base shape (6 node types × 4 status states)
+  - [ ] Node type icons (Outpost, Mining, Factory, Research, Fortress, Capital)
+  - [ ] Tier indicators (I, II, III visual markers)
+  - [ ] Selection ring / highlight effect
+  - [ ] Connection line textures (dirt, paved, highway, hazardous)
+
+- [ ] **Map elements**
+  - [ ] Region background textures (6 regions)
+  - [ ] Grid overlay pattern
+  - [ ] Fog of war texture (if needed)
+
+- [ ] **UI assets**
+  - [ ] Node detail panel background
+  - [ ] Resource icons (Credits, Iron, Minerals, Energy, Composites, Tech)
+  - [ ] Status icons (Neutral, Claimed, Contested, Under Attack)
+
+### Phase 2 Assets (Economy)
+
+- [ ] **Resource visuals**
+  - [ ] Resource icons (refined versions for UI)
+  - [ ] Storage indicators (empty → full gradient)
+  - [ ] Production rate indicators (+/- arrows)
+
+- [ ] **Market UI**
+  - [ ] Buy/sell button states
+  - [ ] Transaction confirmation modal
+  - [ ] Price trend indicators
+
+### Phase 3 Assets (Buildings)
+
+- [ ] **Building sprites** (per category, ~3-5 each)
+  - [ ] Defense: Pulse Turret, Missile Battery, Shield Generator, Wall, Trap
+  - [ ] Production: Factory, Refinery, Assembler
+  - [ ] Storage: Warehouse, Silo
+  - [ ] Research: Lab, Data Center
+  - [ ] Command: HQ, Barracks
+
+- [ ] **Construction states**
+  - [ ] Foundation/scaffolding sprite
+  - [ ] Progress bar overlay
+  - [ ] Completion particle effect
+
+- [ ] **Building UI**
+  - [ ] Category icons
+  - [ ] Upgrade arrow indicators
+  - [ ] Health bar sprites
+
+### Phase 4 Assets (Combat) - CRITICAL
+
+- [ ] **Unit sprites** (idle, move, attack animations)
+  - [ ] Infantry: Marine, Heavy, Medic
+  - [ ] Vehicles: Tank, APC, Artillery
+  - [ ] Air: Drone, Gunship
+  - [ ] Special: Engineer, Commander
+
+- [ ] **Combat effects**
+  - [ ] Projectile sprites (bullets, missiles, lasers)
+  - [ ] Explosion animations
+  - [ ] Shield/barrier effects
+  - [ ] Healing/buff indicators
+  - [ ] Death/destruction animations
+
+- [ ] **Combat UI**
+  - [ ] Unit health bars
+  - [ ] Ability icons
+  - [ ] Consumable icons
+  - [ ] Timer/countdown display
+  - [ ] Victory/defeat screens
+
+- [ ] **Battlefield elements**
+  - [ ] Spawn point markers
+  - [ ] Objective indicators
+  - [ ] Range circles
+  - [ ] Movement path preview
+
+### Phase 5 Assets (Trading)
+
+- [ ] **Caravan sprites**
+  - [ ] Cargo Hauler (light, medium, heavy variants)
+  - [ ] Movement animation
+  - [ ] Loading/unloading states
+
+- [ ] **Trade route visuals**
+  - [ ] Route line style (different from connections)
+  - [ ] Progress indicator on route
+  - [ ] Danger zone overlay
+
+- [ ] **Interception**
+  - [ ] NPC raider sprites
+  - [ ] Combat encounter UI
+
+### Phase 6 Assets (Polish)
+
+- [ ] **Research tree**
+  - [ ] Tech icons (10-15 technologies)
+  - [ ] Tree connection lines
+  - [ ] Locked/unlocked states
+
+- [ ] **Tutorial**
+  - [ ] Highlight overlays
+  - [ ] Arrow/pointer indicators
+  - [ ] Tooltip backgrounds
+
+- [ ] **Audio** (stretch goal)
+  - [ ] UI click/hover sounds
+  - [ ] Combat sound effects
+  - [ ] Ambient background music
+
+### Asset Pipeline Notes
+
+1. **Format requirements:**
+   - Sprites: PNG with transparency, power-of-2 dimensions preferred
+   - Sprite sheets: Use TexturePacker or similar for batching
+   - Icons: SVG for UI, PNG for game world
+
+2. **Resolution targets:**
+   - Node sprites: 64×64 base, 128×128 for high DPI
+   - Building sprites: 32×32 to 64×64 depending on size
+   - Unit sprites: 32×32 base with animation frames
+   - UI icons: 24×24, 32×32, 48×48 variants
+
+3. **Licensing:**
+   - Track all asset sources in `LICENSES.md`
+   - Prefer CC0 or MIT licensed assets
+   - AI-generated assets: document prompts used
 
 ---
 

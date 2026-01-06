@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 1 - World & Nodes    |
 | **Overall Progress**   | Phase 1.1-1.4 complete     |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 8                          |
+| **Total Sessions**     | 9                          |
 
 ---
 
@@ -577,6 +577,51 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 
 ---
 
+## Session 9 - 2026-01-05
+
+**Duration:** ~20 minutes
+**Phase:** Phase 1 - World & Nodes
+**Focus:** Production OAuth fixes
+
+### Completed Tasks
+
+**Production Deployment Fixes:**
+- [x] Fixed OAuth redirecting to localhost after authentication
+- [x] Made `FRONTEND_URL` and `API_URL` required in production (fail-fast)
+- [x] Fixed Discord OAuth `reply.hijack()` ordering (must be before passport.authenticate)
+- [x] Added `VITE_API_URL` documentation for frontend deployment
+- [x] Updated `.env.example` files with clearer production instructions
+
+### Issues Resolved
+
+| Issue | Root Cause | Resolution |
+|-------|------------|------------|
+| OAuth redirects to localhost (frontend) | `VITE_API_URL` not set on Railway frontend | Added env var, documented in `.env.example` |
+| Discord OAuth still redirecting to localhost | `reply.hijack()` called after `passport.authenticate()` | Moved `reply.hijack()` before passport call, matching Google implementation |
+
+### Files Modified
+
+- `apps/api/src/config/env.ts` - URLs required in production
+- `apps/api/src/modules/auth/routes.ts` - Fixed Discord OAuth ordering
+- `apps/api/.env.example` - Clearer production documentation
+- `apps/web/.env.example` - Added `VITE_API_URL` documentation
+
+### Notes
+
+- Both Discord and Google OAuth now working in production
+- Frontend requires `VITE_API_URL` set at build time (Vite bakes env vars into bundle)
+- API will fail to start in production if `FRONTEND_URL` or `API_URL` not set
+
+### Next Session Plan
+
+1. Test WebSocket connection end-to-end (local)
+2. Section 1.5 - HQ placement and special rules
+3. Seed production database with map data
+4. Connect frontend to real API
+5. Test node claiming end-to-end
+
+---
+
 ---
 
 ## Blockers Log
@@ -629,6 +674,9 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 | TD1 | 2026-01-06 | PixiJS v8 text rendering disabled (canvas bug) | Medium   | No       |
 | TD2 | 2026-01-05 | Node claiming cost not deducted (skipped MVP)  | Low      | No       |
 | TD3 | 2026-01-05 | HQ special rules not implemented               | Medium   | No       |
+| TD4 | 2026-01-05 | WebSocket infrastructure untested E2E          | High     | No       |
+| TD5 | 2026-01-05 | Rework nodes to hexagon design (see spec)      | Medium   | No       |
+| TD6 | 2026-01-05 | Replace programmatic shapes with sprite assets | Medium   | No       |
 
 ---
 
@@ -636,13 +684,14 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 
 ### Phase 0: Foundation
 
-- [x] OAuth login works (Discord)
-- [x] OAuth login works (Google)
+- [x] OAuth login works (Discord) - tested locally and production
+- [x] OAuth login works (Google) - tested locally and production
 - [ ] Session persists across page refresh
 - [ ] Logout works correctly
 - [x] New user creation flow complete
 - [x] Database migrations run successfully
 - [x] All services deploy to Railway
+- [x] Production OAuth redirects correctly (fixed Session 9)
 
 ### Phase 1: World & Nodes
 
@@ -651,7 +700,10 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 - [x] Node selection works
 - [x] Node details panel displays correctly
 - [~] Node claiming works (API ready, frontend not connected)
+- [ ] WebSocket server connects and receives events
+- [ ] Real-time node updates display in multiple browser tabs
 - [~] Real-time updates work between clients (infrastructure ready, needs E2E test)
+- [ ] Nodes reworked to hexagon design with 6 connection faces (TD5)
 
 ### Phase 2: Economy & Resources
 
