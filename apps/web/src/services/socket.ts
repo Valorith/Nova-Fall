@@ -116,7 +116,7 @@ class GameSocket {
   }
 
   off<K extends keyof EventHandlers>(event: K): void {
-    this.handlers[event] = undefined;
+    delete this.handlers[event];
   }
 
   // Subscribe to specific node updates
