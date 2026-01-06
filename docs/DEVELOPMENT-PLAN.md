@@ -915,7 +915,7 @@ enum StabilityLevel {
   - [x] Initialize Prisma
   - [x] Create initial schema
   - [x] Configure PostgreSQL connection
-  - [~] Create initial migration (schema ready, migration pending DB connection)
+  - [x] Create initial migration
 
 - [x] **Set up project structure**
   - [x] Module-based architecture
@@ -1055,7 +1055,7 @@ enum StabilityLevel {
   - [x] Node type icons
   - [x] Ownership colors
   - [x] Status indicators
-  - [x] Name labels
+  - [~] Name labels (disabled due to PixiJS v8 text rendering bug - TODO)
 
 - [x] **Implement culling**
   - [x] Only render visible elements

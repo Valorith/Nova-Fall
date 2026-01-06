@@ -500,9 +500,9 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 
 <!-- Track shortcuts taken that need future attention -->
 
-| ID  | Date Added | Description           | Priority | Resolved |
-| --- | ---------- | --------------------- | -------- | -------- |
-| -   | -          | No technical debt yet | -        | -        |
+| ID  | Date Added | Description                                    | Priority | Resolved |
+| --- | ---------- | ---------------------------------------------- | -------- | -------- |
+| TD1 | 2026-01-06 | PixiJS v8 text rendering disabled (canvas bug) | Medium   | No       |
 
 ---
 
