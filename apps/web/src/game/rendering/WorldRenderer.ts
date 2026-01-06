@@ -1,7 +1,7 @@
-import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
+import type {
+  MapNode} from '@nova-fall/shared';
 import {
-  MapNode,
-  NodeType,
   NodeStatus,
   RoadType,
   NODE_TYPE_CONFIGS,
@@ -45,21 +45,14 @@ export class WorldRenderer {
   private connectionGraphics: Graphics;
 
   // Node sprites/graphics stored by ID
-  private nodeGraphics: Map<string, Container> = new Map();
+  private nodeGraphics = new Map<string, Container>();
 
   // Data
   private nodes: MapNode[] = [];
   private connections: ConnectionData[] = [];
 
-  // Current zoom level for LOD
-  private currentZoomLevel: ZoomLevel = 'strategic';
-
   // Camera reference for culling
   private camera: Camera | null = null;
-
-  // Label text style
-  private labelStyle: TextStyle;
-  private smallLabelStyle: TextStyle;
 
   constructor() {
     // Create layer containers
@@ -81,19 +74,6 @@ export class WorldRenderer {
 
     this.connectionGraphics = new Graphics();
     this.connectionLayer.addChild(this.connectionGraphics);
-
-    // Text styles
-    this.labelStyle = new TextStyle({
-      fontFamily: 'Arial',
-      fontSize: 12,
-      fill: '#ffffff',
-    });
-
-    this.smallLabelStyle = new TextStyle({
-      fontFamily: 'Arial',
-      fontSize: 9,
-      fill: '#cccccc',
-    });
   }
 
   // Add all layers to a parent container
@@ -109,10 +89,9 @@ export class WorldRenderer {
     this.camera = camera;
   }
 
-  // Set zoom level for LOD
-  setZoomLevel(level: ZoomLevel) {
-    this.currentZoomLevel = level;
-    this.updateLOD();
+  // Set zoom level for LOD (currently no-op, labels disabled)
+  setZoomLevel(_level: ZoomLevel) {
+    // TODO: Re-enable when text rendering is fixed
   }
 
   // Load map data
@@ -252,30 +231,6 @@ export class WorldRenderer {
     return container;
   }
 
-  // Get icon character for node type
-  private getTypeIcon(type: NodeType): string {
-    switch (type) {
-      case NodeType.MINING:
-        return '⛏';
-      case NodeType.REFINERY:
-        return '🏭';
-      case NodeType.RESEARCH:
-        return '🔬';
-      case NodeType.TRADE_HUB:
-        return '🏪';
-      case NodeType.FORTRESS:
-        return '🏰';
-      case NodeType.AGRICULTURAL:
-        return '🌾';
-      case NodeType.POWER_PLANT:
-        return '⚡';
-      case NodeType.CAPITAL:
-        return '👑';
-      default:
-        return '●';
-    }
-  }
-
   // Update node data (for real-time updates)
   updateNode(nodeId: string, data: Partial<MapNode>) {
     const index = this.nodes.findIndex((n) => n.id === nodeId);
@@ -299,16 +254,10 @@ export class WorldRenderer {
     this.nodeGraphics.set(nodeId, newGraphic);
   }
 
-  // Update LOD based on zoom level
-  private updateLOD() {
-    // TODO: Re-enable when text rendering is fixed
-    // const showLabels = this.currentZoomLevel !== 'strategic';
-    // const showOwnerLabels = this.currentZoomLevel === 'node' || this.currentZoomLevel === 'combat';
-  }
-
   // Update visibility based on camera (culling)
   updateVisibility() {
-    if (!this.camera) return;
+    const camera = this.camera;
+    if (!camera) return;
 
     const margin = 100; // Extra margin for smooth transitions
 
@@ -316,7 +265,7 @@ export class WorldRenderer {
       const node = this.nodes.find((n) => n.id === nodeId);
       if (!node) return;
 
-      const isVisible = this.camera!.isPointVisible(node.positionX, node.positionY, margin);
+      const isVisible = camera.isPointVisible(node.positionX, node.positionY, margin);
       container.visible = isVisible;
     });
   }
@@ -338,17 +287,42 @@ export class WorldRenderer {
     return null;
   }
 
-  // Highlight a node
+  // Highlight a node (hover effect)
   highlightNode(nodeId: string, highlight: boolean) {
     const container = this.nodeGraphics.get(nodeId);
     if (!container) return;
 
-    const graphics = container.children[0] as Graphics;
-    if (!graphics) return;
-
     // Scale effect for highlight
     container.scale.set(highlight ? 1.2 : 1);
+  }
 
-    // Could add glow effect here in the future
+  // Set node selected state (selection ring)
+  setNodeSelected(nodeId: string, selected: boolean) {
+    const container = this.nodeGraphics.get(nodeId);
+    if (!container) return;
+
+    // Find or create selection ring
+    let selectionRing = container.getChildByLabel('selection-ring') as Graphics | null;
+
+    if (selected) {
+      if (!selectionRing) {
+        selectionRing = new Graphics();
+        selectionRing.label = 'selection-ring';
+        container.addChildAt(selectionRing, 0); // Add behind other graphics
+      }
+
+      // Draw selection ring
+      selectionRing.clear();
+      selectionRing.setStrokeStyle({ width: 3, color: 0x00ff88 });
+      selectionRing.circle(0, 0, 24);
+      selectionRing.stroke();
+
+      // Pulsing animation (simple alpha)
+      selectionRing.alpha = 1;
+    } else {
+      if (selectionRing) {
+        selectionRing.destroy();
+      }
+    }
   }
 }

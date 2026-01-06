@@ -11,9 +11,9 @@
 | ---------------------- | -------------------------- |
 | **Project Start Date** | 2026-01-04                 |
 | **Current Phase**      | Phase 1 - World & Nodes    |
-| **Overall Progress**   | Phase 1.1-1.3 + Auth Fixed |
+| **Overall Progress**   | Phase 1.1-1.4 (mostly)     |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 6                          |
+| **Total Sessions**     | 7                          |
 
 ---
 
@@ -451,6 +451,65 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 2. Section 1.4 - Node selection and details panel
 3. Deploy updated auth to Railway
 4. Test production OAuth flow
+
+---
+
+## Session 7 - 2026-01-05
+
+**Duration:** ~1 hour
+**Phase:** Phase 1 - World & Nodes
+**Focus:** Node interaction and API endpoints
+
+### Completed Tasks
+
+**Section 1.4 - Node Interaction:**
+- [x] Implemented node click selection with visual feedback (green ring)
+- [x] Implemented deselection when clicking empty space
+- [x] Implemented multi-select with shift-click
+- [x] Created node detail panel (Vue) with sliding animation
+- [x] Display node info: name, type, tier, status, owner
+- [x] Placeholders for resources, buildings, garrison
+- [x] Multi-select view showing list of selected nodes
+- [x] Focus on Node button to pan and zoom
+
+**Node API Endpoints:**
+- [x] `GET /nodes` - List all nodes (with optional pagination)
+- [x] `GET /nodes/connections` - All connections for map rendering
+- [x] `GET /nodes/:id` - Full node details with connections
+- [x] `GET /nodes/:id/connections` - Adjacent nodes only
+- [x] `POST /nodes/:id/claim` - Claim neutral node (with adjacency check)
+
+**Design Update:**
+- [x] Added hexagon node design note to DEVELOPMENT-PLAN.md
+
+### Files Created/Modified
+
+**New Files:**
+- `apps/api/src/modules/nodes/index.ts` - Module exports
+- `apps/api/src/modules/nodes/types.ts` - Node API types
+- `apps/api/src/modules/nodes/service.ts` - Node business logic
+- `apps/api/src/modules/nodes/routes.ts` - Node HTTP routes
+
+**Modified Files:**
+- `apps/api/src/app.ts` - Registered node routes
+- `apps/web/src/game/engine/GameEngine.ts` - Selection management
+- `apps/web/src/game/rendering/WorldRenderer.ts` - Selection ring graphics
+- `apps/web/src/views/GameView.vue` - Node detail panel UI
+- `docs/DEVELOPMENT-PLAN.md` - Marked tasks complete, added hexagon note
+
+### Notes
+
+- Selection state managed in GameEngine with visual feedback in WorldRenderer
+- API supports both paginated and full node lists for different use cases
+- Node claiming validates adjacency (first node is free HQ)
+- TypeScript exactOptionalPropertyTypes required careful handling
+
+### Next Session Plan
+
+1. Set up WebSocket real-time updates for nodes
+2. Connect frontend to real API (replace mock data)
+3. Test node claiming flow end-to-end
+4. Section 1.5 - Node Claiming mechanics
 
 ---
 

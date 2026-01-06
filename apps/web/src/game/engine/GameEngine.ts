@@ -1,6 +1,8 @@
 import { Application, Container } from 'pixi.js';
-import { Camera, CameraOptions } from './Camera';
-import { MAP_BOUNDS, MapNode, RoadType } from '@nova-fall/shared';
+import type { CameraOptions } from './Camera';
+import { Camera } from './Camera';
+import type { MapNode, RoadType } from '@nova-fall/shared';
+import { MAP_BOUNDS } from '@nova-fall/shared';
 import { WorldRenderer } from '../rendering/WorldRenderer';
 
 export interface GameEngineOptions {
@@ -46,9 +48,13 @@ export class GameEngine {
   private _isDestroyed = false;
   private _currentZoomLevel: ZoomLevel = 'strategic';
 
+  // Selection state
+  private _selectedNodeIds = new Set<string>();
+
   // Event callbacks
   public onZoomLevelChange?: (level: ZoomLevel) => void;
   public onNodeClick?: (node: MapNode) => void;
+  public onSelectionChange?: (selectedNodeIds: string[]) => void;
 
   constructor(options: GameEngineOptions) {
     const { container, width, height, backgroundColor = 0x0a0a0f } = options;
@@ -185,8 +191,14 @@ export class GameEngine {
         const screenY = e.clientY - rect.top;
         const worldPos = this.screenToWorld(screenX, screenY);
         const node = this.worldRenderer.getNodeAtPosition(worldPos.x, worldPos.y);
-        if (node && this.onNodeClick) {
-          this.onNodeClick(node);
+
+        if (node) {
+          // Handle node selection
+          this.handleNodeSelection(node, e.shiftKey);
+          this.onNodeClick?.(node);
+        } else {
+          // Clicked on empty space - deselect all
+          this.clearSelection();
         }
       }
     };
@@ -394,5 +406,50 @@ export class GameEngine {
   // Highlight a node
   public highlightNode(nodeId: string, highlight: boolean) {
     this.worldRenderer.highlightNode(nodeId, highlight);
+  }
+
+  // Selection management
+  private handleNodeSelection(node: MapNode, isMultiSelect: boolean) {
+    if (isMultiSelect) {
+      // Toggle selection with shift-click
+      if (this._selectedNodeIds.has(node.id)) {
+        this._selectedNodeIds.delete(node.id);
+        this.worldRenderer.setNodeSelected(node.id, false);
+      } else {
+        this._selectedNodeIds.add(node.id);
+        this.worldRenderer.setNodeSelected(node.id, true);
+      }
+    } else {
+      // Single select - clear others first
+      for (const id of this._selectedNodeIds) {
+        this.worldRenderer.setNodeSelected(id, false);
+      }
+      this._selectedNodeIds.clear();
+      this._selectedNodeIds.add(node.id);
+      this.worldRenderer.setNodeSelected(node.id, true);
+    }
+
+    this.onSelectionChange?.(Array.from(this._selectedNodeIds));
+  }
+
+  public clearSelection() {
+    for (const id of this._selectedNodeIds) {
+      this.worldRenderer.setNodeSelected(id, false);
+    }
+    this._selectedNodeIds.clear();
+    this.onSelectionChange?.([]);
+  }
+
+  public selectNode(nodeId: string, addToSelection = false) {
+    if (!addToSelection) {
+      this.clearSelection();
+    }
+    this._selectedNodeIds.add(nodeId);
+    this.worldRenderer.setNodeSelected(nodeId, true);
+    this.onSelectionChange?.(Array.from(this._selectedNodeIds));
+  }
+
+  public get selectedNodeIds(): string[] {
+    return Array.from(this._selectedNodeIds);
   }
 }

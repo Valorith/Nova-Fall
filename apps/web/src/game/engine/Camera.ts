@@ -32,8 +32,8 @@ export class Camera {
   private targetScale: number;
 
   // Viewport size
-  private viewportWidth: number = 0;
-  private viewportHeight: number = 0;
+  private viewportWidth = 0;
+  private viewportHeight = 0;
 
   constructor(options: CameraOptions) {
     this.bounds = options.bounds;

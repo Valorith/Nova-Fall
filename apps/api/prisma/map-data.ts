@@ -1,16 +1,17 @@
 // Nova Prime - The main 100-node map for Nova Fall
 // Hybrid design: Hand-crafted key locations + procedural distribution
 
+import type {
+  NodeSeed,
+  ConnectionSeed,
+  EnvironmentZoneSeed,
+  MapSeed} from '@nova-fall/shared';
 import {
   NodeType,
   RoadType,
   StabilityLevel,
   REGIONS,
-  MAP_BOUNDS,
-  NodeSeed,
-  ConnectionSeed,
-  EnvironmentZoneSeed,
-  MapSeed,
+  MAP_BOUNDS
 } from '@nova-fall/shared';
 
 // Seeded random number generator for reproducible maps
@@ -66,13 +67,13 @@ function generateNodeName(type: NodeType, index: number, isKeyLocation: boolean)
 }
 
 // Key locations - hand-crafted positions
-const KEY_LOCATIONS: Array<{
+const KEY_LOCATIONS: {
   x: number;
   y: number;
   type: NodeType;
   name: string;
   tier: number;
-}> = [
+}[] = [
   // Central Trade Hub
   { x: 1000, y: 1000, type: NodeType.TRADE_HUB, name: 'Central Exchange', tier: 3 },
 
@@ -176,7 +177,7 @@ function selectNodeType(regionId: string, random: () => number): NodeType {
 }
 
 // Generate the map
-export function generateMap(seed: number = 42): MapSeed {
+export function generateMap(seed = 42): MapSeed {
   const random = seededRandom(seed);
   const nodes: NodeSeed[] = [];
   const connections: ConnectionSeed[] = [];

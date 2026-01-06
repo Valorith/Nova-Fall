@@ -1,5 +1,5 @@
 import { StabilityLevel } from '../types/enums';
-import { RegionDefinition } from '../types/map';
+import type { RegionDefinition } from '../types/map';
 
 // Region definitions for the Nova Fall world map
 // The map is 2000x2000 units, divided into 6 distinct regions

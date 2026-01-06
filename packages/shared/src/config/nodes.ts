@@ -1,5 +1,5 @@
 import { NodeType } from '../types/enums';
-import { NodeTypeConfig } from '../types/node';
+import type { NodeTypeConfig } from '../types/node';
 
 // Node type configurations
 // Defines bonuses, costs, and properties for each node type

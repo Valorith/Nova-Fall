@@ -1057,6 +1057,8 @@ enum StabilityLevel {
   - [x] Status indicators
   - [~] Name labels (disabled due to PixiJS v8 text rendering bug - TODO)
 
+> **Design Note**: Nodes should be rendered as hexagons with 6 clear connection faces. Each face can connect to an adjacent node, making connections visually intuitive. This will be implemented when refining the node graphics.
+
 - [x] **Implement culling**
   - [x] Only render visible elements
   - [x] LOD system for zoom levels
@@ -1064,22 +1066,22 @@ enum StabilityLevel {
 
 ### 1.4 Node Interaction
 
-- [ ] **Click handling**
-  - [ ] Node selection
-  - [ ] Deselection
-  - [ ] Multi-select (shift-click)
+- [x] **Click handling**
+  - [x] Node selection
+  - [x] Deselection
+  - [x] Multi-select (shift-click)
 
-- [ ] **Node detail panel (Vue)**
-  - [ ] Basic info display
-  - [ ] Resource storage
-  - [ ] Building list (placeholder)
-  - [ ] Garrison list (placeholder)
+- [x] **Node detail panel (Vue)**
+  - [x] Basic info display
+  - [x] Resource storage (placeholder)
+  - [x] Building list (placeholder)
+  - [x] Garrison list (placeholder)
 
-- [ ] **API endpoints**
-  - [ ] `GET /nodes` - List all nodes (paginated)
-  - [ ] `GET /nodes/:id` - Node details
-  - [ ] `GET /nodes/:id/connections` - Adjacent nodes
-  - [ ] `POST /nodes/:id/claim` - Claim neutral node
+- [x] **API endpoints**
+  - [x] `GET /nodes` - List all nodes (paginated)
+  - [x] `GET /nodes/:id` - Node details
+  - [x] `GET /nodes/:id/connections` - Adjacent nodes
+  - [x] `POST /nodes/:id/claim` - Claim neutral node
 
 - [ ] **Real-time updates**
   - [ ] WebSocket connection setup

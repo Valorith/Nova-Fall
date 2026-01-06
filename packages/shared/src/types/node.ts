@@ -1,4 +1,4 @@
-import { NodeType, NodeStatus, RoadType } from './enums';
+import type { NodeType, NodeStatus, RoadType } from './enums';
 
 // Resource types available in the game
 export type ResourceType = 'credits' | 'iron' | 'energy' | 'alloys' | 'crystals';
