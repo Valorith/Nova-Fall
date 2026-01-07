@@ -10,8 +10,8 @@
 | Metric                 | Value                      |
 | ---------------------- | -------------------------- |
 | **Project Start Date** | 2026-01-04                 |
-| **Current Phase**      | Phase 1 - World & Nodes (1.6 Lobby) |
-| **Overall Progress**   | Phase 1.1-1.5 complete, 1.6 in progress |
+| **Current Phase**      | Phase 2 - Economy & Resources |
+| **Overall Progress**   | Phase 1 complete, Phase 2 in progress |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
 | **Total Sessions**     | 23                         |
 
@@ -1522,27 +1522,44 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 - [x] Added UpkeepTickEvent to WebSocket events
 - [x] Added hours-until-depleted warning to credits tooltip
 - [x] Added economy tick tooltip explaining what happens on tick
+- [x] Fixed tooltip visibility (removed overflow-hidden from container)
+- [x] **Removed 30-second game tick** to reduce resource usage
+- [x] Added `/game/status` API endpoint for upkeep timing on load
+- [x] Updated frontend to fetch upkeep timing via API instead of waiting for tick
+- [x] Cleaned up all unused game tick code (worker, events, socket, store)
+- [x] Documented conditional tick strategy for future combat phase
 
 ### Files Created
 
 - `apps/web/src/components/game/TickProgressBar.vue` - Animated progress bar with tooltip
+- `apps/api/src/modules/game/` - New module for game status endpoints
 
 ### Files Modified
 
-- `apps/worker/src/jobs/upkeep.ts` - Added hourly production rates, stores next upkeep in Redis
-- `apps/worker/src/jobs/gameTick.ts` - Broadcasts upkeep timing every 30s from Redis
-- `apps/worker/src/lib/events.ts` - Added UpkeepTickEvent interface and publishUpkeepTick
-- `apps/ws-server/src/index.ts` - Added upkeep:tick channel subscription
-- `apps/web/src/services/socket.ts` - Added UpkeepTickEvent handler
-- `apps/web/src/stores/game.ts` - Added nextUpkeepAt and upkeepInterval state
+- `apps/worker/src/index.ts` - Removed game tick queue/worker (hourly upkeep only)
+- `apps/worker/src/lib/events.ts` - Removed game tick events, kept upkeep tick
+- `apps/ws-server/src/index.ts` - Removed game:tick channel
+- `apps/web/src/services/socket.ts` - Removed GameTickEvent
+- `apps/web/src/services/api.ts` - Added gameApi.getStatus()
+- `apps/web/src/stores/game.ts` - Fetch upkeep timing on load, removed game tick handler
 - `apps/web/src/components/game/PlayerResourcesPanel.vue` - Added depletion warning
 - `apps/web/src/views/GameView.vue` - Integrated TickProgressBar component
-- `packages/shared/src/*.ts` - Added .js extensions to all imports
+- `apps/api/src/app.ts` - Registered game routes
 
-### Issues Resolved
+### Files Deleted
 
-- ESM module resolution errors - fixed with .js extensions and NodeNext module
-- Progress bar not visible - fixed by having game tick broadcast upkeep timing from Redis
+- `apps/worker/src/jobs/gameTick.ts` - No longer needed
+
+### Resource Savings
+
+- Eliminated ~120 DB queries/hour
+- Eliminated ~360 Redis operations/hour
+- Background processing now minimal (hourly upkeep only)
+
+### Design Decisions
+
+- Rapid ticks will be reintroduced in Phase 4 (Combat) with conditional execution
+- Ticks will only run when: viewers present OR combat active
 
 ### Next Steps
 
@@ -1638,8 +1655,10 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ### Phase 2: Economy & Resources
 
-- [ ] Resources generate on tick
-- [ ] Upkeep deducts correctly
+- [x] Resources generate on tick (hourly economy tick)
+- [x] Upkeep deducts correctly (hourly economy tick)
+- [x] Economy tick progress bar with tooltip
+- [x] Credits depletion warning in tooltip
 - [ ] Upkeep failure triggers consequences
 - [ ] NPC market buy/sell works
 - [ ] Resource display updates in real-time

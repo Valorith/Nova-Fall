@@ -1,13 +1,12 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { MapNode, RoadType, ResourceStorage } from '@nova-fall/shared';
-import { api } from '@/services/api';
+import { api, gameApi } from '@/services/api';
 import {
   gameSocket,
   type NodeClaimedEvent,
   type NodeUpdateEvent,
   type ResourcesUpdateEvent,
-  type GameTickEvent,
   type UpkeepTickEvent,
 } from '@/services/socket';
 
@@ -52,6 +51,18 @@ export const useGameStore = defineStore('game', () => {
 
   const nodeList = computed(() => Array.from(nodes.value.values()));
 
+  // Load game status (upkeep timing)
+  async function loadGameStatus(): Promise<void> {
+    try {
+      const response = await gameApi.getStatus();
+      nextUpkeepAt.value = response.data.nextUpkeepAt;
+      upkeepInterval.value = response.data.upkeepInterval;
+    } catch (err) {
+      console.error('Failed to load game status:', err);
+      // Non-fatal - progress bar will just show 0
+    }
+  }
+
   // Load initial map data from API (optionally scoped to a session)
   async function loadMapData(sessionId?: string): Promise<void> {
     isLoading.value = true;
@@ -65,6 +76,7 @@ export const useGameStore = defineStore('game', () => {
       const [nodesResponse, connectionsResponse] = await Promise.all([
         api.get<{ nodes: MapNodeApiResponse[] }>(nodesUrl),
         api.get<{ connections: ConnectionApiResponse[] }>('/nodes/connections'),
+        loadGameStatus(), // Load upkeep timing in parallel
       ]);
 
       // Populate nodes map
@@ -147,10 +159,6 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  function handleGameTick(event: GameTickEvent): void {
-    currentTick.value = event.tick;
-  }
-
   function handleUpkeepTick(event: UpkeepTickEvent): void {
     nextUpkeepAt.value = event.nextUpkeepAt;
     upkeepInterval.value = event.upkeepInterval;
@@ -179,7 +187,6 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.on('node:update', handleNodeUpdate);
     gameSocket.on('node:claimed', handleNodeClaimed);
     gameSocket.on('resources:update', handleResourcesUpdate);
-    gameSocket.on('game:tick', handleGameTick);
     gameSocket.on('upkeep:tick', handleUpkeepTick);
 
     gameSocket.connect();
@@ -192,7 +199,6 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.off('node:update');
     gameSocket.off('node:claimed');
     gameSocket.off('resources:update');
-    gameSocket.off('game:tick');
     gameSocket.off('upkeep:tick');
     gameSocket.disconnect();
     isSocketConnected.value = false;

@@ -101,3 +101,13 @@ export const sessionsApi = {
   addBot: (id: string, data?: AddBotRequest) => api.post(`/sessions/${id}/add-bot`, data),
   removeBot: (id: string, botId: string) => api.post(`/sessions/${id}/remove-bot/${botId}`),
 };
+
+// Game API
+export interface GameStatusResponse {
+  nextUpkeepAt: number;
+  upkeepInterval: number;
+}
+
+export const gameApi = {
+  getStatus: () => api.get<GameStatusResponse>('/game/status'),
+};
