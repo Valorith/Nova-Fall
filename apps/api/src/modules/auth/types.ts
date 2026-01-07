@@ -6,6 +6,15 @@ export interface OAuthProfile {
   avatarUrl: string | null;
 }
 
+export interface ActiveSessionInfo {
+  id: string;
+  name: string;
+  gameType: 'KING_OF_THE_HILL' | 'DOMINATION';
+  status: 'LOBBY' | 'ACTIVE' | 'COMPLETED' | 'ABANDONED';
+  role: 'PLAYER' | 'SPECTATOR';
+  isCreator: boolean;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -13,6 +22,7 @@ export interface AuthUser {
   avatarUrl: string | null;
   isPremium: boolean;
   playerId: string | null;
+  activeSession?: ActiveSessionInfo;
 }
 
 export interface JWTPayload {

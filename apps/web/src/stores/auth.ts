@@ -2,6 +2,15 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { authApi } from '@/services/api';
 
+interface ActiveSession {
+  id: string;
+  name: string;
+  gameType: 'KING_OF_THE_HILL' | 'DOMINATION';
+  status: 'LOBBY' | 'ACTIVE' | 'COMPLETED' | 'ABANDONED';
+  role: 'PLAYER' | 'SPECTATOR';
+  isCreator: boolean;
+}
+
 interface User {
   id: string;
   username: string;
@@ -9,6 +18,7 @@ interface User {
   avatarUrl: string | null;
   isPremium: boolean;
   playerId: string | null;
+  activeSession?: ActiveSession;
 }
 
 const ACCESS_TOKEN_KEY = 'nova_access_token';

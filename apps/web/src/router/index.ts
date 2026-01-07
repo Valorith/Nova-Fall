@@ -20,10 +20,22 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/AuthCallbackView.vue'),
   },
   {
-    path: '/game',
+    path: '/lobby',
+    name: 'lobby',
+    component: () => import('@/views/LobbyView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/game/:sessionId',
     name: 'game',
     component: () => import('@/views/GameView.vue'),
-    meta: { requiresAuth: false }, // TODO: Set back to true for production
+    meta: { requiresAuth: true },
+    props: true,
+  },
+  {
+    // Redirect old /game to /lobby
+    path: '/game',
+    redirect: '/lobby',
   },
 ];
 
@@ -47,7 +59,7 @@ router.beforeEach(async (to, _from, next) => {
 
   // Redirect authenticated users away from guest-only pages
   if (to.meta.guestOnly && authStore.isAuthenticated) {
-    return next({ name: 'game' });
+    return next({ name: 'lobby' });
   }
 
   // Redirect unauthenticated users to login

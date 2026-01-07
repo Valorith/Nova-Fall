@@ -7,6 +7,7 @@ import errorHandlerPlugin from './plugins/error-handler.js';
 import { healthRoutes } from './modules/health/index.js';
 import { authRoutes } from './modules/auth/index.js';
 import { nodeRoutes } from './modules/nodes/index.js';
+import { sessionRoutes } from './modules/sessions/index.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -37,6 +38,7 @@ export async function buildApp() {
   await app.register(healthRoutes);
   await app.register(authRoutes);
   await app.register(nodeRoutes);
+  await app.register(sessionRoutes);
 
   // API version endpoint
   app.get('/api/v1', async () => {

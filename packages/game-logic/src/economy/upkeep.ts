@@ -1,8 +1,9 @@
 // Upkeep calculation and failure state logic
+import type {
+  NodeType} from '@nova-fall/shared';
 import {
   NODE_BASE_UPKEEP,
   DISTANCE_UPKEEP_MODIFIER,
-  NodeType,
   UpkeepStatus,
 } from '@nova-fall/shared';
 
@@ -30,7 +31,7 @@ export interface NodeUpkeepInput {
   tier: number;
   distanceFromHQ: number;
   regionUpkeepModifier?: number;
-  buildings?: Array<{ typeId: string }>;
+  buildings?: { typeId: string }[];
 }
 
 export interface UpkeepBreakdown {
@@ -188,7 +189,7 @@ export function calculateDistanceFromHQ(
   if (nodeId === hqNodeId) return 0;
 
   const visited = new Set<string>();
-  const queue: Array<{ nodeId: string; distance: number }> = [{ nodeId: hqNodeId, distance: 0 }];
+  const queue: { nodeId: string; distance: number }[] = [{ nodeId: hqNodeId, distance: 0 }];
   visited.add(hqNodeId);
 
   while (queue.length > 0) {
@@ -215,7 +216,7 @@ export function calculateDistanceFromHQ(
  */
 export function buildOwnedAdjacencyMap(
   ownedNodeIds: string[],
-  connections: Array<{ fromNodeId: string; toNodeId: string }>
+  connections: { fromNodeId: string; toNodeId: string }[]
 ): Map<string, string[]> {
   const ownedSet = new Set(ownedNodeIds);
   const adjacencyMap = new Map<string, string[]>();

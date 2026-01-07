@@ -191,9 +191,9 @@ Examples:
 
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
-| **Current Phase**  | Phase 2 - Economy & Resources             |
-| **Phase Progress** | Sections 2.1-2.3 complete                 |
-| **Current Task**   | Section 2.4 (Basic Market)                |
+| **Current Phase**  | Phase 1 - World & Nodes                   |
+| **Phase Progress** | Sections 1.1-1.5 complete, 1.6 in progress|
+| **Current Task**   | Section 1.6 - Game Lobby & Session System |
 | **Blockers**       | None                                      |
 | **Last Session**   | Session 21 - 2026-01-06                   |
 | **Last Updated**   | 2026-01-06                                |
@@ -231,6 +231,10 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-06 | Golden ratio hash for player colors       | Ensures distinct colors even for similar IDs       | Claude      |
 | 2026-01-06 | Default zoom 0.55 (Regional View)         | Map fills viewport on load, better first impression| User        |
 | 2026-01-06 | Thematic faction names                    | Sci-fi colonization theme (Helios, Cryo, etc.)     | User        |
+| 2026-01-06 | Multi-session game with lobby system      | Transform from shared world to session-based games | User        |
+| 2026-01-06 | Two game types: KOTH and Domination       | KOTH: 48h crown hold; Domination: last HQ standing | User        |
+| 2026-01-06 | 2 player minimum to start games           | Prevents single-player games, ensures competition  | User        |
+| 2026-01-06 | One active game per player                | Simplifies resource/state management               | User        |
 
 ---
 

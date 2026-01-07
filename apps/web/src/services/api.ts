@@ -71,3 +71,25 @@ export const nodesApi = {
   claim: (id: string) => api.post(`/nodes/${id}/claim`),
   abandon: (id: string) => api.post(`/nodes/${id}/abandon`),
 };
+
+// Sessions API
+export interface CreateSessionRequest {
+  name: string;
+  gameType: 'KING_OF_THE_HILL' | 'DOMINATION';
+}
+
+export interface SessionListQuery {
+  status?: 'LOBBY' | 'ACTIVE' | 'COMPLETED' | 'ABANDONED';
+  gameType?: 'KING_OF_THE_HILL' | 'DOMINATION';
+}
+
+export const sessionsApi = {
+  getAll: (query?: SessionListQuery) => api.get('/sessions', { params: query }),
+  getById: (id: string) => api.get(`/sessions/${id}`),
+  getMy: () => api.get('/sessions/my'),
+  create: (data: CreateSessionRequest) => api.post('/sessions', data),
+  join: (id: string) => api.post(`/sessions/${id}/join`),
+  spectate: (id: string) => api.post(`/sessions/${id}/spectate`),
+  leave: (id: string) => api.post(`/sessions/${id}/leave`),
+  start: (id: string) => api.post(`/sessions/${id}/start`),
+};

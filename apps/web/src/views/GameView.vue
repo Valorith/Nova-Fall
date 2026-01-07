@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData } from '../game';
 import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, type MapNode, type ResourceStorage } from '@nova-fall/shared';
 import PlayerResourcesPanel from '@/components/game/PlayerResourcesPanel.vue';
@@ -11,6 +12,12 @@ import { useToastStore } from '@/stores/toast';
 import { nodesApi } from '@/services/api';
 import { hexToPixel, hexKey, hexNeighbors, type HexCoord } from '../game/utils/hexGrid';
 
+// Props - sessionId will be used for session-scoped node operations
+defineProps<{
+  sessionId: string;
+}>();
+
+const router = useRouter();
 const gameStore = useGameStore();
 const authStore = useAuthStore();
 const toastStore = useToastStore();
@@ -537,6 +544,12 @@ async function handleClaimNode() {
         <PlayerResourcesPanel :resources="playerResources" />
 
         <div class="flex items-center gap-2">
+          <button
+            class="rounded bg-gray-700 px-3 py-1 text-sm text-gray-200 hover:bg-gray-600"
+            @click="router.push('/lobby')"
+          >
+            Back to Lobby
+          </button>
           <button
             class="rounded bg-red-900/80 px-3 py-1 text-sm text-red-200 hover:bg-red-800"
             @click="handleSignOut"

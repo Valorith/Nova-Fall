@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { publisherRedis } from '../lib/redis.js';
-import { getRegion, type ResourceStorage, NodeType } from '@nova-fall/shared';
+import type { NodeType } from '@nova-fall/shared';
+import { getRegion, type ResourceStorage } from '@nova-fall/shared';
 import {
   calculateNodeUpkeep,
   calculateDistanceFromHQ,
@@ -98,7 +99,7 @@ export async function processUpkeep(): Promise<void> {
 
       // Calculate total upkeep for all nodes
       let totalUpkeep = 0;
-      const nodeUpkeeps: Array<{ nodeId: string; upkeep: number; distance: number }> = [];
+      const nodeUpkeeps: { nodeId: string; upkeep: number; distance: number }[] = [];
 
       for (const node of player.ownedNodes) {
         // Skip HQ - it has no upkeep
@@ -256,7 +257,7 @@ async function processFailureConsequences(): Promise<void> {
   // OPTIMIZED: Collect all updates, execute in batches at the end
   const abandonedNodeIds: string[] = [];
   const statusUpdates = new Map<string, string[]>(); // status -> nodeIds
-  const allBuildingUpdates: Array<{ id: string; newHealth: number }> = [];
+  const allBuildingUpdates: { id: string; newHealth: number }[] = [];
 
   for (const node of failingNodes) {
     const lastPaid = node.upkeepPaid ?? now;

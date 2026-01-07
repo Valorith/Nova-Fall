@@ -49,12 +49,16 @@ model Player {
   displayName   String
 
   // Resources stored as JSON for flexibility
+  // NOTE: This is kept for backwards compatibility during migration.
+  // New code should use GameSessionPlayer.resources for session-scoped state.
   resources     Json     @default("{\"credits\": 1000, \"iron\": 100, \"energy\": 50}")
 
   // Unlocked research
   research      Json     @default("[]")
 
   // HQ (Headquarters) - first claimed node
+  // NOTE: This is kept for backwards compatibility during migration.
+  // New code should use GameSessionPlayer.hqNodeId for session-scoped state.
   hqNodeId      String?  @unique  // Player's headquarters node
 
   // Stats
@@ -75,6 +79,9 @@ model Player {
   attacksReceived  Battle[]       @relation("Defender")
   researchQueue    ResearchQueue[]
 
+  // Game sessions
+  gameSessions     GameSessionPlayer[]
+
   // Corporation
   corpMembership   CorpMember?
 }
@@ -91,6 +98,10 @@ model Node {
   positionX   Float
   positionY   Float
   regionId    String?   // For environmental zones
+
+  // Game session (nodes are scoped to sessions)
+  gameSessionId String?
+  gameSession   GameSession? @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
 
   // Ownership
   ownerId     String?
@@ -134,6 +145,7 @@ model Node {
   @@index([upkeepStatus])
   @@index([ownerId, upkeepStatus])
   @@index([attackCooldownUntil])
+  @@index([gameSessionId])
 }
 
 model NodeConnection {
@@ -504,6 +516,69 @@ model EnvironmentZone {
   updatedAt     DateTime @updatedAt
 }
 
+// ==================== GAME SESSIONS ====================
+
+model GameSession {
+  id              String            @id @default(cuid())
+  name            String
+  gameType        GameType          @default(KING_OF_THE_HILL)
+  status          GameSessionStatus @default(LOBBY)
+
+  // Session settings
+  minPlayers      Int               @default(2)  // Minimum players to start
+
+  // Creator (player who created this session)
+  creatorId       String
+
+  // King of the Hill specific
+  crownNodeId     String?           // The special node to control
+  crownHeldSince  DateTime?         // When current holder started holding
+  crownHolderId   String?           // Current crown holder (player ID)
+
+  // Timing
+  createdAt       DateTime          @default(now())
+  startedAt       DateTime?         // When game transitioned to ACTIVE
+  endedAt         DateTime?         // When game completed or abandoned
+  winnerId        String?           // Winner player ID
+
+  // Relations
+  players         GameSessionPlayer[]
+  nodes           Node[]
+
+  @@index([status])
+  @@index([gameType])
+  @@index([creatorId])
+}
+
+model GameSessionPlayer {
+  id              String       @id @default(cuid())
+
+  // Session reference
+  gameSessionId   String
+  gameSession     GameSession  @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+
+  // Player reference
+  playerId        String
+  player          Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  // Role in session
+  role            SessionRole  @default(PLAYER)
+
+  // Session-scoped player state
+  resources       Json         @default("{\"credits\": 1000, \"iron\": 100, \"energy\": 50}")
+  hqNodeId        String?      // Player's HQ in this session
+  totalNodes      Int          @default(0)
+
+  // Elimination tracking (for Domination mode)
+  eliminatedAt    DateTime?    // When player was eliminated (lost HQ)
+
+  joinedAt        DateTime     @default(now())
+
+  @@unique([gameSessionId, playerId])
+  @@index([gameSessionId])
+  @@index([playerId])
+}
+
 // ==================== ENUMS ====================
 
 enum NodeType {
@@ -626,4 +701,23 @@ enum StabilityLevel {
   UNSTABLE
   HAZARDOUS
   EXTREME
+}
+
+// ==================== GAME SESSIONS ====================
+
+enum GameType {
+  KING_OF_THE_HILL  // Hold crown node for 48 hours to win
+  DOMINATION        // Conquer all opponent HQs to win (last standing)
+}
+
+enum GameSessionStatus {
+  LOBBY      // Waiting for players to join
+  ACTIVE     // Game in progress
+  COMPLETED  // Victory achieved
+  ABANDONED  // All players left
+}
+
+enum SessionRole {
+  PLAYER     // Active participant
+  SPECTATOR  // Observer only
 }

@@ -34,7 +34,7 @@ onMounted(async () => {
   await authStore.fetchUser();
 
   if (authStore.isAuthenticated) {
-    router.push('/game');
+    router.push('/lobby');
   } else {
     error.value = 'Authentication failed. Please try again.';
     setTimeout(() => {

@@ -1167,6 +1167,152 @@ function getConnectionFace(fromNode, toNode): number {
   - [x] HQ displays special indicator on map (golden star)
   - [x] Claim button UI in node detail panel (shows for neutral nodes)
 
+### 1.6 Game Lobby & Session System
+
+Transform Nova Fall from a single shared world to a multi-session game with lobby system.
+
+**Key Requirements:**
+- One active game per player at a time
+- Anyone can create new game sessions
+- 2 player minimum to start a game
+- Multiple game types with different win conditions
+- Post-login landing: Lobby (not game)
+
+**Game Types:**
+1. **King of the Hill** - Claim and hold central "Crown Node" for 48 hours to win
+2. **Domination** - Conquer all opponent HQs to win (last player standing)
+
+#### 1.6.1 Database Schema Changes
+
+- [x] **Add GameSession model**
+  - [x] id, name, gameType, status (LOBBY/ACTIVE/COMPLETED/ABANDONED)
+  - [x] minPlayers (default 2), creatorId
+  - [x] crownNodeId, crownHeldSince, crownHolderId (KOTH specific)
+  - [x] startedAt, endedAt, winnerId
+  - [x] Indexes on status, gameType
+
+- [x] **Add GameSessionPlayer model**
+  - [x] id, gameSessionId, playerId, role (PLAYER/SPECTATOR)
+  - [x] resources (JSON), hqNodeId, totalNodes
+  - [x] Unique constraint on [gameSessionId, playerId]
+
+- [x] **Add GameType and GameSessionStatus enums**
+
+- [x] **Modify Node model**
+  - [x] Add gameSessionId (foreign key to GameSession)
+  - [x] Add index on gameSessionId
+
+- [~] **Modify Player model** (kept session-scoped fields for backwards compatibility)
+  - [ ] Remove session-scoped fields (resources, hqNodeId, totalNodes)
+  - [x] Add gameSessions relation to GameSessionPlayer
+
+- [x] **Create migration**
+  - [x] Add new models
+  - [ ] Create default session for existing data
+  - [ ] Migrate existing node/player data to default session
+
+#### 1.6.2 Sessions API Module
+
+- [x] **Create sessions module** (`/apps/api/src/modules/sessions/`)
+  - [x] routes.ts, service.ts, types.ts
+
+- [x] **Implement endpoints**
+  - [x] `GET /sessions` - List sessions (filterable by status)
+  - [x] `GET /sessions/:id` - Session details with players
+  - [x] `POST /sessions` - Create new session
+  - [x] `POST /sessions/:id/join` - Join as player
+  - [x] `POST /sessions/:id/spectate` - Join as spectator
+  - [x] `POST /sessions/:id/leave` - Leave session
+  - [x] `POST /sessions/:id/start` - Start game (creator only, requires 2+ players)
+  - [x] `GET /sessions/my` - Get user's active session
+
+- [x] **Update auth service**
+  - [~] Remove auto-HQ assignment (HQ now assigned per session in future work)
+  - [x] Add activeSession to `/me` response
+
+#### 1.6.3 Scope Node Operations to Sessions
+
+- [ ] **Modify node service**
+  - [ ] Use GameSessionPlayer context for all operations
+  - [ ] Scope getAllNodes to session
+  - [ ] Update claimNode for session scope
+  - [ ] Update abandonNode for session scope
+
+- [ ] **Update game tick worker**
+  - [ ] Scope resource generation to active sessions
+  - [ ] Scope upkeep processing to active sessions
+
+#### 1.6.4 Frontend Lobby
+
+- [x] **Create LobbyView component** (`/apps/web/src/views/LobbyView.vue`)
+  - [x] Your Active Game section (continue/start/leave)
+  - [x] Available Games list (join/spectate)
+  - [x] Create New Game button
+
+- [x] **Create session store** (`/apps/web/src/stores/session.ts`)
+  - [x] currentSession state
+  - [x] availableSessions state
+  - [x] createSession(), joinSession(), leaveSession(), startSession()
+
+- [x] **Create CreateSessionModal component** (integrated into LobbyView)
+  - [x] Game name input
+  - [x] Game type selector (KOTH / Domination)
+
+- [x] **Update router**
+  - [x] Add `/lobby` route (requiresAuth)
+  - [x] Change `/game/:sessionId` route
+  - [x] Redirect `/game` → `/lobby`
+
+- [x] **Update AuthCallbackView**
+  - [x] Redirect to `/lobby` instead of `/game`
+
+#### 1.6.5 GameView Updates
+
+- [x] **Accept sessionId prop from route**
+- [~] **Update game store for session context** (partial - store accepts sessionId but not fully scoped yet)
+- [x] **Add "Back to Lobby" navigation**
+- [ ] **Show session name and victory progress**
+
+#### 1.6.6 WebSocket Session Scoping
+
+- [ ] **Add session room management**
+  - [ ] Session rooms: `session:{sessionId}`
+  - [ ] Clients join room on game load
+
+- [ ] **Update event publishers**
+  - [ ] Include sessionId in all events
+  - [ ] Publish to session-specific rooms
+
+- [ ] **Update frontend socket service**
+  - [ ] Join/leave session rooms
+  - [ ] Filter events by session
+
+#### 1.6.7 Victory Conditions
+
+- [ ] **King of the Hill victory check**
+  - [ ] Worker checks crown node holder
+  - [ ] Track continuous hold time
+  - [ ] Trigger victory at 48 hours
+
+- [ ] **Domination victory check**
+  - [ ] Check for single remaining player with HQ
+  - [ ] Handle HQ conquest (eliminate player, neutralize nodes)
+
+- [ ] **Victory event and UI**
+  - [ ] Publish victory event
+  - [ ] Display victory modal
+  - [ ] Transition session to COMPLETED status
+
+- [ ] **Verify Section 1.6:**
+  - [ ] User lands at lobby after login
+  - [ ] Can create new game session
+  - [ ] Can join existing session
+  - [ ] Game starts when creator clicks start with 2+ players
+  - [ ] Game is session-scoped (nodes, resources, HQ)
+  - [ ] KOTH: Crown node holder wins after 48h
+  - [ ] Domination: Last player with HQ wins
+  - [ ] Victory modal displays and session completes
+
 ### Phase 1 Deliverable
 
 ✓ Players can view world map, zoom in/out, claim initial territory

@@ -3,7 +3,7 @@ import { redis } from '../../lib/redis.js';
 import { createTokenPair, verifyRefreshToken } from '../../lib/jwt.js';
 import { publishNodeClaimed } from '../../lib/events.js';
 import { NodeType, NodeStatus } from '@nova-fall/shared';
-import type { OAuthProfile, AuthUser, TokenPair } from './types.js';
+import type { OAuthProfile, AuthUser, TokenPair, ActiveSessionInfo } from './types.js';
 
 const REFRESH_TOKEN_PREFIX = 'refresh:';
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
@@ -236,7 +236,34 @@ export async function getUserById(userId: string): Promise<AuthUser | null> {
     return null;
   }
 
-  return {
+  // Get active session if player exists
+  let activeSession: ActiveSessionInfo | undefined;
+  if (user.player) {
+    const sessionPlayer = await prisma.gameSessionPlayer.findFirst({
+      where: {
+        playerId: user.player.id,
+        gameSession: {
+          status: { in: ['LOBBY', 'ACTIVE'] },
+        },
+      },
+      include: {
+        gameSession: true,
+      },
+    });
+
+    if (sessionPlayer) {
+      activeSession = {
+        id: sessionPlayer.gameSession.id,
+        name: sessionPlayer.gameSession.name,
+        gameType: sessionPlayer.gameSession.gameType,
+        status: sessionPlayer.gameSession.status,
+        role: sessionPlayer.role,
+        isCreator: sessionPlayer.playerId === sessionPlayer.gameSession.creatorId,
+      };
+    }
+  }
+
+  const result: AuthUser = {
     id: user.id,
     email: user.email,
     username: user.username,
@@ -244,6 +271,12 @@ export async function getUserById(userId: string): Promise<AuthUser | null> {
     isPremium: user.isPremium,
     playerId: user.player?.id ?? null,
   };
+
+  if (activeSession) {
+    result.activeSession = activeSession;
+  }
+
+  return result;
 }
 
 export async function updateUsername(userId: string, username: string): Promise<AuthUser> {

@@ -10,10 +10,10 @@
 | Metric                 | Value                      |
 | ---------------------- | -------------------------- |
 | **Project Start Date** | 2026-01-04                 |
-| **Current Phase**      | Phase 2 - Economy & Resources |
-| **Overall Progress**   | Phase 1 complete, 2.1-2.3 complete |
+| **Current Phase**      | Phase 1 - World & Nodes (1.6 Lobby) |
+| **Overall Progress**   | Phase 1.1-1.5 complete, 1.6 in progress |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 21                         |
+| **Total Sessions**     | 22                         |
 
 ---
 
@@ -1424,6 +1424,87 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ---
 
+## Session 22 - 2026-01-06
+
+**Duration:** 2+ hours
+**Phase:** Phase 1 - World & Nodes (Section 1.6)
+**Focus:** Game Lobby & Session System
+
+### Completed Tasks
+
+- [x] Add GameSession and GameSessionPlayer models to database schema
+- [x] Add gameSessionId to Node model (nullable)
+- [x] Create migration for new models
+- [x] Create sessions API module (routes, service, types)
+- [x] Update auth service to include activeSession in /me response
+- [x] Create LobbyView frontend component
+- [x] Create session store (Pinia)
+- [x] Update router to add /lobby route
+- [x] Update AuthCallbackView to redirect to /lobby
+- [x] Update GameView to accept sessionId prop
+- [x] Add "Back to Lobby" button to GameView
+
+### Partially Complete
+
+- [~] Scope node operations to sessions
+  - Note: Database ready, API needs session context
+- [~] WebSocket session room management
+  - Note: Not started, deferred to later phase
+- [~] Victory conditions
+  - Note: Not started, deferred to later phase
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Multi-session game architecture | Transform from shared world to session-based games |
+| Two game types: KOTH and Domination | KOTH: 48h crown hold; Domination: last HQ standing |
+| 2 player minimum to start games | Prevents single-player games, ensures competition |
+| One active game per player | Simplifies resource/state management |
+
+### Files Created
+
+- `apps/api/src/modules/sessions/types.ts` - Session type definitions
+- `apps/api/src/modules/sessions/service.ts` - Session business logic
+- `apps/api/src/modules/sessions/routes.ts` - Session API endpoints
+- `apps/api/src/modules/sessions/index.ts` - Module exports
+- `apps/web/src/stores/session.ts` - Session Pinia store
+- `apps/web/src/views/LobbyView.vue` - Game lobby UI
+
+### Files Modified
+
+- `apps/api/prisma/schema.prisma` - Added GameSession, GameSessionPlayer, enums
+- `apps/api/src/app.ts` - Register session routes
+- `apps/api/src/modules/auth/types.ts` - Added ActiveSessionInfo
+- `apps/api/src/modules/auth/service.ts` - Include activeSession in getUserById
+- `apps/web/src/services/api.ts` - Added sessionsApi
+- `apps/web/src/stores/auth.ts` - Added ActiveSession interface to User
+- `apps/web/src/router/index.ts` - Added /lobby, /game/:sessionId routes
+- `apps/web/src/views/AuthCallbackView.vue` - Redirect to /lobby
+- `apps/web/src/views/GameView.vue` - Accept sessionId prop, add back button
+
+### New API Endpoints
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/sessions` | List sessions (filterable) |
+| GET | `/sessions/:id` | Session details |
+| POST | `/sessions` | Create new session |
+| POST | `/sessions/:id/join` | Join as player |
+| POST | `/sessions/:id/spectate` | Join as spectator |
+| POST | `/sessions/:id/leave` | Leave session |
+| POST | `/sessions/:id/start` | Start game (creator only) |
+| GET | `/sessions/my` | Get user's active session |
+
+### Next Steps
+
+1. Scope node operations to active sessions
+2. Implement map generation per session
+3. Add WebSocket session room management
+4. Implement victory conditions in worker
+
+---
+
 ## Blockers Log
 
 <!-- Track all blockers here for visibility -->
@@ -1589,4 +1670,4 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ---
 
-_Last Updated: 2026-01-06 (Session 21 - Performance optimization pass)_
+_Last Updated: 2026-01-06 (Session 22 - Game Lobby & Session System)_
