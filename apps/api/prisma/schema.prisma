@@ -130,6 +130,10 @@ model Node {
   @@index([ownerId])
   @@index([type])
   @@index([regionId])
+  @@index([status])
+  @@index([upkeepStatus])
+  @@index([ownerId, upkeepStatus])
+  @@index([attackCooldownUntil])
 }
 
 model NodeConnection {

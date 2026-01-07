@@ -31,8 +31,14 @@ export interface HexMapData {
 // Neutral color for unclaimed nodes
 const NEUTRAL_NODE_COLOR = 0x505050;
 
-// Generate a consistent color from a player ID using hashing
+// PERFORMANCE: Cache player colors to avoid recalculating on every render
+const playerColorCache = new Map<string, number>();
+
+// Generate a consistent color from a player ID using hashing (cached)
 function getPlayerColor(ownerId: string): number {
+  // Check cache first
+  const cached = playerColorCache.get(ownerId);
+  if (cached !== undefined) return cached;
   // Better hash function using golden ratio for good distribution
   let hash = 0;
   for (let i = 0; i < ownerId.length; i++) {
@@ -50,7 +56,12 @@ function getPlayerColor(ownerId: string): number {
   const lightness = 50; // Mid-range lightness
 
   // Convert HSL to RGB then to hex
-  return hslToHex(hue, saturation, lightness);
+  const color = hslToHex(hue, saturation, lightness);
+
+  // Cache for future lookups
+  playerColorCache.set(ownerId, color);
+
+  return color;
 }
 
 // Convert HSL to hex color
@@ -150,10 +161,15 @@ export class WorldRenderer {
   // Data
   private mapData: HexMapData | null = null;
   private nodesByHexKey = new Map<string, MapNode>();
+  private nodesById = new Map<string, MapNode>(); // PERFORMANCE: O(1) lookup by ID
 
   // Selection state
   private selectedNodeIds = new Set<string>();
   private highlightedNodeId: string | null = null;
+
+  // PERFORMANCE: Batch node updates to avoid re-rendering on every update
+  private nodesDirty = false;
+  private pendingRenderFrame: number | null = null;
 
   constructor() {
     this.terrainLayer = new Container();
@@ -202,14 +218,18 @@ export class WorldRenderer {
     const mapData = this.generateMapData(nodes, connections);
     this.mapData = mapData;
 
-    // Build node lookup
+    // Clear existing state first (before building new lookups)
+    this.clearAll();
+
+    // Build node lookups
     this.nodesByHexKey.clear();
+    this.nodesById.clear();
     for (const node of nodes) {
       const hex = pixelToHex({ x: node.positionX, y: node.positionY });
       this.nodesByHexKey.set(hexKey(hex), node);
+      this.nodesById.set(node.id, node);
     }
 
-    this.clearAll();
     this.renderTerrain();
     this.renderConnections();
     this.renderNodes();
@@ -358,6 +378,14 @@ export class WorldRenderer {
     this.selectionGraphics.clear();
     this.selectedNodeIds.clear();
     this.highlightedNodeId = null;
+    this.nodesById.clear();
+    this.nodesDirty = false;
+
+    // Cancel any pending render frame
+    if (this.pendingRenderFrame !== null) {
+      cancelAnimationFrame(this.pendingRenderFrame);
+      this.pendingRenderFrame = null;
+    }
 
     // Clean up textures
     if (this.terrainTexture) {
@@ -565,25 +593,56 @@ export class WorldRenderer {
     g.clear();
   }
 
-  // Update a single node - requires re-rendering all nodes (expensive, avoid frequent calls)
+  // Update a single node - batches re-renders for performance
   updateNode(nodeId: string, data: Partial<MapNode>): void {
     if (!this.mapData) return;
 
-    const index = this.mapData.nodes.findIndex((n) => n.id === nodeId);
-    if (index === -1) return;
-
-    const existingNode = this.mapData.nodes[index];
+    // Use nodesById for O(1) lookup instead of findIndex
+    const existingNode = this.nodesById.get(nodeId);
     if (!existingNode) return;
 
-    const updatedNode: MapNode = { ...existingNode, ...data };
-    this.mapData.nodes[index] = updatedNode;
+    // Check if visual properties actually changed (skip render if only storage changed)
+    const visualPropsChanged =
+      data.ownerId !== undefined && data.ownerId !== existingNode.ownerId ||
+      data.isHQ !== undefined && data.isHQ !== existingNode.isHQ ||
+      data.status !== undefined && data.status !== existingNode.status;
 
-    // Update hex lookup
+    // Update the node data
+    const updatedNode: MapNode = { ...existingNode, ...data };
+
+    // Update in array (find index only when needed)
+    const index = this.mapData.nodes.findIndex((n) => n.id === nodeId);
+    if (index !== -1) {
+      this.mapData.nodes[index] = updatedNode;
+    }
+
+    // Update lookups
     const hex = pixelToHex({ x: updatedNode.positionX, y: updatedNode.positionY });
     this.nodesByHexKey.set(hexKey(hex), updatedNode);
+    this.nodesById.set(nodeId, updatedNode);
 
-    // Re-render all nodes (texture-based approach requires full re-render)
-    this.renderNodes();
+    // Only mark dirty if visual properties changed
+    if (visualPropsChanged) {
+      this.markNodesDirty();
+    }
+  }
+
+  // PERFORMANCE: Batch multiple node updates into a single render
+  private markNodesDirty(): void {
+    if (this.nodesDirty) return; // Already scheduled
+
+    this.nodesDirty = true;
+
+    // Use requestAnimationFrame to batch all updates in current frame
+    if (this.pendingRenderFrame === null) {
+      this.pendingRenderFrame = requestAnimationFrame(() => {
+        this.pendingRenderFrame = null;
+        if (this.nodesDirty) {
+          this.nodesDirty = false;
+          this.renderNodes();
+        }
+      });
+    }
   }
 
   // Visibility culling - no longer needed with texture caching
@@ -622,9 +681,9 @@ export class WorldRenderer {
     const g = this.selectionGraphics;
     g.clear();
 
-    // Draw selection rings
+    // Draw selection rings (use nodesById for O(1) lookup instead of .find())
     for (const nodeId of this.selectedNodeIds) {
-      const node = this.mapData?.nodes.find(n => n.id === nodeId);
+      const node = this.nodesById.get(nodeId);
       if (!node) continue;
 
       const hex = pixelToHex({ x: node.positionX, y: node.positionY });
@@ -641,9 +700,9 @@ export class WorldRenderer {
       g.stroke();
     }
 
-    // Draw highlight (if any)
+    // Draw highlight (if any) - use nodesById for O(1) lookup
     if (this.highlightedNodeId && !this.selectedNodeIds.has(this.highlightedNodeId)) {
-      const node = this.mapData?.nodes.find(n => n.id === this.highlightedNodeId);
+      const node = this.nodesById.get(this.highlightedNodeId);
       if (node) {
         const hex = pixelToHex({ x: node.positionX, y: node.positionY });
         const pixel = hexToPixel(hex);

@@ -64,8 +64,15 @@ export async function processUpkeep(): Promise<void> {
       return;
     }
 
-    // Fetch all connections for distance calculation
+    // Fetch only connections relevant to owned nodes (not ALL connections)
+    const allOwnedNodeIds = players.flatMap((p) => p.ownedNodes.map((n) => n.id));
     const connections = await prisma.nodeConnection.findMany({
+      where: {
+        OR: [
+          { fromNodeId: { in: allOwnedNodeIds } },
+          { toNodeId: { in: allOwnedNodeIds } },
+        ],
+      },
       select: {
         fromNodeId: true,
         toNodeId: true,
@@ -131,47 +138,58 @@ export async function processUpkeep(): Promise<void> {
         },
       });
 
-      // Update node upkeep status
-      const nodeUpdates = player.ownedNodes.map((node) => {
-        // HQ always paid
-        if (node.id === hqNodeId) {
-          return prisma.node.update({
-            where: { id: node.id },
+      // Update node upkeep status - OPTIMIZED: batch by status type
+      const nextDue = new Date(now.getTime() + 60 * 60 * 1000); // +1 hour
+
+      if (paid) {
+        // All nodes paid - use single updateMany
+        await prisma.node.updateMany({
+          where: { id: { in: ownedNodeIds } },
+          data: {
+            upkeepPaid: now,
+            upkeepDue: nextDue,
+            upkeepStatus: 'PAID',
+          },
+        });
+      } else {
+        // HQ still gets marked paid
+        if (hqNodeId) {
+          await prisma.node.update({
+            where: { id: hqNodeId },
             data: {
               upkeepPaid: now,
-              upkeepDue: new Date(now.getTime() + 60 * 60 * 1000), // +1 hour
+              upkeepDue: nextDue,
               upkeepStatus: 'PAID',
             },
           });
         }
 
-        if (paid) {
-          // Upkeep paid - reset status
-          return prisma.node.update({
-            where: { id: node.id },
-            data: {
-              upkeepPaid: now,
-              upkeepDue: new Date(now.getTime() + 60 * 60 * 1000), // +1 hour
-              upkeepStatus: 'PAID',
-            },
-          });
-        } else {
-          // Upkeep not paid - calculate hours since last payment
+        // Group unpaid nodes by their new status to reduce queries
+        const statusGroups = new Map<string, string[]>();
+
+        for (const node of player.ownedNodes) {
+          if (node.id === hqNodeId) continue;
+
           const lastPaid = node.upkeepPaid ?? node.upkeepDue ?? now;
           const hoursSincePayment = (now.getTime() - lastPaid.getTime()) / (1000 * 60 * 60);
-          const newStatus = getUpkeepStatus(hoursSincePayment + 1); // +1 for this missed payment
+          const newStatus = getUpkeepStatus(hoursSincePayment + 1);
 
-          return prisma.node.update({
-            where: { id: node.id },
+          const existing = statusGroups.get(newStatus) ?? [];
+          existing.push(node.id);
+          statusGroups.set(newStatus, existing);
+        }
+
+        // Update each status group with single updateMany
+        for (const [status, nodeIds] of statusGroups) {
+          await prisma.node.updateMany({
+            where: { id: { in: nodeIds } },
             data: {
-              upkeepDue: new Date(now.getTime() + 60 * 60 * 1000), // +1 hour
-              upkeepStatus: newStatus,
+              upkeepDue: nextDue,
+              upkeepStatus: status as 'WARNING' | 'DECAY' | 'COLLAPSE',
             },
           });
         }
-      });
-
-      await prisma.$transaction(nodeUpdates);
+      }
 
       results.push({
         playerId: player.id,
@@ -235,6 +253,11 @@ async function processFailureConsequences(): Promise<void> {
     },
   });
 
+  // OPTIMIZED: Collect all updates, execute in batches at the end
+  const abandonedNodeIds: string[] = [];
+  const statusUpdates = new Map<string, string[]>(); // status -> nodeIds
+  const allBuildingUpdates: Array<{ id: string; newHealth: number }> = [];
+
   for (const node of failingNodes) {
     const lastPaid = node.upkeepPaid ?? now;
     const hoursSincePayment = (now.getTime() - lastPaid.getTime()) / (1000 * 60 * 60);
@@ -242,55 +265,76 @@ async function processFailureConsequences(): Promise<void> {
 
     // Check for abandonment (48h+)
     if (currentStatus === 'ABANDONED') {
-      // Node reverts to neutral
-      await prisma.node.update({
-        where: { id: node.id },
-        data: {
-          ownerId: null,
-          status: 'NEUTRAL',
-          upkeepStatus: 'PAID',
-          upkeepPaid: null,
-          upkeepDue: null,
-          claimedAt: null,
-        },
-      });
+      abandonedNodeIds.push(node.id);
+      continue;
+    }
 
-      // Publish abandonment event
+    // Collect decay damage for buildings
+    const damagePercent = getDecayDamagePercent(hoursSincePayment);
+    if (damagePercent > 0) {
+      for (const building of node.buildings) {
+        const damage = Math.floor(building.maxHealth * (damagePercent / 100));
+        const newHealth = Math.max(0, building.health - damage);
+        allBuildingUpdates.push({ id: building.id, newHealth });
+      }
+    }
+
+    // Collect status updates
+    if (currentStatus !== node.upkeepStatus) {
+      const existing = statusUpdates.get(currentStatus) ?? [];
+      existing.push(node.id);
+      statusUpdates.set(currentStatus, existing);
+    }
+  }
+
+  // Execute all updates in batch
+
+  // 1. Abandoned nodes - single updateMany
+  if (abandonedNodeIds.length > 0) {
+    await prisma.node.updateMany({
+      where: { id: { in: abandonedNodeIds } },
+      data: {
+        ownerId: null,
+        status: 'NEUTRAL',
+        upkeepStatus: 'PAID',
+        upkeepPaid: null,
+        upkeepDue: null,
+        claimedAt: null,
+      },
+    });
+
+    // Publish abandonment events
+    for (const nodeId of abandonedNodeIds) {
       await publisherRedis.publish(
         'node:abandoned',
         JSON.stringify({
-          nodeId: node.id,
+          nodeId,
           reason: 'upkeep_failure',
           timestamp: now.toISOString(),
         })
       );
-
-      console.log(`[Upkeep] Node ${node.id} abandoned due to upkeep failure`);
-      continue;
     }
+    console.log(`[Upkeep] ${abandonedNodeIds.length} nodes abandoned due to upkeep failure`);
+  }
 
-    // Apply decay damage to buildings
-    const damagePercent = getDecayDamagePercent(hoursSincePayment);
-    if (damagePercent > 0 && node.buildings.length > 0) {
-      const buildingUpdates = node.buildings.map((building) => {
-        const damage = Math.floor(building.maxHealth * (damagePercent / 100));
-        const newHealth = Math.max(0, building.health - damage);
+  // 2. Status updates - one updateMany per status
+  for (const [status, nodeIds] of statusUpdates) {
+    await prisma.node.updateMany({
+      where: { id: { in: nodeIds } },
+      data: { upkeepStatus: status as 'WARNING' | 'DECAY' | 'COLLAPSE' },
+    });
+  }
 
-        return prisma.building.update({
-          where: { id: building.id },
-          data: { health: newHealth },
-        });
-      });
-
-      await prisma.$transaction(buildingUpdates);
-    }
-
-    // Update status if changed
-    if (currentStatus !== node.upkeepStatus) {
-      await prisma.node.update({
-        where: { id: node.id },
-        data: { upkeepStatus: currentStatus },
-      });
-    }
+  // 3. Building damage - single transaction for all buildings
+  if (allBuildingUpdates.length > 0) {
+    await prisma.$transaction(
+      allBuildingUpdates.map((update) =>
+        prisma.building.update({
+          where: { id: update.id },
+          data: { health: update.newHealth },
+        })
+      )
+    );
+    console.log(`[Upkeep] Applied decay damage to ${allBuildingUpdates.length} buildings`);
   }
 }

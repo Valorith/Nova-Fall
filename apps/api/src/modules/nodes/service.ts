@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma.js';
+import { redis } from '../../lib/redis.js';
 import { publishNodeClaimed } from '../../lib/events.js';
 import type { NodeStatus, NodeType } from '@prisma/client';
 import type {
@@ -8,6 +9,16 @@ import type {
   PaginatedResponse,
   NodeListQuery,
 } from './types.js';
+
+// Cache keys
+const CACHE_KEYS = {
+  ALL_CONNECTIONS: 'cache:connections:all',
+} as const;
+
+// Cache TTLs in seconds
+const CACHE_TTL = {
+  CONNECTIONS: 60 * 60, // 1 hour - connections rarely change
+} as const;
 
 // Get paginated list of nodes for map display
 export async function getNodes(query: NodeListQuery): Promise<PaginatedResponse<MapNodeResponse>> {
@@ -267,28 +278,31 @@ export async function claimNode(
     return { success: false, error: 'Node is not neutral' };
   }
 
-  // Get player's owned nodes
-  const playerNodes = await prisma.node.findMany({
-    where: { ownerId: playerId },
-    select: { id: true },
-  });
+  // Get adjacent node IDs
+  const adjacentNodeIds = [
+    ...node.connectionsFrom.map((c) => c.toNodeId),
+    ...node.connectionsTo.map((c) => c.fromNodeId),
+  ];
 
-  const playerNodeIds = new Set(playerNodes.map((n) => n.id));
+  // Check if player owns any adjacent node (O(1) query instead of fetching all player nodes)
+  // Also check if this is their first node in the same query
+  const [adjacentOwned, playerNodeCount] = await Promise.all([
+    prisma.node.findFirst({
+      where: {
+        id: { in: adjacentNodeIds },
+        ownerId: playerId,
+      },
+      select: { id: true },
+    }),
+    prisma.node.count({
+      where: { ownerId: playerId },
+    }),
+  ]);
 
-  // Check if player has any nodes yet (first node is free HQ claim)
-  const isFirstNode = playerNodeIds.size === 0;
+  const isFirstNode = playerNodeCount === 0;
 
-  if (!isFirstNode) {
-    // Must be adjacent to an owned node
-    const adjacentNodeIds = [
-      ...node.connectionsFrom.map((c) => c.toNodeId),
-      ...node.connectionsTo.map((c) => c.fromNodeId),
-    ];
-
-    const isAdjacent = adjacentNodeIds.some((id) => playerNodeIds.has(id));
-    if (!isAdjacent) {
-      return { success: false, error: 'Node must be adjacent to one of your nodes' };
-    }
+  if (!isFirstNode && !adjacentOwned) {
+    return { success: false, error: 'Node must be adjacent to one of your nodes' };
   }
 
   // TODO: Check and deduct claiming cost (resources)
@@ -350,8 +364,15 @@ export async function claimNode(
   return { success: true };
 }
 
-// Get all connections (for map rendering)
+// Get all connections (for map rendering) - CACHED
 export async function getAllConnections() {
+  // Try to get from cache first
+  const cached = await redis.get(CACHE_KEYS.ALL_CONNECTIONS);
+  if (cached) {
+    return JSON.parse(cached);
+  }
+
+  // Fetch from database
   const connections = await prisma.nodeConnection.findMany({
     include: {
       fromNode: { select: { positionX: true, positionY: true } },
@@ -359,7 +380,7 @@ export async function getAllConnections() {
     },
   });
 
-  return connections.map((conn) => ({
+  const result = connections.map((conn) => ({
     id: conn.id,
     fromX: conn.fromNode.positionX,
     fromY: conn.fromNode.positionY,
@@ -368,6 +389,16 @@ export async function getAllConnections() {
     roadType: conn.roadType,
     dangerLevel: conn.dangerLevel,
   }));
+
+  // Cache for 1 hour
+  await redis.setex(CACHE_KEYS.ALL_CONNECTIONS, CACHE_TTL.CONNECTIONS, JSON.stringify(result));
+
+  return result;
+}
+
+// Invalidate connections cache (call when connections change)
+export async function invalidateConnectionsCache(): Promise<void> {
+  await redis.del(CACHE_KEYS.ALL_CONNECTIONS);
 }
 
 // Abandon a node (release ownership)
