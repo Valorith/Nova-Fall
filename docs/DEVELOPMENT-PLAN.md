@@ -1232,11 +1232,11 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
 
 #### 1.6.3 Scope Node Operations to Sessions
 
-- [ ] **Modify node service**
-  - [ ] Use GameSessionPlayer context for all operations
-  - [ ] Scope getAllNodes to session
-  - [ ] Update claimNode for session scope
-  - [ ] Update abandonNode for session scope
+- [x] **Modify node service**
+  - [x] Use GameSessionPlayer context for all operations
+  - [x] Scope getAllNodes to session
+  - [x] Update claimNode for session scope
+  - [x] Update abandonNode for session scope
 
 - [ ] **Update game tick worker**
   - [ ] Scope resource generation to active sessions

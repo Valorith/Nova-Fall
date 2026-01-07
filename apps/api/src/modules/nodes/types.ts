@@ -59,4 +59,5 @@ export interface NodeListQuery {
   ownerId?: string;
   type?: NodeType;
   status?: NodeStatus;
+  sessionId?: string; // Filter nodes by game session
 }

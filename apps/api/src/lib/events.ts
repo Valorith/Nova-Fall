@@ -12,6 +12,7 @@ export interface NodeClaimedEvent {
   node: MapNodeResponse;
   playerId: string;
   playerName: string;
+  sessionId?: string; // Game session ID for session-scoped events
 }
 
 export interface BattleStartEvent {

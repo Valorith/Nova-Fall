@@ -42,17 +42,22 @@ export const useGameStore = defineStore('game', () => {
   const error = ref<string | null>(null);
   const isSocketConnected = ref(false);
   const recentlyUpdatedNodes = ref<Set<string>>(new Set());
+  const currentSessionId = ref<string | null>(null);
 
   const nodeList = computed(() => Array.from(nodes.value.values()));
 
-  // Load initial map data from API
-  async function loadMapData(): Promise<void> {
+  // Load initial map data from API (optionally scoped to a session)
+  async function loadMapData(sessionId?: string): Promise<void> {
     isLoading.value = true;
     error.value = null;
+    currentSessionId.value = sessionId ?? null;
 
     try {
+      // Build query params for session-scoped requests
+      const nodesUrl = sessionId ? `/nodes?sessionId=${sessionId}` : '/nodes';
+
       const [nodesResponse, connectionsResponse] = await Promise.all([
-        api.get<{ nodes: MapNodeApiResponse[] }>('/nodes'),
+        api.get<{ nodes: MapNodeApiResponse[] }>(nodesUrl),
         api.get<{ connections: ConnectionApiResponse[] }>('/nodes/connections'),
       ]);
 
@@ -184,6 +189,7 @@ export const useGameStore = defineStore('game', () => {
     error,
     isSocketConnected,
     recentlyUpdatedNodes,
+    currentSessionId,
 
     // Computed
     nodeList,

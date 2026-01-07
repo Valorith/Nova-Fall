@@ -32,12 +32,17 @@ export async function getNodes(query: NodeListQuery): Promise<PaginatedResponse<
     ownerId?: string | null;
     type?: NodeType;
     status?: NodeStatus;
+    gameSessionId?: string | null;
   } = {};
 
   if (query.regionId) where.regionId = query.regionId;
   if (query.ownerId !== undefined) where.ownerId = query.ownerId || null;
   if (query.type) where.type = query.type;
   if (query.status) where.status = query.status;
+  // Session filter: if sessionId provided, filter by it; else show nodes without session (legacy)
+  if (query.sessionId) {
+    where.gameSessionId = query.sessionId;
+  }
 
   const [nodes, total] = await Promise.all([
     prisma.node.findMany({
@@ -85,14 +90,36 @@ export async function getNodes(query: NodeListQuery): Promise<PaginatedResponse<
 }
 
 // Get all nodes (no pagination, for initial map load)
-export async function getAllNodes(): Promise<MapNodeResponse[]> {
+export async function getAllNodes(sessionId?: string): Promise<MapNodeResponse[]> {
+  // Build where clause for session filtering
+  const where: { gameSessionId?: string | null } = {};
+  if (sessionId) {
+    where.gameSessionId = sessionId;
+  }
+
+  // Get nodes with owner info
   const nodes = await prisma.node.findMany({
+    where,
     include: {
       owner: {
         select: { displayName: true, hqNodeId: true },
       },
     },
   });
+
+  // If we have a session, get HQ mappings from GameSessionPlayer
+  let sessionHQs: Map<string, string> = new Map();
+  if (sessionId) {
+    const sessionPlayers = await prisma.gameSessionPlayer.findMany({
+      where: { gameSessionId: sessionId },
+      select: { playerId: true, hqNodeId: true },
+    });
+    sessionHQs = new Map(
+      sessionPlayers
+        .filter((sp) => sp.hqNodeId)
+        .map((sp) => [sp.playerId, sp.hqNodeId!])
+    );
+  }
 
   return nodes.map((node) => {
     const result: MapNodeResponse = {
@@ -109,9 +136,12 @@ export async function getAllNodes(): Promise<MapNodeResponse[]> {
     if (node.owner?.displayName) {
       result.ownerName = node.owner.displayName;
     }
-    // Check if this node is the owner's HQ
-    if (node.owner?.hqNodeId === node.id) {
-      result.isHQ = true;
+    // Check if this node is the owner's HQ (from session or legacy player field)
+    if (node.ownerId) {
+      const sessionHQ = sessionHQs.get(node.ownerId);
+      if (sessionHQ === node.id || node.owner?.hqNodeId === node.id) {
+        result.isHQ = true;
+      }
     }
     // Include upkeep status for owned nodes
     if (node.ownerId) {
@@ -255,10 +285,12 @@ export async function getNodeConnections(nodeId: string): Promise<NodeConnection
   ];
 }
 
-// Claim a neutral node
+// Claim a neutral node (session-scoped)
 export async function claimNode(
   nodeId: string,
-  playerId: string
+  playerId: string,
+  gameSessionId: string,
+  sessionPlayerId: string
 ): Promise<{ success: boolean; error?: string; node?: NodeDetailResponse }> {
   // Get node with connections
   const node = await prisma.node.findUnique({
@@ -278,58 +310,81 @@ export async function claimNode(
     return { success: false, error: 'Node is not neutral' };
   }
 
+  // Check if node belongs to this session (or is unassigned)
+  if (node.gameSessionId && node.gameSessionId !== gameSessionId) {
+    return { success: false, error: 'Node belongs to another game session' };
+  }
+
   // Get adjacent node IDs
   const adjacentNodeIds = [
     ...node.connectionsFrom.map((c) => c.toNodeId),
     ...node.connectionsTo.map((c) => c.fromNodeId),
   ];
 
-  // Check if player owns any adjacent node (O(1) query instead of fetching all player nodes)
-  // Also check if this is their first node in the same query
-  const [adjacentOwned, playerNodeCount] = await Promise.all([
-    prisma.node.findFirst({
+  // Get session player to check their current node count and HQ
+  const sessionPlayer = await prisma.gameSessionPlayer.findUnique({
+    where: { id: sessionPlayerId },
+  });
+
+  if (!sessionPlayer) {
+    return { success: false, error: 'Session player not found' };
+  }
+
+  const isFirstNode = sessionPlayer.totalNodes === 0;
+
+  // Check if player owns any adjacent node within this session
+  if (!isFirstNode) {
+    const adjacentOwned = await prisma.node.findFirst({
       where: {
         id: { in: adjacentNodeIds },
         ownerId: playerId,
+        gameSessionId: gameSessionId,
       },
       select: { id: true },
-    }),
-    prisma.node.count({
-      where: { ownerId: playerId },
-    }),
-  ]);
+    });
 
-  const isFirstNode = playerNodeCount === 0;
-
-  if (!isFirstNode && !adjacentOwned) {
-    return { success: false, error: 'Node must be adjacent to one of your nodes' };
+    if (!adjacentOwned) {
+      return { success: false, error: 'Node must be adjacent to one of your nodes' };
+    }
   }
 
   // TODO: Check and deduct claiming cost (resources)
   // For MVP, we'll skip resource cost
 
-  // Claim the node
+  // Claim the node (assign to session if not already)
   await prisma.node.update({
     where: { id: nodeId },
     data: {
       ownerId: playerId,
+      gameSessionId: gameSessionId,
       status: 'CLAIMED',
       claimedAt: new Date(),
     },
   });
 
-  // Update player stats and set HQ if first node
-  const playerUpdateData: { totalNodes: { increment: number }; hqNodeId?: string } = {
+  // Update session player stats and set HQ if first node
+  const sessionPlayerUpdateData: {
+    totalNodes: { increment: number };
+    hqNodeId?: string;
+  } = {
     totalNodes: { increment: 1 },
   };
 
   if (isFirstNode) {
-    playerUpdateData.hqNodeId = nodeId;
+    sessionPlayerUpdateData.hqNodeId = nodeId;
   }
 
+  await prisma.gameSessionPlayer.update({
+    where: { id: sessionPlayerId },
+    data: sessionPlayerUpdateData,
+  });
+
+  // Also update the global player stats for backwards compatibility
   const player = await prisma.player.update({
     where: { id: playerId },
-    data: playerUpdateData,
+    data: {
+      totalNodes: { increment: 1 },
+    },
   });
 
   // Get updated node details
@@ -357,6 +412,7 @@ export async function claimNode(
       node: nodePayload,
       playerId,
       playerName: player.displayName,
+      sessionId: gameSessionId,
     });
 
     return { success: true, node: updatedNode };
@@ -401,15 +457,17 @@ export async function invalidateConnectionsCache(): Promise<void> {
   await redis.del(CACHE_KEYS.ALL_CONNECTIONS);
 }
 
-// Abandon a node (release ownership)
+// Abandon a node (release ownership) - session-scoped
 export async function abandonNode(
   nodeId: string,
-  playerId: string
+  playerId: string,
+  gameSessionId: string,
+  sessionPlayerId: string
 ): Promise<{ success: boolean; error?: string }> {
-  // Get node to verify ownership
+  // Get node to verify ownership and session
   const node = await prisma.node.findUnique({
     where: { id: nodeId },
-    select: { ownerId: true },
+    select: { ownerId: true, gameSessionId: true },
   });
 
   if (!node) {
@@ -420,17 +478,22 @@ export async function abandonNode(
     return { success: false, error: 'You do not own this node' };
   }
 
-  // Check if this is the player's HQ
-  const player = await prisma.player.findUnique({
-    where: { id: playerId },
+  // Verify node belongs to the player's active session
+  if (node.gameSessionId !== gameSessionId) {
+    return { success: false, error: 'Node does not belong to your current session' };
+  }
+
+  // Check if this is the player's HQ in this session
+  const sessionPlayer = await prisma.gameSessionPlayer.findUnique({
+    where: { id: sessionPlayerId },
     select: { hqNodeId: true },
   });
 
-  if (player?.hqNodeId === nodeId) {
+  if (sessionPlayer?.hqNodeId === nodeId) {
     return { success: false, error: 'Cannot abandon your headquarters' };
   }
 
-  // Abandon the node - reset to neutral
+  // Abandon the node - reset to neutral but keep session assignment
   await prisma.node.update({
     where: { id: nodeId },
     data: {
@@ -442,7 +505,15 @@ export async function abandonNode(
     },
   });
 
-  // Update player stats
+  // Update session player stats
+  await prisma.gameSessionPlayer.update({
+    where: { id: sessionPlayerId },
+    data: {
+      totalNodes: { decrement: 1 },
+    },
+  });
+
+  // Also update global player stats for backwards compatibility
   await prisma.player.update({
     where: { id: playerId },
     data: {

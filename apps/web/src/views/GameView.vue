@@ -12,8 +12,8 @@ import { useToastStore } from '@/stores/toast';
 import { nodesApi } from '@/services/api';
 import { hexToPixel, hexKey, hexNeighbors, type HexCoord } from '../game/utils/hexGrid';
 
-// Props - sessionId will be used for session-scoped node operations
-defineProps<{
+// Props - sessionId is used for session-scoped node operations
+const props = defineProps<{
   sessionId: string;
 }>();
 
@@ -392,8 +392,8 @@ onMounted(async () => {
       // Connect to WebSocket for real-time updates
       gameStore.connectSocket();
 
-      // Load from API
-      await gameStore.loadMapData();
+      // Load from API with session scope
+      await gameStore.loadMapData(props.sessionId);
       engine.value.loadMapData(gameStore.nodeList, gameStore.connections);
     } catch (err) {
       console.warn('Failed to load from API, falling back to mock data:', err);
