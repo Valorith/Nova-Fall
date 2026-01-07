@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 2 - Economy & Resources |
 | **Overall Progress**   | Phase 1 complete, 2.1-2.3 complete |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 20                         |
+| **Total Sessions**     | 21                         |
 
 ---
 
@@ -1360,6 +1360,70 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ---
 
+## Session 21 - 2026-01-06
+
+**Duration:** ~1.5 hours
+**Phase:** Phase 2 - Economy & Resources
+**Focus:** Performance optimization pass
+
+### Completed Tasks
+
+**Backend Database Optimizations:**
+- [x] Added 4 database indexes (status, upkeepStatus, ownerId+upkeepStatus, attackCooldownUntil)
+- [x] Redis caching for getAllConnections() with 1hr TTL
+- [x] Fixed claimNode() N+1 query (findFirst instead of fetching all player nodes)
+- [x] Optimized upkeep.ts batch updates (updateMany by status group)
+- [x] Single transaction for all building damage instead of per-node
+- [x] Filtered connections query to only owned nodes
+
+**Frontend Rendering Optimizations:**
+- [x] Cache player colors to avoid hash recalculation per render
+- [x] Added nodesById Map for O(1) lookups instead of .find()
+- [x] Batch node re-renders using requestAnimationFrame
+- [x] Skip re-render for non-visual property changes (e.g., storage)
+- [x] Fixed setMapData order bug (clearAll before building lookups)
+
+### Performance Audit Summary
+
+| Area | Issue | Impact |
+|------|-------|--------|
+| DB Indexes | Missing indexes on status, upkeepStatus | -50% table scans |
+| Connections | No caching, full query every map load | -95% queries (cache) |
+| claimNode | N+1 fetching all player nodes | O(1) vs O(n) |
+| Upkeep | Individual UPDATE per node | 1-3 batch queries |
+| WorldRenderer | Full re-render on every node update | RAF batching |
+| Selection | Array.find() for node lookup | O(1) Map lookup |
+
+### Bug Fixes
+
+| Bug | Cause | Fix |
+|-----|-------|-----|
+| Node claim not updating map | nodesById cleared after population | Call clearAll() before building lookups |
+| Selection indicator not showing | Same as above | Same fix |
+
+### Files Modified
+
+- `apps/api/prisma/schema.prisma` - Added 4 performance indexes
+- `apps/api/src/modules/nodes/service.ts` - Redis caching, claimNode fix
+- `apps/worker/src/jobs/upkeep.ts` - Batch updates, filtered connections
+- `apps/web/src/game/rendering/WorldRenderer.ts` - Color caching, nodesById, RAF batching
+
+### New Database Indexes
+
+```sql
+@@index([status])
+@@index([upkeepStatus])
+@@index([ownerId, upkeepStatus])
+@@index([attackCooldownUntil])
+```
+
+### Next Steps
+
+1. Continue to Section 2.4 (Basic Market)
+2. Monitor performance in production
+
+---
+
 ## Blockers Log
 
 <!-- Track all blockers here for visibility -->
@@ -1525,4 +1589,4 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ---
 
-_Last Updated: 2026-01-06 (Session 20 - Windows PowerShell fixes)_
+_Last Updated: 2026-01-06 (Session 21 - Performance optimization pass)_
