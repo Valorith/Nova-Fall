@@ -175,9 +175,13 @@ export const useGameStore = defineStore('game', () => {
   }
 
   // Connect to WebSocket and set up handlers
-  function connectSocket(): void {
+  function connectSocket(sessionId?: string): void {
     gameSocket.on('connect', () => {
       isSocketConnected.value = true;
+      // Join session room when connected
+      if (sessionId || currentSessionId.value) {
+        gameSocket.joinSession(sessionId || currentSessionId.value!);
+      }
     });
 
     gameSocket.on('disconnect', () => {
@@ -190,10 +194,20 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.on('upkeep:tick', handleUpkeepTick);
 
     gameSocket.connect();
+
+    // If already connected, join session immediately
+    if (gameSocket.isConnected && (sessionId || currentSessionId.value)) {
+      gameSocket.joinSession(sessionId || currentSessionId.value!);
+    }
   }
 
   // Disconnect from WebSocket
   function disconnectSocket(): void {
+    // Leave session room before disconnecting
+    if (currentSessionId.value) {
+      gameSocket.leaveSession(currentSessionId.value);
+    }
+
     gameSocket.off('connect');
     gameSocket.off('disconnect');
     gameSocket.off('node:update');

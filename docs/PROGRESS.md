@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 2 - Economy & Resources |
 | **Overall Progress**   | Phase 1 complete, Phase 2 in progress |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 23                         |
+| **Total Sessions**     | 24                         |
 
 ---
 
@@ -1569,6 +1569,96 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ---
 
+## Session 24 - 2026-01-06
+
+**Duration:** ~1 hour
+**Phase:** Phase 2 - Economy & Resources
+**Focus:** Lobby enhancements - Active viewer tracking & Economy tick display
+
+### Completed Tasks
+
+**Session Viewer Tracking:**
+- [x] Added Redis-based viewer counting to WebSocket server
+- [x] Created `session:{id}:viewers` keys with INCR/DECR operations
+- [x] Added `join:session` and `leave:session` socket events
+- [x] Updated game store to join/leave session rooms on connect/disconnect
+- [x] Added `activeViewers` field to SessionListResponse API type
+- [x] Added `activeViewers` field to SessionDetailResponse API type
+- [x] Updated sessions service to fetch viewer counts from Redis
+- [x] Added `joinSession()` and `leaveSession()` methods to frontend socket service
+
+**Lobby UI Enhancements:**
+- [x] Added economy tick countdown to lobby navbar (centered)
+- [x] Countdown updates every second with reactive ref
+- [x] Auto-refreshes timing when tick occurs
+- [x] Added "X Active Players" display to available game cards
+- [x] Added "X Active Players" display to "Your Active Game" card
+- [x] Proper pluralization ("1 Active Player" vs "2 Active Players")
+- [x] Green text when viewers > 0, gray when 0
+- [x] Fetch session details for ACTIVE games (not just LOBBY)
+
+### Files Created
+
+None - all modifications to existing files.
+
+### Files Modified
+
+**Backend:**
+- `apps/ws-server/src/index.ts` - Redis viewer tracking, session join/leave handlers
+- `apps/api/src/modules/sessions/types.ts` - Added activeViewers to both response types
+- `apps/api/src/modules/sessions/service.ts` - Fetch viewer counts for getSessions and getSessionById
+
+**Frontend:**
+- `apps/web/src/services/socket.ts` - Added joinSession/leaveSession methods
+- `apps/web/src/stores/session.ts` - Added activeViewers to SessionListItem and SessionDetail
+- `apps/web/src/stores/game.ts` - Updated connectSocket/disconnectSocket for session rooms
+- `apps/web/src/views/LobbyView.vue` - Economy tick countdown, active viewers display
+
+### Technical Details
+
+**Viewer Tracking Architecture:**
+```
+Player enters GameView → connectSocket(sessionId)
+  → gameSocket.joinSession(sessionId)
+  → WS server: redis.incr('session:{id}:viewers')
+  → Socket joins 'session:{id}' room
+
+Player leaves GameView → disconnectSocket()
+  → gameSocket.leaveSession(sessionId)
+  → WS server: redis.decr('session:{id}:viewers')
+  → Socket leaves room
+```
+
+**Economy Tick Display:**
+- Uses reactive `currentTime` ref updated every second
+- Computed `nextTickDisplay` formats remaining time (e.g., "45m 23s")
+- Positioned center of navbar with absolute positioning
+- Fetches timing from `/game/status` on mount
+
+### Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Redis INCR/DECR for viewer counts | Simple atomic operations, no race conditions |
+| Global economy tick for all sessions | Simpler than per-session timers, consistent experience |
+| Viewer count in gray when 0 | Clear visual distinction, not distracting |
+
+### Notes
+
+- Active viewers for LOBBY sessions will typically be 0 (game hasn't started)
+- For ACTIVE sessions, count reflects players with the game board open
+- Economy tick countdown shows in lobby to set expectations before entering game
+- All typechecks pass
+
+### Next Session Plan
+
+1. Test upkeep failure consequences end-to-end
+2. Section 2.4 - Basic Market (NPC buy/sell)
+3. WebSocket E2E testing (verify real-time updates between clients)
+4. Consider per-session economy timing (if user requests)
+
+---
+
 ## Blockers Log
 
 <!-- Track all blockers here for visibility -->
@@ -1736,4 +1826,4 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ---
 
-_Last Updated: 2026-01-06 (Session 23 - Economy Tick Progress Bar & Tooltips)_
+_Last Updated: 2026-01-06 (Session 24 - Lobby Active Viewers & Economy Tick Display)_

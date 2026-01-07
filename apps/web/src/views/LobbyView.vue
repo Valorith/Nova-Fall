@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useSessionStore, type GameType, type SessionListItem, type SessionPlayer } from '@/stores/session';
+import { gameApi } from '@/services/api';
 import lobbyBackground from '@/assets/lobby-background.jpg';
 
 const router = useRouter();
@@ -12,6 +13,12 @@ const sessionStore = useSessionStore();
 const showCreateModal = ref(false);
 const newSessionName = ref('');
 const newSessionType = ref<GameType>('KING_OF_THE_HILL');
+
+// Economy tick timing
+const nextUpkeepAt = ref(0);
+const upkeepInterval = ref(3600000);
+const currentTime = ref(Date.now()); // Reactive time for countdown display
+let tickUpdateInterval: ReturnType<typeof setInterval> | null = null;
 
 const activeSession = computed(() => authStore.user?.activeSession);
 const isCreator = computed(() => activeSession.value?.isCreator ?? false);
@@ -43,12 +50,64 @@ const canAddBot = computed(() => {
          playerCount < sessionStore.currentSession.maxPlayers;
 });
 
-onMounted(async () => {
-  await sessionStore.fetchSessions();
+// Load economy tick timing
+async function loadEconomyTick() {
+  try {
+    const response = await gameApi.getStatus();
+    nextUpkeepAt.value = response.data.nextUpkeepAt;
+    upkeepInterval.value = response.data.upkeepInterval;
+  } catch (err) {
+    console.error('Failed to load economy tick:', err);
+  }
+}
 
-  // If user has an active session in LOBBY, fetch its details
-  if (activeSession.value && activeSession.value.status === 'LOBBY') {
+// Computed for next tick display (uses reactive currentTime)
+const nextTickDisplay = computed(() => {
+  const diff = nextUpkeepAt.value - currentTime.value;
+
+  if (diff <= 0) return 'Now';
+
+  const minutes = Math.floor(diff / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes}m`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+
+  return `${seconds}s`;
+});
+
+onMounted(async () => {
+  await Promise.all([
+    sessionStore.fetchSessions(),
+    loadEconomyTick(),
+  ]);
+
+  // Update the tick display every second
+  tickUpdateInterval = setInterval(() => {
+    currentTime.value = Date.now();
+    // Tick has passed, reload the timing
+    if (nextUpkeepAt.value > 0 && currentTime.value >= nextUpkeepAt.value) {
+      loadEconomyTick();
+    }
+  }, 1000);
+
+  // If user has an active session, fetch its details
+  if (activeSession.value) {
     await sessionStore.fetchSessionById(activeSession.value.id);
+  }
+});
+
+onUnmounted(() => {
+  if (tickUpdateInterval) {
+    clearInterval(tickUpdateInterval);
+    tickUpdateInterval = null;
   }
 });
 
@@ -158,8 +217,11 @@ function handleLogout() {
     <div class="relative z-10">
     <!-- Header -->
     <header class="border-b border-gray-800 bg-gray-900/95 px-6 py-4">
-      <div class="flex items-center justify-between">
+      <div class="relative flex items-center justify-between">
         <h1 class="text-2xl font-bold text-indigo-400">NOVA FALL</h1>
+        <span v-if="nextUpkeepAt > 0" class="absolute left-1/2 -translate-x-1/2 text-sm text-gray-400">
+          Next economy tick in <span class="text-amber-400 font-medium">{{ nextTickDisplay }}</span>
+        </span>
         <div class="flex items-center gap-4">
           <span class="text-gray-400">{{ authStore.user?.username }}</span>
           <button
@@ -200,6 +262,13 @@ function handleLogout() {
                 </span>
                 <span v-else-if="activeSession.status === 'ACTIVE'" class="text-green-400">
                   Game in progress
+                </span>
+                <span
+                  v-if="sessionStore.currentSession"
+                  :class="sessionStore.currentSession.activeViewers > 0 ? 'text-green-400' : 'text-gray-500'"
+                  title="Players viewing the game board"
+                >
+                  {{ sessionStore.currentSession.activeViewers }} Active {{ sessionStore.currentSession.activeViewers === 1 ? 'Player' : 'Players' }}
                 </span>
               </div>
 
@@ -340,6 +409,9 @@ function handleLogout() {
                 </span>
                 <span>{{ getPlayerCount(session) }}</span>
                 <span v-if="getPlayerBreakdown(session)" class="text-gray-500">{{ getPlayerBreakdown(session) }}</span>
+                <span :class="session.activeViewers > 0 ? 'text-green-400' : 'text-gray-500'" title="Players viewing the game board">
+                  {{ session.activeViewers }} Active {{ session.activeViewers === 1 ? 'Player' : 'Players' }}
+                </span>
                 <span class="text-gray-500">by {{ session.creatorName }}</span>
               </div>
             </div>

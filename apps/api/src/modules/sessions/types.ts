@@ -9,6 +9,7 @@ export interface SessionListResponse {
   playerCount: number;   // Total players (humans + bots)
   humanCount: number;    // Human players only
   botCount: number;      // Bot players only
+  activeViewers: number; // Players currently viewing the game board
   minPlayers: number;
   maxPlayers: number;
   creatorId: string;
@@ -48,6 +49,7 @@ export interface SessionDetailResponse {
   startedAt: string | null;
   endedAt: string | null;
   winnerId: string | null;
+  activeViewers: number;
   players: SessionPlayerResponse[];
 }
 

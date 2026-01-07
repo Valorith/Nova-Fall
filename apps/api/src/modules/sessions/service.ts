@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma.js';
+import { redis } from '../../lib/redis.js';
 import type { GameType, GameSessionStatus, BotDifficulty } from '@prisma/client';
 import type {
   SessionListResponse,
@@ -7,6 +8,12 @@ import type {
   ActiveSessionResponse,
   SessionListQuery,
 } from './types.js';
+
+// Helper to get viewer count for a session
+async function getViewerCount(sessionId: string): Promise<number> {
+  const count = await redis.get(`session:${sessionId}:viewers`);
+  return parseInt(count ?? '0', 10);
+}
 
 // Bot name generator
 const BOT_NAMES = [
@@ -49,7 +56,12 @@ export async function getSessions(query: SessionListQuery): Promise<SessionListR
   });
   const creatorMap = new Map(creators.map((c) => [c.id, c.displayName]));
 
-  return sessions.map((session) => {
+  // Get viewer counts for all sessions
+  const viewerCounts = await Promise.all(
+    sessions.map((s) => getViewerCount(s.id))
+  );
+
+  return sessions.map((session, index) => {
     const humanCount = session.players.filter((p) => !p.isBot).length;
     const botCount = session.players.filter((p) => p.isBot).length;
 
@@ -61,6 +73,7 @@ export async function getSessions(query: SessionListQuery): Promise<SessionListR
       playerCount: session.players.length,
       humanCount,
       botCount,
+      activeViewers: viewerCounts[index] ?? 0,
       minPlayers: session.minPlayers,
       maxPlayers: session.maxPlayers,
       creatorId: session.creatorId,
@@ -87,6 +100,8 @@ export async function getSessionById(sessionId: string): Promise<SessionDetailRe
   });
 
   if (!session) return null;
+
+  const activeViewers = await getViewerCount(sessionId);
 
   const players: SessionPlayerResponse[] = session.players.map((sp) => ({
     id: sp.id,
@@ -117,6 +132,7 @@ export async function getSessionById(sessionId: string): Promise<SessionDetailRe
     startedAt: session.startedAt?.toISOString() ?? null,
     endedAt: session.endedAt?.toISOString() ?? null,
     winnerId: session.winnerId,
+    activeViewers,
     players,
   };
 }
@@ -215,6 +231,7 @@ export async function createSession(
       startedAt: session.startedAt?.toISOString() ?? null,
       endedAt: session.endedAt?.toISOString() ?? null,
       winnerId: session.winnerId,
+      activeViewers: 0, // New session has no viewers yet
       players,
     },
   };

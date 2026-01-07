@@ -30,6 +30,7 @@ export interface SessionListItem {
   playerCount: number;
   humanCount: number;
   botCount: number;
+  activeViewers: number;
   minPlayers: number;
   maxPlayers: number;
   creatorId: string;
@@ -53,6 +54,7 @@ export interface SessionDetail {
   startedAt: string | null;
   endedAt: string | null;
   winnerId: string | null;
+  activeViewers: number;
   players: SessionPlayer[];
 }
 

@@ -167,6 +167,15 @@ class GameSocket {
     this.socket?.emit('unsubscribe:battle', battleId);
   }
 
+  // Join a game session (viewing the game board)
+  joinSession(sessionId: string): void {
+    this.socket?.emit('join:session', sessionId);
+  }
+
+  leaveSession(sessionId: string): void {
+    this.socket?.emit('leave:session', sessionId);
+  }
+
   get isConnected(): boolean {
     return this.socket?.connected ?? false;
   }

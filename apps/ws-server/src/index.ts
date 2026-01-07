@@ -38,6 +38,37 @@ const io = new Server(httpServer, {
 // Redis subscriber for game events
 const redisSub = new Redis(REDIS_URL);
 
+// Redis client for read/write operations (viewer tracking)
+const redis = new Redis(REDIS_URL);
+
+// Track which session each socket is viewing
+const socketSessions = new Map<string, string>();
+
+// Helper to get viewer count key
+function getViewerKey(sessionId: string): string {
+  return `session:${sessionId}:viewers`;
+}
+
+// Increment viewer count for a session
+async function incrementViewers(sessionId: string): Promise<number> {
+  const count = await redis.incr(getViewerKey(sessionId));
+  logger.debug({ sessionId, count }, 'Viewer count incremented');
+  return count;
+}
+
+// Decrement viewer count for a session
+async function decrementViewers(sessionId: string): Promise<number> {
+  const key = getViewerKey(sessionId);
+  const count = await redis.decr(key);
+  // Ensure count doesn't go negative
+  if (count < 0) {
+    await redis.set(key, '0');
+    return 0;
+  }
+  logger.debug({ sessionId, count }, 'Viewer count decremented');
+  return count;
+}
+
 // Subscribe to game event channels
 redisSub.subscribe(
   'node:update',
@@ -110,6 +141,32 @@ redisSub.on('message', (channel, message) => {
 io.on('connection', (socket) => {
   logger.info({ socketId: socket.id }, 'Client connected');
 
+  // Client joins a game session (viewing the game board)
+  socket.on('join:session', async (sessionId: string) => {
+    // Leave previous session if any
+    const previousSession = socketSessions.get(socket.id);
+    if (previousSession && previousSession !== sessionId) {
+      socket.leave(`session:${previousSession}`);
+      await decrementViewers(previousSession);
+    }
+
+    // Join new session
+    socket.join(`session:${sessionId}`);
+    socketSessions.set(socket.id, sessionId);
+    await incrementViewers(sessionId);
+    logger.info({ socketId: socket.id, sessionId }, 'Client joined session');
+  });
+
+  socket.on('leave:session', async (sessionId: string) => {
+    const currentSession = socketSessions.get(socket.id);
+    if (currentSession === sessionId) {
+      socket.leave(`session:${sessionId}`);
+      socketSessions.delete(socket.id);
+      await decrementViewers(sessionId);
+      logger.info({ socketId: socket.id, sessionId }, 'Client left session');
+    }
+  });
+
   // Client can subscribe to specific node updates
   socket.on('subscribe:node', (nodeId: string) => {
     socket.join(`node:${nodeId}`);
@@ -132,8 +189,14 @@ io.on('connection', (socket) => {
     logger.debug({ socketId: socket.id, battleId }, 'Client unsubscribed from battle');
   });
 
-  socket.on('disconnect', (reason) => {
-    logger.info({ socketId: socket.id, reason }, 'Client disconnected');
+  socket.on('disconnect', async (reason) => {
+    // Decrement viewer count if socket was in a session
+    const sessionId = socketSessions.get(socket.id);
+    if (sessionId) {
+      await decrementViewers(sessionId);
+      socketSessions.delete(socket.id);
+    }
+    logger.info({ socketId: socket.id, reason, sessionId }, 'Client disconnected');
   });
 });
 
@@ -142,6 +205,7 @@ process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down...');
   io.close();
   redisSub.quit();
+  redis.quit();
   httpServer.close(() => {
     logger.info('Server closed');
     process.exit(0);

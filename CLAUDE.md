@@ -192,10 +192,10 @@ Examples:
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
 | **Current Phase**  | Phase 2 - Economy & Resources             |
-| **Phase Progress** | Economy tick visualization complete       |
-| **Current Task**   | Continue Phase 2 economy implementation   |
+| **Phase Progress** | Lobby enhancements complete, economy tick display done |
+| **Current Task**   | Continue Phase 2 - upkeep testing, market system |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 23 - 2026-01-06                   |
+| **Last Session**   | Session 24 - 2026-01-06                   |
 | **Last Updated**   | 2026-01-06                                |
 
 ---
@@ -239,6 +239,8 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-06 | Shared package uses tsc (not tsup)        | ESM compatibility with .js extensions required     | Claude      |
 | 2026-01-06 | Removed 30s game tick (for now)           | Saves ~120 DB queries/hr; reintroduce for combat   | User        |
 | 2026-01-06 | Conditional tick strategy for combat      | Rapid ticks only when viewers present or combat active | User     |
+| 2026-01-06 | Redis-based session viewer tracking       | INCR/DECR counters for live player counts per session | Claude   |
+| 2026-01-06 | Global economy tick (all sessions)        | Single hourly tick processes all sessions at once    | User        |
 
 ---
 
@@ -375,5 +377,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-_Last Updated: 2026-01-06_
+_Last Updated: 2026-01-06 (Session 24)_
 _Version: 1.0.0_

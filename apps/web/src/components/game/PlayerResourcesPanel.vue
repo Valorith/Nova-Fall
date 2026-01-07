@@ -22,17 +22,7 @@ const props = defineProps<{
 }>();
 
 const showCreditsTooltip = ref(false);
-
-// Format large numbers compactly
-function formatAmount(amount: number): string {
-  if (amount >= 1_000_000) {
-    return `${(amount / 1_000_000).toFixed(1)}M`;
-  }
-  if (amount >= 1_000) {
-    return `${(amount / 1_000).toFixed(1)}K`;
-  }
-  return amount.toLocaleString();
-}
+const hoveredResource = ref<string | null>(null);
 
 // Get primary resources to always display (credits, iron, energy)
 const primaryResources = computed(() => {
@@ -92,7 +82,7 @@ const depletionText = computed(() => {
       @mouseleave="showCreditsTooltip = false"
     >
       <span class="text-sm">{{ RESOURCES.credits.icon }}</span>
-      <span class="text-sm font-medium text-gray-200">{{ formatAmount(props.resources.credits ?? 0) }}</span>
+      <span class="text-sm font-medium text-gray-200">{{ (props.resources.credits ?? 0).toLocaleString() }}</span>
 
       <!-- Credits Tooltip -->
       <div
@@ -157,11 +147,21 @@ const depletionText = computed(() => {
     <template v-for="{ type, amount, def } in primaryResources" :key="type">
       <div
         v-if="type !== 'credits'"
-        class="flex items-center gap-1 px-2 py-1 rounded bg-gray-800/50"
-        :title="def.name"
+        class="relative flex items-center gap-1 px-2 py-1 rounded bg-gray-800/50 cursor-help"
+        @mouseenter="hoveredResource = type"
+        @mouseleave="hoveredResource = null"
       >
         <span class="text-sm">{{ def.icon }}</span>
-        <span class="text-sm font-medium text-gray-200">{{ formatAmount(amount) }}</span>
+        <span class="text-sm font-medium text-gray-200">{{ amount.toLocaleString() }}</span>
+
+        <!-- Resource Tooltip -->
+        <div
+          v-if="hoveredResource === type"
+          class="absolute top-full left-0 mt-1 z-50 w-48 p-2 rounded-lg bg-gray-900 border border-gray-700 shadow-xl text-xs"
+        >
+          <div class="font-semibold text-gray-200">{{ def.name }}</div>
+          <p class="mt-1 text-gray-400 leading-relaxed">{{ def.description }}</p>
+        </div>
       </div>
     </template>
 
@@ -172,11 +172,21 @@ const depletionText = computed(() => {
     <div
       v-for="{ type, amount, def } in secondaryResources"
       :key="type"
-      class="flex items-center gap-1 px-2 py-1 rounded bg-gray-800/30"
-      :title="def.name"
+      class="relative flex items-center gap-1 px-2 py-1 rounded bg-gray-800/30 cursor-help"
+      @mouseenter="hoveredResource = type"
+      @mouseleave="hoveredResource = null"
     >
       <span class="text-sm">{{ def.icon }}</span>
-      <span class="text-xs text-gray-300">{{ formatAmount(amount) }}</span>
+      <span class="text-xs text-gray-300">{{ amount.toLocaleString() }}</span>
+
+      <!-- Resource Tooltip -->
+      <div
+        v-if="hoveredResource === type"
+        class="absolute top-full left-0 mt-1 z-50 w-48 p-2 rounded-lg bg-gray-900 border border-gray-700 shadow-xl text-xs"
+      >
+        <div class="font-semibold text-gray-200">{{ def.name }}</div>
+        <p class="mt-1 text-gray-400 leading-relaxed">{{ def.description }}</p>
+      </div>
     </div>
   </div>
 </template>
