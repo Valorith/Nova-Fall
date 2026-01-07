@@ -16,7 +16,7 @@ export const config = {
     url: requireEnv('DATABASE_URL'),
   },
   game: {
-    tickInterval: parseInt(process.env['GAME_TICK_INTERVAL'] ?? '5000', 10), // 5 seconds
+    tickInterval: parseInt(process.env['GAME_TICK_INTERVAL'] ?? '30000', 10), // 30 seconds
   },
   nodeEnv: process.env['NODE_ENV'] ?? 'development',
 };

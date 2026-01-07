@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma.js';
-import type { GameType, GameSessionStatus } from '@prisma/client';
+import type { GameType, GameSessionStatus, BotDifficulty } from '@prisma/client';
 import type {
   SessionListResponse,
   SessionDetailResponse,
@@ -7,6 +7,21 @@ import type {
   ActiveSessionResponse,
   SessionListQuery,
 } from './types.js';
+
+// Bot name generator
+const BOT_NAMES = [
+  'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon',
+  'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa',
+  'Lambda', 'Mu', 'Nu', 'Xi', 'Omicron',
+];
+
+function generateBotName(existingBotCount: number): string {
+  const index = existingBotCount % BOT_NAMES.length;
+  const suffix = existingBotCount >= BOT_NAMES.length
+    ? ` ${Math.floor(existingBotCount / BOT_NAMES.length) + 1}`
+    : '';
+  return `Bot ${BOT_NAMES[index]}${suffix}`;
+}
 
 // Get list of sessions (for lobby)
 export async function getSessions(query: SessionListQuery): Promise<SessionListResponse[]> {
@@ -20,7 +35,7 @@ export async function getSessions(query: SessionListQuery): Promise<SessionListR
     include: {
       players: {
         where: { role: 'PLAYER' },
-        select: { id: true },
+        select: { id: true, isBot: true },
       },
     },
     orderBy: { createdAt: 'desc' },
@@ -34,18 +49,26 @@ export async function getSessions(query: SessionListQuery): Promise<SessionListR
   });
   const creatorMap = new Map(creators.map((c) => [c.id, c.displayName]));
 
-  return sessions.map((session) => ({
-    id: session.id,
-    name: session.name,
-    gameType: session.gameType,
-    status: session.status,
-    playerCount: session.players.length,
-    minPlayers: session.minPlayers,
-    creatorId: session.creatorId,
-    creatorName: creatorMap.get(session.creatorId) ?? 'Unknown',
-    createdAt: session.createdAt.toISOString(),
-    startedAt: session.startedAt?.toISOString() ?? null,
-  }));
+  return sessions.map((session) => {
+    const humanCount = session.players.filter((p) => !p.isBot).length;
+    const botCount = session.players.filter((p) => p.isBot).length;
+
+    return {
+      id: session.id,
+      name: session.name,
+      gameType: session.gameType,
+      status: session.status,
+      playerCount: session.players.length,
+      humanCount,
+      botCount,
+      minPlayers: session.minPlayers,
+      maxPlayers: session.maxPlayers,
+      creatorId: session.creatorId,
+      creatorName: creatorMap.get(session.creatorId) ?? 'Unknown',
+      createdAt: session.createdAt.toISOString(),
+      startedAt: session.startedAt?.toISOString() ?? null,
+    };
+  });
 }
 
 // Get session by ID with full details
@@ -68,9 +91,11 @@ export async function getSessionById(sessionId: string): Promise<SessionDetailRe
   const players: SessionPlayerResponse[] = session.players.map((sp) => ({
     id: sp.id,
     playerId: sp.playerId,
-    displayName: sp.player.displayName,
+    displayName: sp.isBot ? (sp.botName ?? 'Bot') : (sp.player?.displayName ?? 'Unknown'),
     role: sp.role,
     isCreator: sp.playerId === session.creatorId,
+    isBot: sp.isBot,
+    botDifficulty: sp.botDifficulty,
     hqNodeId: sp.hqNodeId,
     totalNodes: sp.totalNodes,
     eliminatedAt: sp.eliminatedAt?.toISOString() ?? null,
@@ -83,6 +108,7 @@ export async function getSessionById(sessionId: string): Promise<SessionDetailRe
     gameType: session.gameType,
     status: session.status,
     minPlayers: session.minPlayers,
+    maxPlayers: session.maxPlayers,
     creatorId: session.creatorId,
     crownNodeId: session.crownNodeId,
     crownHolderId: session.crownHolderId,
@@ -143,6 +169,7 @@ export async function createSession(
         create: {
           playerId,
           role: 'PLAYER',
+          isBot: false,
         },
       },
     },
@@ -160,9 +187,11 @@ export async function createSession(
   const players: SessionPlayerResponse[] = session.players.map((sp) => ({
     id: sp.id,
     playerId: sp.playerId,
-    displayName: sp.player.displayName,
+    displayName: sp.isBot ? (sp.botName ?? 'Bot') : (sp.player?.displayName ?? 'Unknown'),
     role: sp.role,
     isCreator: sp.playerId === session.creatorId,
+    isBot: sp.isBot,
+    botDifficulty: sp.botDifficulty,
     hqNodeId: sp.hqNodeId,
     totalNodes: sp.totalNodes,
     eliminatedAt: sp.eliminatedAt?.toISOString() ?? null,
@@ -177,6 +206,7 @@ export async function createSession(
       gameType: session.gameType,
       status: session.status,
       minPlayers: session.minPlayers,
+      maxPlayers: session.maxPlayers,
       creatorId: session.creatorId,
       crownNodeId: session.crownNodeId,
       crownHolderId: session.crownHolderId,
@@ -201,9 +231,15 @@ export async function joinSession(
     return { success: false, error: 'You already have an active game session' };
   }
 
-  // Get session
+  // Get session with player count
   const session = await prisma.gameSession.findUnique({
     where: { id: sessionId },
+    include: {
+      players: {
+        where: { role: 'PLAYER' },
+        select: { id: true },
+      },
+    },
   });
 
   if (!session) {
@@ -214,12 +250,18 @@ export async function joinSession(
     return { success: false, error: 'Session is not open for joining' };
   }
 
+  // Check if session is full
+  if (session.players.length >= session.maxPlayers) {
+    return { success: false, error: 'Session is full' };
+  }
+
   // Add player to session
   await prisma.gameSessionPlayer.create({
     data: {
       gameSessionId: sessionId,
       playerId,
       role: 'PLAYER',
+      isBot: false,
     },
   });
 
@@ -343,12 +385,13 @@ export async function startSession(
   sessionId: string,
   playerId: string
 ): Promise<{ success: boolean; error?: string; session?: SessionDetailResponse }> {
-  // Get session
+  // Get session with players
   const session = await prisma.gameSession.findUnique({
     where: { id: sessionId },
     include: {
       players: {
         where: { role: 'PLAYER' },
+        orderBy: { joinedAt: 'asc' }, // Order by join time for HQ assignment
       },
     },
   });
@@ -375,6 +418,145 @@ export async function startSession(
     };
   }
 
+  // Find available nodes (not assigned to any session)
+  const availableNodes = await prisma.node.findMany({
+    where: { gameSessionId: null },
+    orderBy: [{ type: 'asc' }, { positionX: 'asc' }, { positionY: 'asc' }],
+  });
+
+  if (availableNodes.length === 0) {
+    return { success: false, error: 'No map nodes available. Please seed the database.' };
+  }
+
+  // Find CAPITAL nodes for player starting positions (corners)
+  const capitalNodes = availableNodes.filter((n) => n.type === 'CAPITAL');
+
+  if (capitalNodes.length < session.players.length) {
+    return {
+      success: false,
+      error: `Not enough starting positions. Need ${session.players.length} capitals, found ${capitalNodes.length}`,
+    };
+  }
+
+  // Identify corners by splitting into top/bottom halves, then left/right within each
+  // This handles hex grid stagger where corners may have slightly different Y values
+  let selectedCapitals: typeof capitalNodes;
+  const playerCount = session.players.length;
+
+  if (playerCount === 2 && capitalNodes.length >= 4) {
+    // Find median Y to split into top and bottom halves
+    const sortedByY = [...capitalNodes].sort((a, b) => a.positionY - b.positionY);
+    const secondNode = sortedByY[1];
+    const thirdNode = sortedByY[2];
+
+    if (secondNode && thirdNode) {
+      const medianY = (secondNode.positionY + thirdNode.positionY) / 2;
+
+      // Split into top half (smaller Y) and bottom half (larger Y)
+      const topHalf = capitalNodes.filter(n => n.positionY < medianY);
+      const bottomHalf = capitalNodes.filter(n => n.positionY >= medianY);
+
+      if (topHalf.length >= 2 && bottomHalf.length >= 2) {
+        // Within each half, find left (min X) and right (max X)
+        const topLeft = topHalf.reduce((a, b) => a.positionX < b.positionX ? a : b);
+        const topRight = topHalf.reduce((a, b) => a.positionX > b.positionX ? a : b);
+        const bottomLeft = bottomHalf.reduce((a, b) => a.positionX < b.positionX ? a : b);
+        const bottomRight = bottomHalf.reduce((a, b) => a.positionX > b.positionX ? a : b);
+
+        // Choose a diagonal randomly (TL+BR or TR+BL)
+        const useFirstDiagonal = Math.random() < 0.5;
+        const cornerA = useFirstDiagonal ? topLeft : topRight;
+        const cornerB = useFirstDiagonal ? bottomRight : bottomLeft;
+        // Randomize which player gets which corner
+        const swapPositions = Math.random() < 0.5;
+        selectedCapitals = swapPositions ? [cornerB, cornerA] : [cornerA, cornerB];
+      } else {
+        // Fallback: just take first two capitals
+        selectedCapitals = capitalNodes.slice(0, playerCount);
+      }
+    } else {
+      // Fallback: just take first two capitals
+      selectedCapitals = capitalNodes.slice(0, playerCount);
+    }
+  } else {
+    // For 3+ players: shuffle all corners randomly (Fisher-Yates shuffle)
+    selectedCapitals = [...capitalNodes];
+    for (let i = selectedCapitals.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = selectedCapitals[i];
+      const swapItem = selectedCapitals[j];
+      if (temp && swapItem) {
+        selectedCapitals[i] = swapItem;
+        selectedCapitals[j] = temp;
+      }
+    }
+  }
+
+  // Assign all nodes to this session
+  await prisma.node.updateMany({
+    where: { id: { in: availableNodes.map((n) => n.id) } },
+    data: { gameSessionId: sessionId },
+  });
+
+  // Assign HQ nodes to players and claim them
+  for (let i = 0; i < session.players.length; i++) {
+    const sessionPlayer = session.players[i];
+    const hqNode = selectedCapitals[i];
+
+    if (!sessionPlayer || !hqNode) {
+      continue; // Should not happen given earlier checks
+    }
+
+    let ownerId = sessionPlayer.playerId;
+
+    // For bots, create a Player record so they can own nodes
+    if (sessionPlayer.isBot && !ownerId) {
+      const botPlayer = await prisma.player.create({
+        data: {
+          displayName: sessionPlayer.botName ?? 'Bot',
+          isBot: true,
+          totalNodes: 0,
+        },
+      });
+      ownerId = botPlayer.id;
+
+      // Link the bot session player to this player record
+      await prisma.gameSessionPlayer.update({
+        where: { id: sessionPlayer.id },
+        data: { playerId: ownerId },
+      });
+    }
+
+    // Update session player with HQ
+    await prisma.gameSessionPlayer.update({
+      where: { id: sessionPlayer.id },
+      data: {
+        hqNodeId: hqNode.id,
+        totalNodes: 1,
+      },
+    });
+
+    // Claim the HQ node for the player/bot
+    if (ownerId) {
+      await prisma.node.update({
+        where: { id: hqNode.id },
+        data: {
+          ownerId: ownerId,
+          status: 'CLAIMED',
+          claimedAt: new Date(),
+        },
+      });
+
+      // Update player stats
+      await prisma.player.update({
+        where: { id: ownerId },
+        data: {
+          totalNodes: { increment: 1 },
+        },
+      });
+    }
+  }
+
   // Start the session
   await prisma.gameSession.update({
     where: { id: sessionId },
@@ -384,12 +566,189 @@ export async function startSession(
     },
   });
 
-  // TODO: Generate map nodes for this session
-  // For now, the existing nodes have null gameSessionId which won't match
+  const updatedSession = await getSessionById(sessionId);
+  if (!updatedSession) {
+    return { success: false, error: 'Failed to retrieve session' };
+  }
+  return { success: true, session: updatedSession };
+}
+
+// Add a bot to a session (creator only)
+export async function addBot(
+  sessionId: string,
+  playerId: string,
+  botName?: string,
+  difficulty: BotDifficulty = 'NORMAL'
+): Promise<{ success: boolean; error?: string; session?: SessionDetailResponse }> {
+  // Get session with player count
+  const session = await prisma.gameSession.findUnique({
+    where: { id: sessionId },
+    include: {
+      players: {
+        where: { role: 'PLAYER' },
+        select: { id: true, isBot: true },
+      },
+    },
+  });
+
+  if (!session) {
+    return { success: false, error: 'Session not found' };
+  }
+
+  // Only creator can add bots
+  if (session.creatorId !== playerId) {
+    return { success: false, error: 'Only the session creator can add bots' };
+  }
+
+  // Must be in LOBBY status
+  if (session.status !== 'LOBBY') {
+    return { success: false, error: 'Can only add bots in lobby' };
+  }
+
+  // Check if session is full
+  if (session.players.length >= session.maxPlayers) {
+    return { success: false, error: 'Session is full' };
+  }
+
+  // Generate bot name if not provided
+  const existingBotCount = session.players.filter((p) => p.isBot).length;
+  const finalBotName = botName || generateBotName(existingBotCount);
+
+  // Add bot to session
+  await prisma.gameSessionPlayer.create({
+    data: {
+      gameSessionId: sessionId,
+      playerId: null,  // Bots don't have a real player ID
+      role: 'PLAYER',
+      isBot: true,
+      botName: finalBotName,
+      botDifficulty: difficulty,
+    },
+  });
 
   const updatedSession = await getSessionById(sessionId);
   if (!updatedSession) {
     return { success: false, error: 'Failed to retrieve session' };
   }
   return { success: true, session: updatedSession };
+}
+
+// Remove a bot from a session (creator only)
+export async function removeBot(
+  sessionId: string,
+  playerId: string,
+  botId: string
+): Promise<{ success: boolean; error?: string; session?: SessionDetailResponse }> {
+  // Get session
+  const session = await prisma.gameSession.findUnique({
+    where: { id: sessionId },
+  });
+
+  if (!session) {
+    return { success: false, error: 'Session not found' };
+  }
+
+  // Only creator can remove bots
+  if (session.creatorId !== playerId) {
+    return { success: false, error: 'Only the session creator can remove bots' };
+  }
+
+  // Must be in LOBBY status
+  if (session.status !== 'LOBBY') {
+    return { success: false, error: 'Can only remove bots in lobby' };
+  }
+
+  // Get the bot
+  const bot = await prisma.gameSessionPlayer.findUnique({
+    where: { id: botId },
+  });
+
+  if (!bot) {
+    return { success: false, error: 'Bot not found' };
+  }
+
+  if (bot.gameSessionId !== sessionId) {
+    return { success: false, error: 'Bot is not in this session' };
+  }
+
+  if (!bot.isBot) {
+    return { success: false, error: 'Cannot remove a human player using this endpoint' };
+  }
+
+  // Remove the bot
+  await prisma.gameSessionPlayer.delete({
+    where: { id: botId },
+  });
+
+  const updatedSession = await getSessionById(sessionId);
+  if (!updatedSession) {
+    return { success: false, error: 'Failed to retrieve session' };
+  }
+  return { success: true, session: updatedSession };
+}
+
+// End a game session early (creator only)
+export async function endSession(
+  sessionId: string,
+  playerId: string
+): Promise<{ success: boolean; error?: string }> {
+  // Get session
+  const session = await prisma.gameSession.findUnique({
+    where: { id: sessionId },
+  });
+
+  if (!session) {
+    return { success: false, error: 'Session not found' };
+  }
+
+  // Only creator can end the session
+  if (session.creatorId !== playerId) {
+    return { success: false, error: 'Only the session creator can end the game' };
+  }
+
+  // Can only end LOBBY or ACTIVE sessions
+  if (session.status !== 'LOBBY' && session.status !== 'ACTIVE') {
+    return { success: false, error: 'Session is already ended' };
+  }
+
+  // Release all nodes assigned to this session
+  await prisma.node.updateMany({
+    where: { gameSessionId: sessionId },
+    data: {
+      gameSessionId: null,
+      ownerId: null,
+      status: 'NEUTRAL',
+      claimedAt: null,
+      upkeepPaid: null,
+      upkeepDue: null,
+    },
+  });
+
+  // Reset player stats for session players
+  const sessionPlayers = await prisma.gameSessionPlayer.findMany({
+    where: { gameSessionId: sessionId, playerId: { not: null } },
+    select: { playerId: true, totalNodes: true },
+  });
+
+  for (const sp of sessionPlayers) {
+    if (sp.playerId) {
+      await prisma.player.update({
+        where: { id: sp.playerId },
+        data: {
+          totalNodes: { decrement: sp.totalNodes },
+        },
+      });
+    }
+  }
+
+  // Mark session as abandoned
+  await prisma.gameSession.update({
+    where: { id: sessionId },
+    data: {
+      status: 'ABANDONED',
+      endedAt: new Date(),
+    },
+  });
+
+  return { success: true };
 }

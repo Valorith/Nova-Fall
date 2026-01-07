@@ -112,18 +112,25 @@ export const NODE_BASE_UPKEEP: Record<string, number> = {
 // Distance upkeep penalty (15% per node from HQ)
 export const DISTANCE_UPKEEP_MODIFIER = 0.15;
 
-// Base production rates per tick (5 seconds)
+// Node claim costs by tier (credits)
+export const NODE_CLAIM_COST_BY_TIER: Record<number, number> = {
+  1: 100,  // Tier 1 nodes
+  2: 200,  // Tier 2 nodes
+  3: 300,  // Tier 3 nodes
+};
+
+// Base production rates per tick (30 seconds, 120 ticks/hour)
 // Node type bonuses multiply these values
 export const BASE_PRODUCTION_PER_TICK: Partial<Record<ResourceType, number>> = {
-  iron: 2,      // 2 iron per tick = 24 per minute = 1440 per hour
-  energy: 1,    // 1 energy per tick = 12 per minute = 720 per hour
+  iron: 12,     // 12 iron per tick = 24 per minute = 1440 per hour
+  energy: 6,    // 6 energy per tick = 12 per minute = 720 per hour
   minerals: 0,  // Only from special buildings
   composites: 0, // Only from refineries with recipes
   techComponents: 0, // Only from research stations
 };
 
 // Credit generation is special - based on trade hub presence
-export const BASE_CREDIT_GENERATION = 5; // per tick at trade hubs
+export const BASE_CREDIT_GENERATION = 30; // per tick at trade hubs (3600/hr)
 
 // Helper type for resource storage
 export type ResourceStorage = Partial<Record<ResourceType, number>>;

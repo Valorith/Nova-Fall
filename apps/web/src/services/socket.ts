@@ -41,6 +41,17 @@ export interface ResourcesUpdateEvent {
   tick: number;
 }
 
+export interface GameTickEvent {
+  tick: number;
+  tickInterval: number;
+  nextTickAt: number;
+}
+
+export interface UpkeepTickEvent {
+  nextUpkeepAt: number;
+  upkeepInterval: number;
+}
+
 // Socket event handlers
 interface EventHandlers {
   'node:update': (event: NodeUpdateEvent) => void;
@@ -48,6 +59,8 @@ interface EventHandlers {
   'battle:start': (event: BattleStartEvent) => void;
   'battle:update': (event: BattleUpdateEvent) => void;
   'resources:update': (event: ResourcesUpdateEvent) => void;
+  'game:tick': (event: GameTickEvent) => void;
+  'upkeep:tick': (event: UpkeepTickEvent) => void;
   connect: () => void;
   disconnect: (reason: string) => void;
   connect_error: (error: Error) => void;
@@ -120,6 +133,14 @@ class GameSocket {
         console.log('[Socket] Resources update tick:', data.tick, 'nodes:', data.updates.length);
       }
       this.handlers['resources:update']?.(data);
+    });
+
+    this.socket.on('game:tick', (data: GameTickEvent) => {
+      this.handlers['game:tick']?.(data);
+    });
+
+    this.socket.on('upkeep:tick', (data: UpkeepTickEvent) => {
+      this.handlers['upkeep:tick']?.(data);
     });
   }
 

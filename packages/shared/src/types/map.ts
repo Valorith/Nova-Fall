@@ -1,5 +1,5 @@
-import type { NodeType, RoadType, StabilityLevel } from './enums';
-import type { NodeResources } from './node';
+import type { NodeType, RoadType, StabilityLevel } from './enums.js';
+import type { NodeResources } from './node.js';
 
 // Map seed data structure for generating the world
 

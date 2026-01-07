@@ -7,6 +7,8 @@ import {
   type NodeClaimedEvent,
   type NodeUpdateEvent,
   type ResourcesUpdateEvent,
+  type GameTickEvent,
+  type UpkeepTickEvent,
 } from '@/services/socket';
 
 // API response types
@@ -43,6 +45,10 @@ export const useGameStore = defineStore('game', () => {
   const isSocketConnected = ref(false);
   const recentlyUpdatedNodes = ref<Set<string>>(new Set());
   const currentSessionId = ref<string | null>(null);
+
+  // Upkeep/economy tick timing for progress bar (hourly)
+  const nextUpkeepAt = ref(0);
+  const upkeepInterval = ref(3600000); // Default 1 hour
 
   const nodeList = computed(() => Array.from(nodes.value.values()));
 
@@ -141,6 +147,15 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
+  function handleGameTick(event: GameTickEvent): void {
+    currentTick.value = event.tick;
+  }
+
+  function handleUpkeepTick(event: UpkeepTickEvent): void {
+    nextUpkeepAt.value = event.nextUpkeepAt;
+    upkeepInterval.value = event.upkeepInterval;
+  }
+
   // Get storage for a node
   function getNodeStorage(nodeId: string): ResourceStorage | undefined {
     return nodeStorage.value.get(nodeId);
@@ -164,6 +179,8 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.on('node:update', handleNodeUpdate);
     gameSocket.on('node:claimed', handleNodeClaimed);
     gameSocket.on('resources:update', handleResourcesUpdate);
+    gameSocket.on('game:tick', handleGameTick);
+    gameSocket.on('upkeep:tick', handleUpkeepTick);
 
     gameSocket.connect();
   }
@@ -175,6 +192,8 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.off('node:update');
     gameSocket.off('node:claimed');
     gameSocket.off('resources:update');
+    gameSocket.off('game:tick');
+    gameSocket.off('upkeep:tick');
     gameSocket.disconnect();
     isSocketConnected.value = false;
   }
@@ -185,6 +204,8 @@ export const useGameStore = defineStore('game', () => {
     connections,
     nodeStorage,
     currentTick,
+    nextUpkeepAt,
+    upkeepInterval,
     isLoading,
     error,
     isSocketConnected,

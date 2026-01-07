@@ -3,8 +3,8 @@ import { verifyAccessToken } from '../../lib/jwt.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { prisma } from '../../lib/prisma.js';
 import * as sessionService from './service.js';
-import type { CreateSessionRequest, SessionListQuery } from './types.js';
-import type { GameType } from '@prisma/client';
+import type { CreateSessionRequest, SessionListQuery, AddBotRequest } from './types.js';
+import type { GameType, BotDifficulty } from '@prisma/client';
 
 export async function sessionRoutes(app: FastifyInstance) {
   // Middleware to require authentication
@@ -166,5 +166,68 @@ export async function sessionRoutes(app: FastifyInstance) {
     }
 
     return { session: result.session };
+  });
+
+  // POST /sessions/:id/add-bot - Add a bot to the session (creator only)
+  app.post('/sessions/:id/add-bot', {
+    preHandler: requireAuth,
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const userId = (request as FastifyRequest & { userId: string }).userId;
+    const player = await getPlayer(userId);
+    const body = request.body as AddBotRequest | undefined;
+
+    // Validate difficulty if provided
+    const validDifficulties: BotDifficulty[] = ['EASY', 'NORMAL', 'HARD'];
+    const difficulty = body?.difficulty && validDifficulties.includes(body.difficulty)
+      ? body.difficulty
+      : 'NORMAL';
+
+    const result = await sessionService.addBot(
+      id,
+      player.id,
+      body?.name,
+      difficulty
+    );
+
+    if (!result.success) {
+      throw AppError.badRequest(result.error ?? 'Failed to add bot');
+    }
+
+    return { session: result.session };
+  });
+
+  // POST /sessions/:id/remove-bot/:botId - Remove a bot from the session (creator only)
+  app.post('/sessions/:id/remove-bot/:botId', {
+    preHandler: requireAuth,
+  }, async (request) => {
+    const { id, botId } = request.params as { id: string; botId: string };
+    const userId = (request as FastifyRequest & { userId: string }).userId;
+    const player = await getPlayer(userId);
+
+    const result = await sessionService.removeBot(id, player.id, botId);
+
+    if (!result.success) {
+      throw AppError.badRequest(result.error ?? 'Failed to remove bot');
+    }
+
+    return { session: result.session };
+  });
+
+  // POST /sessions/:id/end - End the game early (creator only)
+  app.post('/sessions/:id/end', {
+    preHandler: requireAuth,
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const userId = (request as FastifyRequest & { userId: string }).userId;
+    const player = await getPlayer(userId);
+
+    const result = await sessionService.endSession(id, player.id);
+
+    if (!result.success) {
+      throw AppError.badRequest(result.error ?? 'Failed to end session');
+    }
+
+    return { success: true };
   });
 }

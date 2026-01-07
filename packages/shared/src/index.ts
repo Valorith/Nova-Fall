@@ -4,10 +4,10 @@
 export const VERSION = '0.1.0';
 
 // Types
-export * from './types';
+export * from './types/index.js';
 
 // Configuration
-export * from './config';
+export * from './config/index.js';
 
 // Constants
-export * from './constants';
+export * from './constants/index.js';

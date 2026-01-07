@@ -1,8 +1,5 @@
 // Game constants and settings
-
-// Starting resources moved to config/resources.ts
-// Re-export for backwards compatibility
-export { STARTING_RESOURCES } from '../config/resources';
+// Note: STARTING_RESOURCES is exported from config/resources.ts
 
 // Upkeep settings
 export const UPKEEP = {

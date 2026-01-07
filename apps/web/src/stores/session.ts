@@ -1,18 +1,21 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { sessionsApi, type CreateSessionRequest } from '@/services/api';
+import { sessionsApi, type CreateSessionRequest, type AddBotRequest } from '@/services/api';
 import { useAuthStore } from './auth';
 
 export type GameType = 'KING_OF_THE_HILL' | 'DOMINATION';
 export type SessionStatus = 'LOBBY' | 'ACTIVE' | 'COMPLETED' | 'ABANDONED';
 export type SessionRole = 'PLAYER' | 'SPECTATOR';
+export type BotDifficulty = 'EASY' | 'NORMAL' | 'HARD';
 
 export interface SessionPlayer {
   id: string;
-  playerId: string;
+  playerId: string | null;
   displayName: string;
   role: SessionRole;
   isCreator: boolean;
+  isBot: boolean;
+  botDifficulty: BotDifficulty | null;
   hqNodeId: string | null;
   totalNodes: number;
   eliminatedAt: string | null;
@@ -25,7 +28,10 @@ export interface SessionListItem {
   gameType: GameType;
   status: SessionStatus;
   playerCount: number;
+  humanCount: number;
+  botCount: number;
   minPlayers: number;
+  maxPlayers: number;
   creatorId: string;
   creatorName: string;
   createdAt: string;
@@ -38,6 +44,7 @@ export interface SessionDetail {
   gameType: GameType;
   status: SessionStatus;
   minPlayers: number;
+  maxPlayers: number;
   creatorId: string;
   crownNodeId: string | null;
   crownHolderId: string | null;
@@ -178,6 +185,59 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function addBot(sessionId: string, options?: AddBotRequest) {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await sessionsApi.addBot(sessionId, options);
+      currentSession.value = response.data.session;
+      return response.data.session;
+    } catch (e: unknown) {
+      const axiosError = e as { response?: { data?: { error?: string } } };
+      error.value = axiosError.response?.data?.error ?? 'Failed to add bot';
+      throw e;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function removeBot(sessionId: string, botId: string) {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      const response = await sessionsApi.removeBot(sessionId, botId);
+      currentSession.value = response.data.session;
+      return response.data.session;
+    } catch (e: unknown) {
+      const axiosError = e as { response?: { data?: { error?: string } } };
+      error.value = axiosError.response?.data?.error ?? 'Failed to remove bot';
+      throw e;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function endSession(sessionId: string) {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      await sessionsApi.end(sessionId);
+      currentSession.value = null;
+      // Immediately clear active session for UI responsiveness
+      authStore.clearActiveSession();
+      // Refresh auth to get latest state
+      await authStore.fetchUser();
+      // Refresh available sessions
+      await fetchSessions();
+    } catch (e: unknown) {
+      const axiosError = e as { response?: { data?: { error?: string } } };
+      error.value = axiosError.response?.data?.error ?? 'Failed to end session';
+      throw e;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   function clearError() {
     error.value = null;
   }
@@ -196,6 +256,9 @@ export const useSessionStore = defineStore('session', () => {
     spectateSession,
     leaveSession,
     startSession,
+    endSession,
+    addBot,
+    removeBot,
     clearError,
   };
 });

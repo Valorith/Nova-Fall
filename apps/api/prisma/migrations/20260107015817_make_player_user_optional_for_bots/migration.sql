@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Player" ADD COLUMN     "isBot" BOOLEAN NOT NULL DEFAULT false,
+ALTER COLUMN "userId" DROP NOT NULL;

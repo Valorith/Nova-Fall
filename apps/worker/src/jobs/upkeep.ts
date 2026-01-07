@@ -1,7 +1,11 @@
 import { prisma } from '../lib/prisma.js';
-import { publisherRedis } from '../lib/redis.js';
+import { publisherRedis, redis } from '../lib/redis.js';
+import { publishUpkeepTick } from '../lib/events.js';
+
+// Redis key for storing next upkeep time
+export const NEXT_UPKEEP_KEY = 'game:nextUpkeepAt';
 import type { NodeType } from '@nova-fall/shared';
-import { getRegion, type ResourceStorage } from '@nova-fall/shared';
+import { getRegion, type ResourceStorage, type ResourceType } from '@nova-fall/shared';
 import {
   calculateNodeUpkeep,
   calculateDistanceFromHQ,
@@ -10,24 +14,51 @@ import {
   getDecayDamagePercent,
 } from '@nova-fall/game-logic';
 
-interface PlayerUpkeepResult {
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
+// Hourly production rates (resources generated per hour per node type)
+const HOURLY_PRODUCTION: Record<string, Partial<Record<ResourceType, number>>> = {
+  MINING: { iron: 100 },
+  POWER_PLANT: { energy: 80 },
+  REFINERY: { composites: 20 },
+  RESEARCH: { minerals: 15 },
+  AGRICULTURAL: { credits: 50 },
+  TRADE_HUB: { credits: 200 },
+  CAPITAL: { credits: 100, iron: 25, energy: 25 },
+  FORTRESS: {},
+};
+
+interface PlayerEconomyResult {
   playerId: string;
   totalUpkeep: number;
+  totalIncome: number;
   creditsBefore: number;
   creditsAfter: number;
-  paid: boolean;
+  upkeepPaid: boolean;
   nodesProcessed: number;
+  resourcesGenerated: ResourceStorage;
 }
 
-interface UpkeepEvent {
-  type: 'upkeep:processed';
-  results: PlayerUpkeepResult[];
+interface EconomyEvent {
+  type: 'economy:processed';
+  results: PlayerEconomyResult[];
   timestamp: string;
 }
 
 export async function processUpkeep(): Promise<void> {
   const startTime = Date.now();
-  console.log('[Upkeep] Starting hourly upkeep processing...');
+  const nextUpkeepAt = startTime + ONE_HOUR_MS;
+
+  // Store next upkeep time in Redis so game tick can broadcast it
+  await redis.set(NEXT_UPKEEP_KEY, nextUpkeepAt.toString());
+
+  // Broadcast upkeep timing for client progress bars
+  await publishUpkeepTick({
+    nextUpkeepAt,
+    upkeepInterval: ONE_HOUR_MS,
+  });
+
+  console.log('[Economy] Starting hourly economy processing...');
 
   try {
     // Fetch all players with owned nodes
@@ -80,7 +111,7 @@ export async function processUpkeep(): Promise<void> {
       },
     });
 
-    const results: PlayerUpkeepResult[] = [];
+    const results: PlayerEconomyResult[] = [];
     const now = new Date();
 
     for (const player of players) {
@@ -89,7 +120,7 @@ export async function processUpkeep(): Promise<void> {
       const hqNodeId = player.hqNodeId;
 
       if (!hqNodeId) {
-        console.warn(`[Upkeep] Player ${player.id} has no HQ, skipping`);
+        console.warn(`[Economy] Player ${player.id} has no HQ, skipping`);
         continue;
       }
 
@@ -97,52 +128,70 @@ export async function processUpkeep(): Promise<void> {
       const ownedNodeIds = player.ownedNodes.map((n) => n.id);
       const adjacencyMap = buildOwnedAdjacencyMap(ownedNodeIds, connections);
 
-      // Calculate total upkeep for all nodes
+      // Calculate upkeep and resource generation for all nodes
       let totalUpkeep = 0;
-      const nodeUpkeeps: { nodeId: string; upkeep: number; distance: number }[] = [];
+      let totalIncome = 0;
+      const resourcesGenerated: ResourceStorage = {};
 
       for (const node of player.ownedNodes) {
-        // Skip HQ - it has no upkeep
-        if (node.id === hqNodeId) continue;
-
         const distance = calculateDistanceFromHQ(node.id, hqNodeId, adjacencyMap);
         const region = node.regionId ? getRegion(node.regionId) : undefined;
 
-        const breakdown = calculateNodeUpkeep({
-          type: node.type as NodeType,
-          tier: node.tier,
-          distanceFromHQ: distance === Infinity ? 10 : distance, // Cap disconnected nodes at 10
-          regionUpkeepModifier: region?.upkeepModifier ?? 1.0,
-          buildings: node.buildings,
-        });
+        // Calculate upkeep (skip HQ - it has no upkeep)
+        if (node.id !== hqNodeId) {
+          const breakdown = calculateNodeUpkeep({
+            type: node.type as NodeType,
+            tier: node.tier,
+            distanceFromHQ: distance === Infinity ? 10 : distance,
+            regionUpkeepModifier: region?.upkeepModifier ?? 1.0,
+            buildings: node.buildings,
+          });
+          totalUpkeep += breakdown.total;
+        }
 
-        totalUpkeep += breakdown.total;
-        nodeUpkeeps.push({
-          nodeId: node.id,
-          upkeep: breakdown.total,
-          distance,
-        });
+        // Calculate resource production for this node type
+        const production = HOURLY_PRODUCTION[node.type] ?? {};
+        const tierMultiplier = 1 + (node.tier - 1) * 0.25; // 25% bonus per tier
+
+        for (const [resourceType, baseAmount] of Object.entries(production)) {
+          if (!baseAmount) continue;
+          const amount = Math.floor(baseAmount * tierMultiplier);
+
+          // Track credits separately as income
+          if (resourceType === 'credits') {
+            totalIncome += amount;
+          }
+
+          // Add to total generated
+          resourcesGenerated[resourceType as ResourceType] =
+            (resourcesGenerated[resourceType as ResourceType] ?? 0) + amount;
+        }
       }
 
-      // Attempt to deduct upkeep
-      const paid = creditsBefore >= totalUpkeep;
-      const creditsAfter = paid ? creditsBefore - totalUpkeep : creditsBefore;
+      // Calculate net credit change: income - upkeep
+      const netCreditChange = totalIncome - totalUpkeep;
+      const upkeepPaid = creditsBefore + totalIncome >= totalUpkeep;
+      const creditsAfter = Math.max(0, creditsBefore + netCreditChange);
 
-      // Update player resources
+      // Update player resources (credits adjusted + other resources added)
+      const updatedResources: ResourceStorage = { ...playerResources, credits: creditsAfter };
+
+      // Add non-credit resources to player inventory
+      for (const [resourceType, amount] of Object.entries(resourcesGenerated)) {
+        if (resourceType === 'credits' || !amount) continue;
+        updatedResources[resourceType as ResourceType] =
+          (updatedResources[resourceType as ResourceType] ?? 0) + amount;
+      }
+
       await prisma.player.update({
         where: { id: player.id },
-        data: {
-          resources: {
-            ...playerResources,
-            credits: creditsAfter,
-          },
-        },
+        data: { resources: updatedResources },
       });
 
       // Update node upkeep status - OPTIMIZED: batch by status type
-      const nextDue = new Date(now.getTime() + 60 * 60 * 1000); // +1 hour
+      const nextDue = new Date(now.getTime() + ONE_HOUR_MS);
 
-      if (paid) {
+      if (upkeepPaid) {
         // All nodes paid - use single updateMany
         await prisma.node.updateMany({
           where: { id: { in: ownedNodeIds } },
@@ -195,33 +244,37 @@ export async function processUpkeep(): Promise<void> {
       results.push({
         playerId: player.id,
         totalUpkeep,
+        totalIncome,
         creditsBefore,
         creditsAfter,
-        paid,
+        upkeepPaid,
         nodesProcessed: player.ownedNodes.length,
+        resourcesGenerated,
       });
     }
 
     // Process failure consequences (decay/collapse/abandonment)
     await processFailureConsequences();
 
-    // Publish upkeep event
-    const event: UpkeepEvent = {
-      type: 'upkeep:processed',
+    // Publish economy event
+    const event: EconomyEvent = {
+      type: 'economy:processed',
       results,
       timestamp: now.toISOString(),
     };
-    await publisherRedis.publish('upkeep:processed', JSON.stringify(event));
+    await publisherRedis.publish('economy:processed', JSON.stringify(event));
 
     const duration = Date.now() - startTime;
-    const paidCount = results.filter((r) => r.paid).length;
-    const unpaidCount = results.filter((r) => !r.paid).length;
+    const paidCount = results.filter((r) => r.upkeepPaid).length;
+    const unpaidCount = results.filter((r) => !r.upkeepPaid).length;
+    const totalGenerated = results.reduce((sum, r) => sum + r.totalIncome, 0);
 
     console.log(
-      `[Upkeep] Processed ${results.length} players in ${duration}ms. Paid: ${paidCount}, Unpaid: ${unpaidCount}`
+      `[Economy] Processed ${results.length} players in ${duration}ms. ` +
+      `Upkeep paid: ${paidCount}, Unpaid: ${unpaidCount}, Credits generated: ${totalGenerated}`
     );
   } catch (error) {
-    console.error('[Upkeep] Error processing upkeep:', error);
+    console.error('[Economy] Error processing economy tick:', error);
     throw error;
   }
 }

@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma.js';
 import { redis } from '../../lib/redis.js';
 import { publishNodeClaimed } from '../../lib/events.js';
+import { NODE_CLAIM_COST_BY_TIER, type ResourceStorage } from '@nova-fall/shared';
 import type { NodeStatus, NodeType } from '@prisma/client';
 import type {
   MapNodeResponse,
@@ -108,7 +109,7 @@ export async function getAllNodes(sessionId?: string): Promise<MapNodeResponse[]
   });
 
   // If we have a session, get HQ mappings from GameSessionPlayer
-  let sessionHQs: Map<string, string> = new Map();
+  let sessionHQs = new Map<string, string>();
   if (sessionId) {
     const sessionPlayers = await prisma.gameSessionPlayer.findMany({
       where: { gameSessionId: sessionId },
@@ -116,8 +117,9 @@ export async function getAllNodes(sessionId?: string): Promise<MapNodeResponse[]
     });
     sessionHQs = new Map(
       sessionPlayers
-        .filter((sp) => sp.hqNodeId)
-        .map((sp) => [sp.playerId, sp.hqNodeId!])
+        .filter((sp): sp is { playerId: string; hqNodeId: string } =>
+          sp.playerId !== null && sp.hqNodeId !== null)
+        .map((sp) => [sp.playerId, sp.hqNodeId])
     );
   }
 
@@ -348,8 +350,28 @@ export async function claimNode(
     }
   }
 
-  // TODO: Check and deduct claiming cost (resources)
-  // For MVP, we'll skip resource cost
+  // Check and deduct claiming cost (credits based on node tier)
+  const claimCost = NODE_CLAIM_COST_BY_TIER[node.tier] ?? NODE_CLAIM_COST_BY_TIER[1] ?? 100;
+  const playerResources = sessionPlayer.resources as ResourceStorage;
+  const currentCredits = playerResources.credits ?? 0;
+
+  if (currentCredits < claimCost) {
+    return {
+      success: false,
+      error: `Not enough credits to claim this node. Need ${claimCost}, have ${currentCredits}`,
+    };
+  }
+
+  // Deduct the claim cost
+  const updatedResources: ResourceStorage = {
+    ...playerResources,
+    credits: currentCredits - claimCost,
+  };
+
+  await prisma.gameSessionPlayer.update({
+    where: { id: sessionPlayerId },
+    data: { resources: updatedResources },
+  });
 
   // Claim the node (assign to session if not already)
   await prisma.node.update({

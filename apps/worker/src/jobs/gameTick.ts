@@ -1,5 +1,9 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { publishResourceUpdates, type ResourceUpdateEvent } from '../lib/events.js';
+import { redis } from '../lib/redis.js';
+import { publishResourceUpdates, publishGameTick, publishUpkeepTick, type ResourceUpdateEvent } from '../lib/events.js';
+import { config } from '../config.js';
+import { NEXT_UPKEEP_KEY } from './upkeep.js';
 import {
   NODE_TYPE_CONFIGS,
   BASE_PRODUCTION_PER_TICK,
@@ -11,18 +15,43 @@ import {
   NodeType,
 } from '@nova-fall/shared';
 
+const ONE_HOUR_MS = 60 * 60 * 1000;
 let tickCount = 0;
 
 export async function processGameTick(): Promise<void> {
   tickCount++;
   const startTime = Date.now();
+  const tickInterval = config.game.tickInterval;
+  const nextTickAt = startTime + tickInterval;
+
+  // Broadcast tick event immediately so clients can sync their progress bars
+  await publishGameTick({
+    tick: tickCount,
+    tickInterval,
+    nextTickAt,
+  });
+
+  // Also broadcast upkeep timing (read from Redis, or calculate if not set)
+  let nextUpkeepAt = parseInt(await redis.get(NEXT_UPKEEP_KEY) ?? '0', 10);
+  if (!nextUpkeepAt || nextUpkeepAt < startTime) {
+    // Calculate next upkeep time aligned to the hour
+    nextUpkeepAt = startTime + ONE_HOUR_MS;
+    await redis.set(NEXT_UPKEEP_KEY, nextUpkeepAt.toString());
+  }
+  await publishUpkeepTick({
+    nextUpkeepAt,
+    upkeepInterval: ONE_HOUR_MS,
+  });
 
   try {
-    // Fetch all owned nodes with their current storage
+    // Fetch owned nodes only in ACTIVE game sessions
     const ownedNodes = await prisma.node.findMany({
       where: {
         ownerId: { not: null },
         status: 'CLAIMED',
+        gameSession: {
+          status: 'ACTIVE',
+        },
       },
       select: {
         id: true,
@@ -98,16 +127,23 @@ export async function processGameTick(): Promise<void> {
       }
     }
 
-    // Batch update database
+    // Batch update database using raw SQL (single query instead of N queries)
     if (dbUpdates.length > 0) {
-      await prisma.$transaction(
-        dbUpdates.map((update) =>
-          prisma.node.update({
-            where: { id: update.id },
-            data: { storage: update.storage },
-          })
-        )
-      );
+      // Build CASE/WHEN statement for batch update
+      const caseStatements = dbUpdates
+        .map((update) => {
+          const storageJson = JSON.stringify(update.storage);
+          return Prisma.sql`WHEN id = ${update.id} THEN ${storageJson}::jsonb`;
+        });
+
+      const nodeIds = dbUpdates.map((update) => update.id);
+
+      await prisma.$executeRaw`
+        UPDATE "Node"
+        SET "storage" = CASE ${Prisma.join(caseStatements, ' ')} END,
+            "updatedAt" = NOW()
+        WHERE id IN (${Prisma.join(nodeIds)})
+      `;
 
       // Broadcast updates via WebSocket
       await publishResourceUpdates({
@@ -117,8 +153,8 @@ export async function processGameTick(): Promise<void> {
     }
 
     const duration = Date.now() - startTime;
-    if (tickCount % 12 === 0) {
-      // Log every minute (12 ticks * 5 seconds)
+    if (tickCount % 2 === 0) {
+      // Log every minute (2 ticks * 30 seconds)
       console.log(
         `[Tick ${tickCount}] Processed ${ownedNodes.length} nodes, ${updates.length} updated in ${duration}ms`
       );

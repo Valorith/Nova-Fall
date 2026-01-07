@@ -54,6 +54,13 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = newUser;
   }
 
+  function clearActiveSession() {
+    if (user.value && user.value.activeSession) {
+      const { activeSession: _, ...rest } = user.value;
+      user.value = rest;
+    }
+  }
+
   async function fetchUser() {
     if (!accessToken.value) {
       isInitialized.value = true;
@@ -99,6 +106,7 @@ export const useAuthStore = defineStore('auth', () => {
     isInitialized,
     setTokens,
     setUser,
+    clearActiveSession,
     fetchUser,
     logout,
     initialize,

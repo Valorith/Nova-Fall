@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "GameSession" ALTER COLUMN "maxPlayers" SET DEFAULT 4;

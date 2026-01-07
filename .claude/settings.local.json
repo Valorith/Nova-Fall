@@ -28,7 +28,14 @@
       "Bash(pnpm db:seed:*)",
       "Bash(pnpm --filter @nova-fall/game-logic build:*)",
       "Bash(pnpm --filter @nova-fall/worker typecheck:*)",
-      "Bash(npx prisma:*)"
+      "Bash(npx prisma:*)",
+      "Bash(grep:*)",
+      "Bash(npx tsc:*)",
+      "Bash(cat:*)",
+      "Bash(npx esbuild:*)",
+      "Bash(node -e:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npx tsup)"
     ]
   }
 }

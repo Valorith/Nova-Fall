@@ -1,4 +1,4 @@
-import { TerrainType } from '../types/enums';
+import { TerrainType } from '../types/enums.js';
 
 export interface TerrainConfig {
   id: TerrainType;

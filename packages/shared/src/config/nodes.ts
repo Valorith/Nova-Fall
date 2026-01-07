@@ -1,5 +1,5 @@
-import { NodeType } from '../types/enums';
-import type { NodeTypeConfig } from '../types/node';
+import { NodeType } from '../types/enums.js';
+import type { NodeTypeConfig } from '../types/node.js';
 
 // Node type configurations
 // Defines bonuses, costs, and properties for each node type

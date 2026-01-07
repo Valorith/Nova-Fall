@@ -2,10 +2,11 @@
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData } from '../game';
-import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, type MapNode, type ResourceStorage } from '@nova-fall/shared';
-import PlayerResourcesPanel from '@/components/game/PlayerResourcesPanel.vue';
+import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, BASE_CREDIT_GENERATION, type MapNode, type ResourceStorage } from '@nova-fall/shared';
+import PlayerResourcesPanel, { type UpkeepBreakdownItem, type IncomeBreakdownItem } from '@/components/game/PlayerResourcesPanel.vue';
 import ResourceDisplay from '@/components/game/ResourceDisplay.vue';
 import NodeTooltip from '@/components/game/NodeTooltip.vue';
+import TickProgressBar from '@/components/game/TickProgressBar.vue';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
@@ -65,6 +66,60 @@ const selectedNodeStorage = computed(() => {
 const selectedNodeCapacity = computed(() => {
   if (!primarySelectedNode.value) return 0;
   return NODE_BASE_STORAGE[primarySelectedNode.value.type] ?? 10000;
+});
+
+// Get current player ID
+const currentPlayerId = computed(() => authStore.user?.playerId ?? null);
+
+// Get all nodes owned by the current player
+const ownedNodes = computed(() => {
+  if (!currentPlayerId.value) return [];
+  return gameStore.nodeList.filter(node => node.ownerId === currentPlayerId.value);
+});
+
+// Calculate upkeep breakdown for owned nodes
+const upkeepBreakdown = computed<UpkeepBreakdownItem[]>(() => {
+  return ownedNodes.value.map(node => {
+    // Base upkeep from node type (simplified - doesn't include distance modifier for now)
+    const baseUpkeep = NODE_BASE_UPKEEP[node.type] ?? 50;
+    // Apply tier multiplier
+    const tierMultiplier = 1 + (node.tier - 1) * 0.25;
+    const amount = Math.floor(baseUpkeep * tierMultiplier);
+
+    return {
+      nodeName: node.name,
+      nodeType: node.type,
+      amount,
+    };
+  });
+});
+
+// Calculate total upkeep
+const totalUpkeep = computed(() => {
+  return upkeepBreakdown.value.reduce((sum, item) => sum + item.amount, 0);
+});
+
+// Calculate income breakdown (trade hubs generate credits)
+const incomeBreakdown = computed<IncomeBreakdownItem[]>(() => {
+  const income: IncomeBreakdownItem[] = [];
+
+  // Trade hubs generate credits
+  const tradeHubs = ownedNodes.value.filter(node => node.type === NodeType.TRADE_HUB);
+  if (tradeHubs.length > 0) {
+    // BASE_CREDIT_GENERATION is per 30-second tick, convert to per hour (120 ticks/hour)
+    const creditsPerHour = BASE_CREDIT_GENERATION * 120 * tradeHubs.length;
+    income.push({
+      source: `Trade Hubs (${tradeHubs.length})`,
+      amount: creditsPerHour,
+    });
+  }
+
+  return income;
+});
+
+// Calculate total income
+const totalIncome = computed(() => {
+  return incomeBreakdown.value.reduce((sum, item) => sum + item.amount, 0);
 });
 
 // Generate mock map data using hex grid placement
@@ -541,7 +596,22 @@ async function handleClaimNode() {
         </div>
 
         <!-- Player Resources -->
-        <PlayerResourcesPanel :resources="playerResources" />
+        <div class="flex items-center gap-3">
+          <PlayerResourcesPanel
+            :resources="playerResources"
+            :total-upkeep="totalUpkeep"
+            :upkeep-breakdown="upkeepBreakdown"
+            :total-income="totalIncome"
+            :income-breakdown="incomeBreakdown"
+          />
+
+          <!-- Upkeep Progress Bar (hourly economy tick) -->
+          <TickProgressBar
+            v-if="gameStore.nextUpkeepAt > 0"
+            :next-tick-at="gameStore.nextUpkeepAt"
+            :tick-interval="gameStore.upkeepInterval"
+          />
+        </div>
 
         <div class="flex items-center gap-2">
           <button

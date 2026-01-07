@@ -44,9 +44,10 @@ model Session {
 
 model Player {
   id            String   @id @default(cuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String?  @unique  // Null for bot players
+  user          User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   displayName   String
+  isBot         Boolean  @default(false)  // True for bot-controlled players
 
   // Resources stored as JSON for flexibility
   // NOTE: This is kept for backwards compatibility during migration.
@@ -526,6 +527,7 @@ model GameSession {
 
   // Session settings
   minPlayers      Int               @default(2)  // Minimum players to start
+  maxPlayers      Int               @default(4)  // Maximum players allowed (map corners)
 
   // Creator (player who created this session)
   creatorId       String
@@ -557,9 +559,14 @@ model GameSessionPlayer {
   gameSessionId   String
   gameSession     GameSession  @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
 
-  // Player reference
-  playerId        String
-  player          Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  // Player reference (nullable for bots)
+  playerId        String?
+  player          Player?      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  // Bot fields
+  isBot           Boolean      @default(false)
+  botName         String?      // Display name for bots (e.g., "Bot Alpha")
+  botDifficulty   BotDifficulty? // AI difficulty level (for future implementation)
 
   // Role in session
   role            SessionRole  @default(PLAYER)
@@ -574,9 +581,12 @@ model GameSessionPlayer {
 
   joinedAt        DateTime     @default(now())
 
+  // Unique constraint: for real players, ensure one entry per session
+  // Bots don't have this constraint since playerId is null
   @@unique([gameSessionId, playerId])
   @@index([gameSessionId])
   @@index([playerId])
+  @@index([isBot])
 }
 
 // ==================== ENUMS ====================
@@ -720,4 +730,10 @@ enum GameSessionStatus {
 enum SessionRole {
   PLAYER     // Active participant
   SPECTATOR  // Observer only
+}
+
+enum BotDifficulty {
+  EASY       // Slower, makes mistakes
+  NORMAL     // Balanced AI
+  HARD       // Aggressive, efficient
 }

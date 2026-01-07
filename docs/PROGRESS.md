@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 1 - World & Nodes (1.6 Lobby) |
 | **Overall Progress**   | Phase 1.1-1.5 complete, 1.6 in progress |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 22                         |
+| **Total Sessions**     | 23                         |
 
 ---
 
@@ -1505,6 +1505,53 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ---
 
+## Session 23 - 2026-01-06
+
+**Duration:** 1+ hours
+**Phase:** Phase 2 - Economy & Resources
+**Focus:** Economy Tick Progress Bar & Tooltips
+
+### Completed Tasks
+
+- [x] Fixed shared package ESM exports (NODE_CLAIM_COST_BY_TIER)
+- [x] Changed shared package build from tsup to tsc for ESM compatibility
+- [x] Added .js extensions to all internal imports for NodeNext resolution
+- [x] Created TickProgressBar component for economy tick countdown
+- [x] Consolidated resource generation, income, and upkeep into single hourly event
+- [x] Added upkeep timing broadcast via Redis (game tick reads and broadcasts)
+- [x] Added UpkeepTickEvent to WebSocket events
+- [x] Added hours-until-depleted warning to credits tooltip
+- [x] Added economy tick tooltip explaining what happens on tick
+
+### Files Created
+
+- `apps/web/src/components/game/TickProgressBar.vue` - Animated progress bar with tooltip
+
+### Files Modified
+
+- `apps/worker/src/jobs/upkeep.ts` - Added hourly production rates, stores next upkeep in Redis
+- `apps/worker/src/jobs/gameTick.ts` - Broadcasts upkeep timing every 30s from Redis
+- `apps/worker/src/lib/events.ts` - Added UpkeepTickEvent interface and publishUpkeepTick
+- `apps/ws-server/src/index.ts` - Added upkeep:tick channel subscription
+- `apps/web/src/services/socket.ts` - Added UpkeepTickEvent handler
+- `apps/web/src/stores/game.ts` - Added nextUpkeepAt and upkeepInterval state
+- `apps/web/src/components/game/PlayerResourcesPanel.vue` - Added depletion warning
+- `apps/web/src/views/GameView.vue` - Integrated TickProgressBar component
+- `packages/shared/src/*.ts` - Added .js extensions to all imports
+
+### Issues Resolved
+
+- ESM module resolution errors - fixed with .js extensions and NodeNext module
+- Progress bar not visible - fixed by having game tick broadcast upkeep timing from Redis
+
+### Next Steps
+
+1. Continue Phase 2 - Economy & Resources implementation
+2. Test upkeep failure consequences
+3. Implement NPC market buy/sell
+
+---
+
 ## Blockers Log
 
 <!-- Track all blockers here for visibility -->
@@ -1670,4 +1717,4 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ---
 
-_Last Updated: 2026-01-06 (Session 22 - Game Lobby & Session System)_
+_Last Updated: 2026-01-06 (Session 23 - Economy Tick Progress Bar & Tooltips)_

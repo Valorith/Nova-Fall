@@ -1,8 +1,8 @@
-import type { NodeType, NodeStatus, RoadType, UpkeepStatus } from './enums';
-import type { ResourceType as RT, ResourceStorage } from '../config/resources';
+import type { NodeType, NodeStatus, RoadType, UpkeepStatus } from './enums.js';
+import type { ResourceType as RT, ResourceStorage } from '../config/resources.js';
 
 // Re-export ResourceType from config for backwards compatibility
-export type { ResourceType, ResourceStorage } from '../config/resources';
+export type { ResourceType, ResourceStorage } from '../config/resources.js';
 
 // Resources stored in a node (using ResourceStorage from config)
 export type NodeResources = ResourceStorage;

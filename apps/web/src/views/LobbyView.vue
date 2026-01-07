@@ -2,7 +2,8 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
-import { useSessionStore, type GameType, type SessionListItem } from '@/stores/session';
+import { useSessionStore, type GameType, type SessionListItem, type SessionPlayer } from '@/stores/session';
+import lobbyBackground from '@/assets/lobby-background.jpg';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -20,6 +21,26 @@ const canStart = computed(() => {
   return isCreator.value &&
          sessionStore.currentSession.status === 'LOBBY' &&
          playerCount >= sessionStore.currentSession.minPlayers;
+});
+
+// Get filled player slots and empty slots for current session
+const playerSlots = computed(() => {
+  if (!sessionStore.currentSession) return [];
+  const players = sessionStore.currentSession.players.filter(p => p.role === 'PLAYER');
+  const maxPlayers = sessionStore.currentSession.maxPlayers;
+  const slots: (SessionPlayer | null)[] = [...players];
+  // Fill remaining slots with nulls
+  while (slots.length < maxPlayers) {
+    slots.push(null);
+  }
+  return slots;
+});
+
+const canAddBot = computed(() => {
+  if (!sessionStore.currentSession || !isCreator.value) return false;
+  const playerCount = sessionStore.currentSession.players.filter(p => p.role === 'PLAYER').length;
+  return sessionStore.currentSession.status === 'LOBBY' &&
+         playerCount < sessionStore.currentSession.maxPlayers;
 });
 
 onMounted(async () => {
@@ -73,9 +94,39 @@ async function handleStartSession() {
   }
 }
 
+async function handleAddBot() {
+  if (!activeSession.value) return;
+  try {
+    await sessionStore.addBot(activeSession.value.id);
+  } catch {
+    // Error is handled by the store
+  }
+}
+
+async function handleRemoveBot(botId: string) {
+  if (!activeSession.value) return;
+  try {
+    await sessionStore.removeBot(activeSession.value.id, botId);
+  } catch {
+    // Error is handled by the store
+  }
+}
+
 function handleContinue() {
   if (!activeSession.value) return;
   router.push(`/game/${activeSession.value.id}`);
+}
+
+async function handleEndSession() {
+  if (!activeSession.value) return;
+  if (!confirm('Are you sure you want to end this game? All progress will be lost.')) {
+    return;
+  }
+  try {
+    await sessionStore.endSession(activeSession.value.id);
+  } catch {
+    // Error is handled by the store
+  }
 }
 
 function formatGameType(type: GameType): string {
@@ -83,7 +134,12 @@ function formatGameType(type: GameType): string {
 }
 
 function getPlayerCount(session: SessionListItem): string {
-  return `${session.playerCount}/${session.minPlayers}+ players`;
+  return `${session.playerCount}/${session.maxPlayers} slots`;
+}
+
+function getPlayerBreakdown(session: SessionListItem): string {
+  if (session.botCount === 0) return '';
+  return `(${session.humanCount} human, ${session.botCount} bot)`;
 }
 
 function handleLogout() {
@@ -93,7 +149,13 @@ function handleLogout() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-900 text-white">
+  <div class="min-h-screen bg-gray-900 text-white relative">
+    <!-- Background Image -->
+    <div
+      class="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-60"
+      :style="{ backgroundImage: `url(${lobbyBackground})` }"
+    ></div>
+    <div class="relative z-10">
     <!-- Header -->
     <header class="border-b border-gray-800 bg-gray-900/95 px-6 py-4">
       <div class="flex items-center justify-between">
@@ -126,7 +188,7 @@ function handleLogout() {
       <section v-if="activeSession" class="mb-8">
         <h2 class="mb-4 text-lg font-semibold text-gray-300">YOUR ACTIVE GAME</h2>
         <div class="rounded-lg border border-gray-700 bg-gray-800 p-6">
-          <div class="flex items-center justify-between">
+          <div class="flex items-start justify-between">
             <div>
               <h3 class="text-xl font-bold">{{ activeSession.name }}</h3>
               <div class="mt-1 flex items-center gap-3 text-sm text-gray-400">
@@ -145,18 +207,59 @@ function handleLogout() {
               <div v-if="sessionStore.currentSession && activeSession.status === 'LOBBY'" class="mt-3">
                 <p class="text-sm text-gray-400">
                   {{ sessionStore.currentSession.players.filter(p => p.role === 'PLAYER').length }} /
-                  {{ sessionStore.currentSession.minPlayers }}+ players ready
+                  {{ sessionStore.currentSession.maxPlayers }} slots filled
+                  <span class="text-gray-500">(min {{ sessionStore.currentSession.minPlayers }} to start)</span>
                 </p>
-                <div class="mt-2 flex flex-wrap gap-2">
-                  <span
-                    v-for="player in sessionStore.currentSession.players.filter(p => p.role === 'PLAYER')"
-                    :key="player.id"
-                    class="rounded bg-gray-700 px-2 py-1 text-sm"
-                    :class="{ 'bg-indigo-900': player.isCreator }"
-                  >
-                    {{ player.displayName }}
-                    <span v-if="player.isCreator" class="text-xs text-indigo-400">(host)</span>
-                  </span>
+
+                <!-- Player Slots Grid -->
+                <div class="mt-3 grid grid-cols-4 gap-2">
+                  <template v-for="(slot, index) in playerSlots" :key="index">
+                    <!-- Filled slot - Player or Bot -->
+                    <div
+                      v-if="slot"
+                      class="flex items-center justify-between rounded border px-3 py-2 text-sm"
+                      :class="{
+                        'border-indigo-500 bg-indigo-900/30': slot.isCreator,
+                        'border-cyan-600 bg-cyan-900/20': slot.isBot,
+                        'border-gray-600 bg-gray-700': !slot.isCreator && !slot.isBot
+                      }"
+                    >
+                      <div class="flex items-center gap-2 min-w-0">
+                        <span v-if="slot.isBot" class="text-cyan-400 flex-shrink-0">🤖</span>
+                        <span class="truncate">{{ slot.displayName }}</span>
+                        <span v-if="slot.isCreator" class="text-xs text-indigo-400 flex-shrink-0">(host)</span>
+                      </div>
+                      <!-- Remove bot button (only for host and bots) -->
+                      <button
+                        v-if="isCreator && slot.isBot"
+                        title="Remove bot"
+                        class="ml-2 text-gray-400 hover:text-red-400 flex-shrink-0"
+                        :disabled="sessionStore.isLoading"
+                        @click="handleRemoveBot(slot.id)"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <!-- Empty slot -->
+                    <div
+                      v-else
+                      class="rounded border border-dashed border-gray-600 bg-gray-800/50 px-3 py-2 text-sm text-gray-500 flex items-center justify-center"
+                    >
+                      <template v-if="isCreator && canAddBot">
+                        <button
+                          class="text-gray-400 hover:text-indigo-400"
+                          :disabled="sessionStore.isLoading"
+                          @click="handleAddBot"
+                        >
+                          + Add Bot
+                        </button>
+                      </template>
+                      <template v-else>
+                        Empty
+                      </template>
+                    </div>
+                  </template>
                 </div>
               </div>
             </div>
@@ -184,7 +287,15 @@ function handleLogout() {
                   class="rounded bg-indigo-600 px-6 py-2 font-medium hover:bg-indigo-500"
                   @click="handleContinue"
                 >
-                  Continue
+                  Enter Game
+                </button>
+                <button
+                  v-if="isCreator"
+                  :disabled="sessionStore.isLoading"
+                  class="rounded bg-red-600 px-4 py-2 font-medium hover:bg-red-500 disabled:opacity-50"
+                  @click="handleEndSession"
+                >
+                  End Game
                 </button>
               </template>
             </div>
@@ -228,6 +339,7 @@ function handleLogout() {
                   {{ formatGameType(session.gameType) }}
                 </span>
                 <span>{{ getPlayerCount(session) }}</span>
+                <span v-if="getPlayerBreakdown(session)" class="text-gray-500">{{ getPlayerBreakdown(session) }}</span>
                 <span class="text-gray-500">by {{ session.creatorName }}</span>
               </div>
             </div>
@@ -319,6 +431,7 @@ function handleLogout() {
           </button>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>

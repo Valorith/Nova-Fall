@@ -83,6 +83,11 @@ export interface SessionListQuery {
   gameType?: 'KING_OF_THE_HILL' | 'DOMINATION';
 }
 
+export interface AddBotRequest {
+  name?: string;
+  difficulty?: 'EASY' | 'NORMAL' | 'HARD';
+}
+
 export const sessionsApi = {
   getAll: (query?: SessionListQuery) => api.get('/sessions', { params: query }),
   getById: (id: string) => api.get(`/sessions/${id}`),
@@ -92,4 +97,7 @@ export const sessionsApi = {
   spectate: (id: string) => api.post(`/sessions/${id}/spectate`),
   leave: (id: string) => api.post(`/sessions/${id}/leave`),
   start: (id: string) => api.post(`/sessions/${id}/start`),
+  end: (id: string) => api.post(`/sessions/${id}/end`),
+  addBot: (id: string, data?: AddBotRequest) => api.post(`/sessions/${id}/add-bot`, data),
+  removeBot: (id: string, botId: string) => api.post(`/sessions/${id}/remove-bot/${botId}`),
 };

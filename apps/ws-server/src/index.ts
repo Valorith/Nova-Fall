@@ -45,6 +45,9 @@ redisSub.subscribe(
   'battle:start',
   'battle:update',
   'resources:update',
+  'game:tick',
+  'upkeep:tick',
+  'economy:processed',
   (err, count) => {
     if (err) {
       logger.error({ err }, 'Failed to subscribe to Redis channels');
@@ -84,6 +87,21 @@ redisSub.on('message', (channel, message) => {
       case 'resources:update':
         // Broadcast resource updates from game tick
         io.emit('resources:update', data);
+        break;
+
+      case 'game:tick':
+        // Broadcast tick timing for progress bar sync
+        io.emit('game:tick', data);
+        break;
+
+      case 'upkeep:tick':
+        // Broadcast upkeep timing for hourly progress bar
+        io.emit('upkeep:tick', data);
+        break;
+
+      case 'economy:processed':
+        // Broadcast economy results (upkeep + income processed)
+        io.emit('economy:processed', data);
         break;
 
       default:

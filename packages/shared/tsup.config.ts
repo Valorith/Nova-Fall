@@ -6,4 +6,8 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: true,
+  // Disable code splitting to avoid rollup dependency
+  splitting: false,
+  // Use esbuild for everything
+  treeshake: false,
 });

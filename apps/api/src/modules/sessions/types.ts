@@ -1,4 +1,4 @@
-import type { GameType, GameSessionStatus, SessionRole } from '@prisma/client';
+import type { GameType, GameSessionStatus, SessionRole, BotDifficulty } from '@prisma/client';
 
 // Session data for lobby display
 export interface SessionListResponse {
@@ -6,21 +6,26 @@ export interface SessionListResponse {
   name: string;
   gameType: GameType;
   status: GameSessionStatus;
-  playerCount: number;
+  playerCount: number;   // Total players (humans + bots)
+  humanCount: number;    // Human players only
+  botCount: number;      // Bot players only
   minPlayers: number;
+  maxPlayers: number;
   creatorId: string;
   creatorName: string;
   createdAt: string;
   startedAt: string | null;
 }
 
-// Session player info
+// Session player info (can be human or bot)
 export interface SessionPlayerResponse {
   id: string;
-  playerId: string;
+  playerId: string | null;  // null for bots
   displayName: string;
   role: SessionRole;
   isCreator: boolean;
+  isBot: boolean;
+  botDifficulty: BotDifficulty | null;
   hqNodeId: string | null;
   totalNodes: number;
   eliminatedAt: string | null;
@@ -34,6 +39,7 @@ export interface SessionDetailResponse {
   gameType: GameType;
   status: GameSessionStatus;
   minPlayers: number;
+  maxPlayers: number;
   creatorId: string;
   crownNodeId: string | null;
   crownHolderId: string | null;
@@ -64,4 +70,10 @@ export interface CreateSessionRequest {
 export interface SessionListQuery {
   status?: GameSessionStatus;
   gameType?: GameType;
+}
+
+// Request for adding a bot to a session
+export interface AddBotRequest {
+  name?: string;  // Optional custom name, defaults to "Bot 1", "Bot 2", etc.
+  difficulty?: BotDifficulty;  // Optional difficulty, defaults to NORMAL
 }
