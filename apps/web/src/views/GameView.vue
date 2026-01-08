@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData } from '../game';
-import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, type MapNode, type ResourceStorage } from '@nova-fall/shared';
+import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData, type TransferData } from '../game';
+import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, NODE_CLAIM_COST_BY_TIER, type MapNode, type ResourceStorage } from '@nova-fall/shared';
 import PlayerResourcesPanel, { type UpkeepBreakdownItem, type IncomeBreakdownItem } from '@/components/game/PlayerResourcesPanel.vue';
 import ResourceDisplay from '@/components/game/ResourceDisplay.vue';
 import NodeTooltip from '@/components/game/NodeTooltip.vue';
 import TickProgressBar from '@/components/game/TickProgressBar.vue';
 import DevPanel from '@/components/game/DevPanel.vue';
+import MarketPanel from '@/components/game/MarketPanel.vue';
+import TransferPanel from '@/components/game/TransferPanel.vue';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
-import { nodesApi, sessionsApi } from '@/services/api';
-import { hexToPixel, hexKey, hexNeighbors, type HexCoord } from '../game/utils/hexGrid';
+import { nodesApi, sessionsApi, transfersApi, type TransferResponse } from '@/services/api';
+import { hexToPixel, pixelToHex, hexKey, hexNeighbors, type HexCoord } from '../game/utils/hexGrid';
 
 // Props - sessionId is used for session-scoped node operations
 const props = defineProps<{
@@ -31,6 +33,19 @@ const showControls = ref(true);
 const selectedNodeIds = ref<string[]>([]);
 const useMockData = ref(false); // Set to false to use real API data
 const isClaiming = ref(false);
+const isMarketOpen = ref(false);
+const isTransferOpen = ref(false);
+
+// Transfer mode state (for click-to-select-destination flow)
+const isTransferMode = ref(false);
+const transferSourceNode = ref<MapNode | null>(null);
+const transferDestNode = ref<MapNode | null>(null);
+const mousePosition = ref({ x: 0, y: 0 });
+
+// Pending transfers state (for displaying in node panels)
+const pendingTransfers = ref<TransferResponse[]>([]);
+const transferTimerNow = ref(Date.now()); // Reactive timer for transfer countdowns
+let transferTimerInterval: ReturnType<typeof setInterval> | null = null;
 
 // Tooltip state
 const hoveredNode = ref<MapNode | null>(null);
@@ -57,10 +72,19 @@ const selectedNodes = computed(() => {
 // Primary selected node (first one for single selection display)
 const primarySelectedNode = computed(() => selectedNodes.value[0] ?? null);
 
-// Get storage for the selected node
-const selectedNodeStorage = computed(() => {
+// Get storage for the selected node (from actual node data, fallback to mock)
+// Excludes credits since they are global, not stored in nodes
+const selectedNodeStorage = computed<ResourceStorage>(() => {
   if (!primarySelectedNode.value) return {};
-  return nodeStorage.value[primarySelectedNode.value.id] ?? {};
+  // Use actual node storage from MapNode, fallback to mock storage for development
+  const nodeData = primarySelectedNode.value.storage as ResourceStorage | undefined;
+  const rawStorage = (nodeData && Object.keys(nodeData).length > 0)
+    ? nodeData
+    : (nodeStorage.value[primarySelectedNode.value.id] ?? {});
+
+  // Filter out credits - they're a global resource, not node storage
+  const { credits: _, ...nodeResources } = rawStorage;
+  return nodeResources;
 });
 
 // Get storage capacity for the selected node
@@ -76,6 +100,28 @@ const currentPlayerId = computed(() => authStore.user?.playerId ?? null);
 const ownedNodes = computed(() => {
   if (!currentPlayerId.value) return [];
   return gameStore.nodeList.filter(node => node.ownerId === currentPlayerId.value);
+});
+
+// Aggregate resources from all owned nodes
+const aggregatedNodeResources = computed<ResourceStorage>(() => {
+  const result: ResourceStorage = {};
+  for (const node of ownedNodes.value) {
+    const storage = node.storage as ResourceStorage | undefined;
+    if (!storage) continue;
+    for (const [type, amount] of Object.entries(storage)) {
+      if (type === 'credits' || !amount) continue;
+      result[type as keyof ResourceStorage] = (result[type as keyof ResourceStorage] ?? 0) + amount;
+    }
+  }
+  return result;
+});
+
+// Total resources: credits from player + aggregated node resources
+const totalResources = computed<ResourceStorage>(() => {
+  return {
+    credits: playerResources.value.credits ?? 0,
+    ...aggregatedNodeResources.value,
+  };
 });
 
 // Calculate upkeep breakdown for owned nodes
@@ -394,6 +440,21 @@ onMounted(async () => {
 
   // Listen for selection changes
   engine.value.onSelectionChange = (ids) => {
+    // If in transfer mode, check if clicked node is a valid target
+    if (isTransferMode.value && ids.length === 1) {
+      const clickedNodeId = ids[0];
+      if (clickedNodeId && isValidTransferTarget(clickedNodeId)) {
+        const destNode = gameStore.getNode(clickedNodeId);
+        if (destNode) {
+          completeTransferSelection(destNode);
+          return; // Don't change selection
+        }
+      }
+      // Clicked on invalid target - ignore but keep transfer mode
+      return;
+    }
+
+    // Normal selection behavior
     selectedNodeIds.value = ids;
   };
 
@@ -448,8 +509,42 @@ onMounted(async () => {
     nodeStorage.value = mockStorage;
   } else {
     try {
-      // Connect to WebSocket for real-time updates
-      gameStore.connectSocket();
+      // Connect to WebSocket for real-time updates (pass playerId for economy updates)
+      gameStore.connectSocket(props.sessionId, currentPlayerId.value);
+
+      // Register callback to update player resources when economy tick processes
+      gameStore.onEconomyProcessed((result) => {
+        // Update player resources with the new values after economy tick
+        const updatedResources = { ...playerResources.value };
+        updatedResources.credits = result.creditsAfter;
+
+        // Add generated resources
+        for (const [resourceType, amount] of Object.entries(result.resourcesGenerated)) {
+          if (resourceType !== 'credits' && amount) {
+            updatedResources[resourceType as keyof typeof updatedResources] =
+              (updatedResources[resourceType as keyof typeof updatedResources] ?? 0) + amount;
+          }
+        }
+
+        playerResources.value = updatedResources;
+        console.log('[GameView] Player resources updated from economy tick:', updatedResources);
+      });
+
+      // Register callback to handle transfer completions
+      gameStore.onTransferCompleted(async (event) => {
+        console.log('[GameView] Transfer completed:', event.transferId, event.status);
+
+        // Reload pending transfers and node data in parallel
+        await Promise.all([
+          loadPendingTransfers(),
+          gameStore.loadMapData(props.sessionId),
+        ]);
+
+        // Update renderer with new data
+        if (engine.value) {
+          engine.value.loadMapData(gameStore.nodeList, gameStore.connections);
+        }
+      });
 
       // Load from API with session scope
       await gameStore.loadMapData(props.sessionId);
@@ -465,6 +560,9 @@ onMounted(async () => {
       } catch (resourceErr) {
         console.warn('Failed to load player resources:', resourceErr);
       }
+
+      // Load pending transfers
+      await loadPendingTransfers();
     } catch (err) {
       console.warn('Failed to load from API, falling back to mock data:', err);
       // Fallback to mock data
@@ -477,8 +575,18 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  // Unregister callbacks
+  gameStore.offEconomyProcessed();
+  gameStore.offTransferCompleted();
+
   // Disconnect from WebSocket
   gameStore.disconnectSocket();
+
+  // Clean up transfer timer
+  if (transferTimerInterval) {
+    clearInterval(transferTimerInterval);
+    transferTimerInterval = null;
+  }
 
   if (engine.value) {
     engine.value.destroy();
@@ -500,6 +608,32 @@ watch(
       }
     }
   }
+);
+
+// Watch pending transfers to start/stop countdown timer
+watch(
+  () => pendingTransfers.value.length,
+  (newCount) => {
+    if (newCount > 0 && !transferTimerInterval) {
+      // Start timer when we have pending transfers
+      transferTimerInterval = setInterval(() => {
+        transferTimerNow.value = Date.now();
+
+        // Check if any transfers have completed and reload
+        const hasCompleted = pendingTransfers.value.some(
+          (t) => new Date(t.completesAt).getTime() <= transferTimerNow.value
+        );
+        if (hasCompleted) {
+          loadPendingTransfers();
+        }
+      }, 1000);
+    } else if (newCount === 0 && transferTimerInterval) {
+      // Stop timer when no pending transfers
+      clearInterval(transferTimerInterval);
+      transferTimerInterval = null;
+    }
+  },
+  { immediate: true }
 );
 
 function handleZoomIn() {
@@ -560,12 +694,203 @@ function handleFocusNode() {
   }
 }
 
+// Check if market is available (Trade Hub owned by current player)
+const canAccessMarket = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node) return false;
+  if (!authStore.isAuthenticated) return false;
+  if (useMockData.value) return false;
+  if (node.type !== NodeType.TRADE_HUB) return false;
+  if (node.ownerId !== currentPlayerId.value) return false;
+  return true;
+});
+
+// Get Trade Hub node for market panel (properly typed to avoid exactOptionalPropertyTypes issues)
+const selectedTradeHub = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node || !canAccessMarket.value) return null;
+
+  // Filter out credits from storage - they're global, not node storage
+  const rawStorage = (node.storage ?? {}) as Record<string, number>;
+  const { credits: _, ...nodeStorage } = rawStorage;
+
+  return {
+    id: node.id,
+    name: node.name,
+    storage: nodeStorage,
+  };
+});
+
+// Check if transfer is available (owned node with resources and at least one other owned node)
+const canTransferResources = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node) return false;
+  if (!authStore.isAuthenticated) return false;
+  if (useMockData.value) return false;
+  if (node.ownerId !== currentPlayerId.value) return false;
+
+  // Check if node has any resources to transfer
+  const storage = selectedNodeStorage.value;
+  const hasResources = Object.entries(storage).some(
+    ([key, amount]) => key !== 'credits' && amount && amount > 0
+  );
+
+  // Check if there's at least one other owned node to transfer to
+  const hasOtherOwnedNodes = ownedNodes.value.length > 1;
+
+  return hasResources && hasOtherOwnedNodes;
+});
+
+// Valid transfer targets (any owned node except the source)
+const validTransferTargets = computed(() => {
+  if (!transferSourceNode.value) return new Set<string>();
+  const sourceId = transferSourceNode.value.id;
+  return new Set(
+    ownedNodes.value
+      .filter((n) => n.id !== sourceId)
+      .map((n) => n.id)
+  );
+});
+
+// Check if a node is a valid transfer target
+function isValidTransferTarget(nodeId: string): boolean {
+  return validTransferTargets.value.has(nodeId);
+}
+
+// Get pending transfers for the selected node (as source or destination)
+const selectedNodeTransfers = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node) return { outgoing: [], incoming: [] };
+
+  return {
+    outgoing: pendingTransfers.value.filter((t) => t.sourceNodeId === node.id),
+    incoming: pendingTransfers.value.filter((t) => t.destNodeId === node.id),
+  };
+});
+
+// Load pending transfers from API
+async function loadPendingTransfers() {
+  if (useMockData.value) return;
+
+  try {
+    const response = await transfersApi.getAll();
+    pendingTransfers.value = response.data.transfers;
+
+    // Update the renderer with transfer data for animated flow lines
+    if (engine.value) {
+      const transferData: TransferData[] = pendingTransfers.value.map((t) => ({
+        id: t.id,
+        sourceNodeId: t.sourceNodeId,
+        destNodeId: t.destNodeId,
+        completesAt: t.completesAt,
+      }));
+      engine.value.setTransfers(transferData);
+    }
+  } catch (err) {
+    console.error('Failed to load pending transfers:', err);
+  }
+}
+
+// Format time remaining for transfer (uses reactive timer)
+function formatTransferTime(completesAt: string): string {
+  const remaining = new Date(completesAt).getTime() - transferTimerNow.value;
+  if (remaining <= 0) return 'Arriving...';
+
+  const seconds = Math.floor(remaining / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes}m ${secs}s`;
+}
+
+// Get node name by ID
+function getTransferNodeName(nodeId: string): string {
+  const node = gameStore.getNode(nodeId);
+  return node?.name ?? 'Unknown';
+}
+
+// Enter transfer mode
+function enterTransferMode() {
+  const node = primarySelectedNode.value;
+  if (!node || !canTransferResources.value) return;
+
+  isTransferMode.value = true;
+  transferSourceNode.value = node;
+  transferDestNode.value = null;
+}
+
+// Exit transfer mode
+function exitTransferMode() {
+  isTransferMode.value = false;
+  transferSourceNode.value = null;
+  transferDestNode.value = null;
+}
+
+// Complete transfer selection (open panel with selected destination)
+function completeTransferSelection(destNode: MapNode) {
+  transferDestNode.value = destNode;
+  isTransferMode.value = false;
+  isTransferOpen.value = true;
+  // Select the destination node in the details panel
+  selectedNodeIds.value = [destNode.id];
+}
+
+// Handle mouse move for transfer line
+function handleMouseMove(event: MouseEvent) {
+  if (!isTransferMode.value) return;
+  mousePosition.value = { x: event.clientX, y: event.clientY };
+}
+
+// Handle right-click to cancel transfer mode
+function handleRightClick(event: MouseEvent) {
+  if (isTransferMode.value) {
+    event.preventDefault();
+    exitTransferMode();
+  }
+}
+
+// Get screen position of source node for connector line
+const sourceNodeScreenPos = computed(() => {
+  if (!transferSourceNode.value || !engine.value) return null;
+  const node = transferSourceNode.value;
+  return engine.value.worldToScreen(node.positionX, node.positionY);
+});
+
 // Check if the selected node can be claimed
 const canClaimNode = computed(() => {
-  if (!primarySelectedNode.value) return false;
+  const node = primarySelectedNode.value;
+  if (!node) return false;
   if (!authStore.isAuthenticated) return false;
   if (useMockData.value) return false; // Can't claim with mock data
-  return primarySelectedNode.value.status === NodeStatus.NEUTRAL;
+  if (node.status !== NodeStatus.NEUTRAL) return false;
+
+  // CAPITAL and CROWN nodes cannot be claimed directly
+  if (node.type === NodeType.CAPITAL || node.type === NodeType.CROWN) return false;
+
+  // Check if player has enough credits
+  const claimCost = NODE_CLAIM_COST_BY_TIER[node.tier] ?? NODE_CLAIM_COST_BY_TIER[1] ?? 100;
+  if ((playerResources.value.credits ?? 0) < claimCost) return false;
+
+  // Check adjacency - need to own at least one adjacent node (unless first claim)
+  const playerId = authStore.user?.playerId;
+  if (!playerId) return false;
+
+  const ownedNodes = gameStore.nodeList.filter((n) => n.ownerId === playerId);
+
+  // If player has no nodes, they can claim any valid neutral node (first claim via HQ assignment)
+  // But in practice, HQ is assigned at game start, so this shouldn't happen
+  if (ownedNodes.length === 0) return true;
+
+  // Check if target node is adjacent to any owned node
+  const targetHex = pixelToHex({ x: node.positionX, y: node.positionY });
+  const neighborHexKeys = hexNeighbors(targetHex).map((h) => hexKey(h));
+
+  const isAdjacent = ownedNodes.some((ownedNode) => {
+    const ownedHex = pixelToHex({ x: ownedNode.positionX, y: ownedNode.positionY });
+    return neighborHexKeys.includes(hexKey(ownedHex));
+  });
+
+  return isAdjacent;
 });
 
 // Claim a node
@@ -655,12 +980,88 @@ async function handleClaimNode() {
     isClaiming.value = false;
   }
 }
+
+// Handle market transaction - refresh resources from server
+async function handleMarketTransaction() {
+  try {
+    const resourcesResponse = await sessionsApi.getMyResources();
+    if (resourcesResponse.data.resources) {
+      playerResources.value = resourcesResponse.data.resources;
+    }
+  } catch (err) {
+    console.warn('Failed to refresh resources after transaction:', err);
+  }
+}
+
+// Handle transfer created - show success toast and clean up
+async function handleTransferCreated() {
+  toastStore.success('Resource transfer initiated');
+  // Reload pending transfers to update the node panels
+  await loadPendingTransfers();
+  // Keep panel open for additional transfers, but user can close it manually
+}
 </script>
 
 <template>
-  <div class="relative h-screen w-screen overflow-hidden bg-gray-950">
+  <div
+    class="relative h-screen w-screen overflow-hidden bg-gray-950"
+    :class="{ 'cursor-crosshair': isTransferMode }"
+    @mousemove="handleMouseMove"
+    @contextmenu="handleRightClick"
+  >
     <!-- Game Canvas Container -->
     <div ref="gameContainer" class="absolute inset-0" />
+
+    <!-- Transfer Mode Connector Line -->
+    <svg
+      v-if="isTransferMode && sourceNodeScreenPos"
+      class="absolute inset-0 pointer-events-none z-30"
+      style="width: 100%; height: 100%"
+    >
+      <defs>
+        <marker
+          id="transfer-arrow"
+          markerWidth="10"
+          markerHeight="10"
+          refX="9"
+          refY="3"
+          orient="auto"
+          markerUnits="strokeWidth"
+        >
+          <path d="M0,0 L0,6 L9,3 z" fill="#818cf8" />
+        </marker>
+      </defs>
+      <line
+        :x1="sourceNodeScreenPos.x"
+        :y1="sourceNodeScreenPos.y"
+        :x2="mousePosition.x"
+        :y2="mousePosition.y"
+        stroke="#818cf8"
+        stroke-width="3"
+        stroke-dasharray="8,4"
+        marker-end="url(#transfer-arrow)"
+      />
+      <circle
+        :cx="sourceNodeScreenPos.x"
+        :cy="sourceNodeScreenPos.y"
+        r="8"
+        fill="#6366f1"
+        stroke="#c7d2fe"
+        stroke-width="2"
+      />
+    </svg>
+
+    <!-- Transfer Mode Hint -->
+    <div
+      v-if="isTransferMode"
+      class="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-indigo-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-indigo-500/50 text-indigo-100 text-sm flex items-center gap-2"
+    >
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+      </svg>
+      Click any owned node to transfer resources
+      <span class="text-indigo-400 ml-2">(Distance + quantity = travel time • Right-click to cancel)</span>
+    </div>
 
     <!-- UI Overlay -->
     <div class="pointer-events-none absolute inset-0">
@@ -684,10 +1085,10 @@ async function handleClaimNode() {
           </span>
         </div>
 
-        <!-- Player Resources -->
+        <!-- Player Resources (credits global + aggregated node resources) -->
         <div class="flex items-center gap-3">
           <PlayerResourcesPanel
-            :resources="playerResources"
+            :resources="totalResources"
             :total-upkeep="totalUpkeep"
             :upkeep-breakdown="upkeepBreakdown"
             :total-income="totalIncome"
@@ -849,6 +1250,66 @@ async function handleClaimNode() {
               </div>
             </div>
 
+            <!-- Active Transfers -->
+            <div v-if="selectedNodeTransfers.outgoing.length > 0 || selectedNodeTransfers.incoming.length > 0">
+              <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Active Transfers</p>
+              <div class="space-y-2">
+                <!-- Outgoing Transfers -->
+                <div
+                  v-for="transfer in selectedNodeTransfers.outgoing"
+                  :key="transfer.id"
+                  class="bg-indigo-900/30 border border-indigo-500/30 rounded p-2"
+                >
+                  <div class="flex items-center justify-between mb-1">
+                    <div class="flex items-center gap-1 text-xs">
+                      <svg class="w-3 h-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                      </svg>
+                      <span class="text-indigo-300">Sending to</span>
+                      <span class="text-indigo-100 font-medium">{{ getTransferNodeName(transfer.destNodeId) }}</span>
+                    </div>
+                    <span class="text-xs text-indigo-300 font-mono">{{ formatTransferTime(transfer.completesAt) }}</span>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    <span
+                      v-for="(amount, type) in transfer.resources"
+                      :key="type"
+                      class="text-xs px-1.5 py-0.5 bg-indigo-800/50 text-indigo-200 rounded"
+                    >
+                      {{ amount }} {{ type }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Incoming Transfers -->
+                <div
+                  v-for="transfer in selectedNodeTransfers.incoming"
+                  :key="transfer.id"
+                  class="bg-emerald-900/30 border border-emerald-500/30 rounded p-2"
+                >
+                  <div class="flex items-center justify-between mb-1">
+                    <div class="flex items-center gap-1 text-xs">
+                      <svg class="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+                      </svg>
+                      <span class="text-emerald-300">Incoming from</span>
+                      <span class="text-emerald-100 font-medium">{{ getTransferNodeName(transfer.sourceNodeId) }}</span>
+                    </div>
+                    <span class="text-xs text-emerald-300 font-mono">{{ formatTransferTime(transfer.completesAt) }}</span>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    <span
+                      v-for="(amount, type) in transfer.resources"
+                      :key="type"
+                      class="text-xs px-1.5 py-0.5 bg-emerald-800/50 text-emerald-200 rounded"
+                    >
+                      {{ amount }} {{ type }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Buildings (placeholder) -->
             <div>
               <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Buildings</p>
@@ -867,6 +1328,28 @@ async function handleClaimNode() {
 
             <!-- Actions -->
             <div class="pt-2 space-y-2">
+              <!-- Market button for owned Trade Hubs -->
+              <button
+                v-if="canAccessMarket"
+                class="w-full py-2 px-4 bg-amber-600 hover:bg-amber-500 text-white rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                @click="isMarketOpen = true"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                Open Market
+              </button>
+              <!-- Transfer button for owned nodes with resources -->
+              <button
+                v-if="canTransferResources"
+                class="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                @click="enterTransferMode"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                Transfer Resources
+              </button>
               <!-- Claim button for neutral nodes -->
               <button
                 v-if="canClaimNode"
@@ -912,6 +1395,32 @@ async function handleClaimNode() {
       :screen-x="tooltipX"
       :screen-y="tooltipY"
     />
+
+    <!-- Market Panel -->
+    <MarketPanel
+      :credits="playerResources.credits ?? 0"
+      :trade-hub="selectedTradeHub"
+      :is-open="isMarketOpen"
+      @close="isMarketOpen = false"
+      @transaction="handleMarketTransaction"
+    />
+
+    <!-- Transfer Panel -->
+    <Teleport to="body">
+      <div
+        v-if="isTransferOpen && transferSourceNode && transferDestNode"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        @click.self="isTransferOpen = false; transferSourceNode = null; transferDestNode = null"
+      >
+        <TransferPanel
+          :source-node="transferSourceNode"
+          :dest-node="transferDestNode"
+          :node-storage="selectedNodeStorage"
+          @close="isTransferOpen = false; transferSourceNode = null; transferDestNode = null"
+          @transfer-created="handleTransferCreated"
+        />
+      </div>
+    </Teleport>
   </div>
 </template>
 

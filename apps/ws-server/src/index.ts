@@ -78,6 +78,7 @@ redisSub.subscribe(
   'resources:update',
   'upkeep:tick',
   'economy:processed',
+  'transfer:completed',
   (err, count) => {
     if (err) {
       logger.error({ err }, 'Failed to subscribe to Redis channels');
@@ -127,6 +128,13 @@ redisSub.on('message', (channel, message) => {
       case 'economy:processed':
         // Broadcast economy results (upkeep + income processed)
         io.emit('economy:processed', data);
+        break;
+
+      case 'transfer:completed':
+        // Broadcast transfer completion to session
+        if (data.sessionId) {
+          io.to(`session:${data.sessionId}`).emit('transfer:completed', data);
+        }
         break;
 
       default:

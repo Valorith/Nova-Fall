@@ -346,6 +346,36 @@ model MarketOrder {
   @@index([status])
 }
 
+model ResourceTransfer {
+  id              String         @id @default(cuid())
+
+  // Session scope
+  gameSessionId   String
+
+  // Owner (player initiating transfer)
+  playerId        String
+
+  // Route
+  sourceNodeId    String
+  destNodeId      String
+
+  // Resources being transferred (JSON: { iron: 50, energy: 20 })
+  resources       Json
+
+  // Timing
+  createdAt       DateTime       @default(now())
+  completesAt     DateTime       // When resources arrive
+
+  // State
+  status          TransferStatus @default(PENDING)
+
+  @@index([gameSessionId])
+  @@index([playerId])
+  @@index([sourceNodeId])
+  @@index([destNodeId])
+  @@index([status, completesAt]) // Composite index for pending transfer queries
+}
+
 model Caravan {
   id              String        @id @default(cuid())
   vehicleType     String        // References config file
@@ -571,8 +601,8 @@ model GameSessionPlayer {
   // Role in session
   role            SessionRole  @default(PLAYER)
 
-  // Session-scoped player state
-  resources       Json         @default("{\"credits\": 1000, \"iron\": 100, \"energy\": 50}")
+  // Session-scoped player state (only credits - other resources stored in nodes)
+  resources       Json         @default("{\"credits\": 1000}")
   hqNodeId        String?      // Player's HQ in this session
   totalNodes      Int          @default(0)
 
@@ -683,6 +713,12 @@ enum CaravanStatus {
   ARRIVED
   INTERCEPTED
   DESTROYED
+}
+
+enum TransferStatus {
+  PENDING     // Resources deducted, waiting to complete
+  COMPLETED   // Resources delivered to destination
+  CANCELLED   // Transfer cancelled, resources returned to source
 }
 
 enum CorpRank {

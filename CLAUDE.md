@@ -27,25 +27,49 @@ Before starting ANY work session, you MUST read these files:
 
 ## Development Rules
 
-### WSL vs Windows Environment (CRITICAL)
+### ⚠️ WSL vs Windows Environment (CRITICAL - READ FIRST) ⚠️
 
-**The dev server runs on Windows PowerShell, NOT WSL.**
+**This project runs on Windows PowerShell. Claude Code runs in WSL. These have INCOMPATIBLE binaries.**
 
-Node packages contain platform-specific binaries (esbuild, tsx, etc.) that differ between Windows and Linux. Installing packages from WSL will install Linux binaries that break the Windows dev server.
+Node packages contain platform-specific binaries (esbuild, tsx, prisma, etc.) that differ between Windows and Linux. The `node_modules` folder was installed from Windows and contains Windows binaries. **Any modification to node_modules from WSL will corrupt the project.**
 
-**NEVER do the following from WSL:**
+#### ❌ NEVER do these from WSL (Claude Code):
 
-- ❌ `pnpm install` - Installs Linux binaries that break Windows
-- ❌ `rm -rf node_modules` - Forces reinstall which will use wrong platform
-- ❌ Any command that modifies `node_modules`
+| Command | Why it breaks things |
+|---------|---------------------|
+| `pnpm install` | Installs Linux binaries, breaks Windows |
+| `npm install` | Same problem |
+| `rm -rf node_modules` | Forces reinstall with wrong platform |
+| `rm -rf` on any `node_modules` subfolder | Same problem |
+| Any command that adds/removes packages | Corrupts binary compatibility |
 
-**If node_modules gets corrupted**, instruct the user to run these commands in **PowerShell**:
+#### ✅ SAFE to do from WSL (Claude Code):
+
+- `pnpm typecheck` - Just runs TypeScript compiler
+- `pnpm lint` / `pnpm lint:fix` - Just runs ESLint
+- `pnpm build` - Compiles code (no binary changes)
+- `pnpm db:generate` - Generates Prisma client (usually safe)
+- `pnpm db:seed` - Seeds database (runs tsx, may fail but won't corrupt)
+- `npx prisma migrate` - Database migrations
+- Reading/writing source files
+- Git operations
+
+#### 🔧 If node_modules gets corrupted:
+
+**STOP. Do not try to fix it from WSL.** Tell the user to run in **PowerShell**:
 
 ```powershell
-Remove-Item -Recurse -Force node_modules, apps\api\node_modules, apps\web\node_modules, apps\ws-server\node_modules, apps\worker\node_modules, packages\shared\node_modules, packages\game-logic\node_modules -ErrorAction SilentlyContinue
+# Run this in PowerShell, NOT WSL
+Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
 pnpm install
 pnpm db:generate
 ```
+
+#### 🚨 Before running ANY npm/pnpm command, ask yourself:
+
+1. Does this command modify `node_modules`? → **DON'T RUN IT**
+2. Does this command install/update packages? → **DON'T RUN IT**
+3. Is this just running existing code/tools? → Probably safe
 
 ---
 
@@ -214,11 +238,11 @@ Examples:
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
 | **Current Phase**  | Phase 2 - Economy & Resources             |
-| **Phase Progress** | Lobby enhancements complete, economy tick display done |
-| **Current Task**   | Continue Phase 2 - upkeep testing, market system |
+| **Phase Progress** | Section 2.5 code complete, awaiting manual testing |
+| **Current Task**   | Test transfer system end-to-end (FIRST PRIORITY) |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 24 - 2026-01-06                   |
-| **Last Updated**   | 2026-01-06                                |
+| **Last Session**   | Session 29 - 2026-01-07                   |
+| **Last Updated**   | 2026-01-07                                |
 
 ---
 
@@ -263,6 +287,18 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-06 | Conditional tick strategy for combat      | Rapid ticks only when viewers present or combat active | User     |
 | 2026-01-06 | Redis-based session viewer tracking       | INCR/DECR counters for live player counts per session | Claude   |
 | 2026-01-06 | Global economy tick (all sessions)        | Single hourly tick processes all sessions at once    | User        |
+| 2026-01-07 | CROWN nodes reset on session end          | Prevents orphaned crown nodes from accumulating      | Claude      |
+| 2026-01-07 | Session-scoped crown detection            | Only use crownNodeId for session queries, not type   | Claude      |
+| 2026-01-07 | Market access via Trade Hub nodes only    | Thematic - trade hubs unlock commerce, not global    | User        |
+| 2026-01-07 | 4 Trade Hubs per quadrant (16 total)      | Even distribution, strategic resource placement      | User        |
+| 2026-01-07 | Trade Hub icon on map (money bag)         | Visual distinction for special node type             | User        |
+| 2026-01-07 | Real-time credits via economy:processed   | WebSocket event updates UI without page refresh      | Claude      |
+| 2026-01-07 | Transfer time: 1 min/node + 1 sec/resource | Both distance and quantity affect transfer duration  | User        |
+| 2026-01-07 | Transfer paths through owned nodes only   | Resources can't traverse neutral/enemy territory     | User        |
+| 2026-01-07 | Animated transfer flow lines on map       | Visual feedback showing resource movement direction  | User        |
+| 2026-01-07 | Single transfers job (removed from upkeep)| Prevents race condition causing double resource transfer | Claude   |
+| 2026-01-07 | WebSocket transfer:completed event        | Real-time UI updates without page refresh            | Claude      |
+| 2026-01-07 | Transfer animations private to owner      | Strategic - opponents can't see your resource movements | User     |
 
 ---
 
@@ -400,5 +436,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-_Last Updated: 2026-01-06 (Session 24)_
-_Version: 1.0.0_
+_Last Updated: 2026-01-07 (Session 28)_
+_Version: 1.0.1_

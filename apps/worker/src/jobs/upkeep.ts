@@ -61,43 +61,75 @@ export async function processUpkeep(): Promise<void> {
   console.log('[Economy] Starting hourly economy processing...');
 
   try {
-    // Fetch all players with owned nodes
-    const players = await prisma.player.findMany({
+    // Note: Resource transfers are processed by the dedicated transfers job (every minute)
+
+    // Fetch all session players in ACTIVE sessions with their owned nodes
+    const sessionPlayers = await prisma.gameSessionPlayer.findMany({
       where: {
-        ownedNodes: {
-          some: {},
+        gameSession: {
+          status: 'ACTIVE',
         },
+        playerId: { not: null }, // Exclude spectators and unlinked bots
+        role: 'PLAYER',
       },
       select: {
         id: true,
+        playerId: true,
         hqNodeId: true,
         resources: true,
-        ownedNodes: {
+        gameSessionId: true,
+        gameSession: {
           select: {
             id: true,
-            type: true,
-            tier: true,
-            regionId: true,
-            upkeepPaid: true,
-            upkeepDue: true,
-            upkeepStatus: true,
-            buildings: {
-              select: {
-                typeId: true,
-              },
-            },
           },
         },
       },
     });
 
-    if (players.length === 0) {
-      console.log('[Upkeep] No players with owned nodes');
+    if (sessionPlayers.length === 0) {
+      console.log('[Upkeep] No active session players');
       return;
     }
 
-    // Fetch only connections relevant to owned nodes (not ALL connections)
-    const allOwnedNodeIds = players.flatMap((p) => p.ownedNodes.map((n) => n.id));
+    // Get all player IDs and session IDs
+    const playerIds = sessionPlayers.map((sp) => sp.playerId).filter((id): id is string => id !== null);
+    const sessionIds = [...new Set(sessionPlayers.map((sp) => sp.gameSessionId))];
+
+    // Fetch nodes owned by these players in active sessions
+    const ownedNodes = await prisma.node.findMany({
+      where: {
+        ownerId: { in: playerIds },
+        gameSessionId: { in: sessionIds },
+      },
+      select: {
+        id: true,
+        ownerId: true,
+        gameSessionId: true,
+        type: true,
+        tier: true,
+        regionId: true,
+        upkeepPaid: true,
+        upkeepDue: true,
+        upkeepStatus: true,
+        buildings: {
+          select: {
+            typeId: true,
+          },
+        },
+      },
+    });
+
+    // Group nodes by session player
+    const nodesBySessionPlayer = new Map<string, typeof ownedNodes>();
+    for (const sp of sessionPlayers) {
+      const playerNodes = ownedNodes.filter(
+        (n) => n.ownerId === sp.playerId && n.gameSessionId === sp.gameSessionId
+      );
+      nodesBySessionPlayer.set(sp.id, playerNodes);
+    }
+
+    // Fetch only connections relevant to owned nodes
+    const allOwnedNodeIds = ownedNodes.map((n) => n.id);
     const connections = await prisma.nodeConnection.findMany({
       where: {
         OR: [
@@ -114,18 +146,21 @@ export async function processUpkeep(): Promise<void> {
     const results: PlayerEconomyResult[] = [];
     const now = new Date();
 
-    for (const player of players) {
-      const playerResources = player.resources as ResourceStorage;
+    for (const sessionPlayer of sessionPlayers) {
+      const playerNodes = nodesBySessionPlayer.get(sessionPlayer.id) ?? [];
+      if (playerNodes.length === 0) continue;
+
+      const playerResources = sessionPlayer.resources as ResourceStorage;
       const creditsBefore = playerResources.credits ?? 0;
-      const hqNodeId = player.hqNodeId;
+      const hqNodeId = sessionPlayer.hqNodeId;
 
       if (!hqNodeId) {
-        console.warn(`[Economy] Player ${player.id} has no HQ, skipping`);
+        console.warn(`[Economy] Session player ${sessionPlayer.id} has no HQ, skipping`);
         continue;
       }
 
       // Build adjacency map for distance calculation
-      const ownedNodeIds = player.ownedNodes.map((n) => n.id);
+      const ownedNodeIds = playerNodes.map((n) => n.id);
       const adjacencyMap = buildOwnedAdjacencyMap(ownedNodeIds, connections);
 
       // Calculate upkeep and resource generation for all nodes
@@ -133,7 +168,7 @@ export async function processUpkeep(): Promise<void> {
       let totalIncome = 0;
       const resourcesGenerated: ResourceStorage = {};
 
-      for (const node of player.ownedNodes) {
+      for (const node of playerNodes) {
         const distance = calculateDistanceFromHQ(node.id, hqNodeId, adjacencyMap);
         const region = node.regionId ? getRegion(node.regionId) : undefined;
 
@@ -173,7 +208,7 @@ export async function processUpkeep(): Promise<void> {
       const upkeepPaid = creditsBefore + totalIncome >= totalUpkeep;
       const creditsAfter = Math.max(0, creditsBefore + netCreditChange);
 
-      // Update player resources (credits adjusted + other resources added)
+      // Update session player resources (credits adjusted + other resources added)
       const updatedResources: ResourceStorage = { ...playerResources, credits: creditsAfter };
 
       // Add non-credit resources to player inventory
@@ -183,8 +218,8 @@ export async function processUpkeep(): Promise<void> {
           (updatedResources[resourceType as ResourceType] ?? 0) + amount;
       }
 
-      await prisma.player.update({
-        where: { id: player.id },
+      await prisma.gameSessionPlayer.update({
+        where: { id: sessionPlayer.id },
         data: { resources: updatedResources },
       });
 
@@ -217,7 +252,7 @@ export async function processUpkeep(): Promise<void> {
         // Group unpaid nodes by their new status to reduce queries
         const statusGroups = new Map<string, string[]>();
 
-        for (const node of player.ownedNodes) {
+        for (const node of playerNodes) {
           if (node.id === hqNodeId) continue;
 
           const lastPaid = node.upkeepPaid ?? node.upkeepDue ?? now;
@@ -242,13 +277,13 @@ export async function processUpkeep(): Promise<void> {
       }
 
       results.push({
-        playerId: player.id,
+        playerId: sessionPlayer.playerId ?? sessionPlayer.id,
         totalUpkeep,
         totalIncome,
         creditsBefore,
         creditsAfter,
         upkeepPaid,
-        nodesProcessed: player.ownedNodes.length,
+        nodesProcessed: playerNodes.length,
         resourcesGenerated,
       });
     }
@@ -281,17 +316,21 @@ export async function processUpkeep(): Promise<void> {
 
 /**
  * Process failure consequences for nodes that have not paid upkeep
+ * Only processes nodes in active game sessions
  */
 async function processFailureConsequences(): Promise<void> {
   const now = new Date();
 
-  // Find nodes in decay or collapse status
+  // Find nodes in decay or collapse status (only in active sessions)
   const failingNodes = await prisma.node.findMany({
     where: {
       upkeepStatus: {
         in: ['WARNING', 'DECAY', 'COLLAPSE'],
       },
       ownerId: { not: null },
+      gameSession: {
+        status: 'ACTIVE',
+      },
     },
     select: {
       id: true,

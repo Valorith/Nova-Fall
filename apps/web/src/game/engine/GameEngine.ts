@@ -3,7 +3,7 @@ import type { CameraOptions } from './Camera';
 import { Camera } from './Camera';
 import type { MapNode, RoadType } from '@nova-fall/shared';
 import { MAP_BOUNDS } from '@nova-fall/shared';
-import { WorldRenderer } from '../rendering/WorldRenderer';
+import { WorldRenderer, type TransferData } from '../rendering/WorldRenderer';
 
 export interface GameEngineOptions {
   container: HTMLElement;
@@ -538,5 +538,10 @@ export class GameEngine {
 
   public get selectedNodeIds(): string[] {
     return Array.from(this._selectedNodeIds);
+  }
+
+  // Set pending transfers for animated flow lines
+  public setTransfers(transfers: TransferData[]) {
+    this.worldRenderer.setTransfers(transfers);
   }
 }

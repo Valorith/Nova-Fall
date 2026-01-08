@@ -242,3 +242,59 @@ export function getHexVertices(centerX: number, centerY: number, size: number): 
   }
   return vertices;
 }
+
+/**
+ * Find the shortest path between two hex positions using BFS
+ * Returns array of hex coordinates from source to destination (inclusive)
+ * Returns null if no path exists
+ */
+export function findPath(
+  sourceHex: HexCoord,
+  destHex: HexCoord,
+  validHexes: Set<string>
+): HexCoord[] | null {
+  const sourceKey = hexKey(sourceHex);
+  const destKey = hexKey(destHex);
+
+  if (sourceKey === destKey) return [sourceHex];
+  if (!validHexes.has(sourceKey) || !validHexes.has(destKey)) return null;
+
+  // BFS with parent tracking
+  const visited = new Set<string>([sourceKey]);
+  const parent = new Map<string, HexCoord>();
+  const queue: HexCoord[] = [sourceHex];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const currentKey = hexKey(current);
+
+    for (const neighbor of hexNeighbors(current)) {
+      const neighborKey = hexKey(neighbor);
+
+      if (neighborKey === destKey) {
+        // Found destination - reconstruct path
+        const path: HexCoord[] = [destHex];
+        let traceKey = currentKey;
+        let traceHex = current;
+
+        while (traceKey !== sourceKey) {
+          path.unshift(traceHex);
+          const parentHex = parent.get(traceKey);
+          if (!parentHex) break;
+          traceHex = parentHex;
+          traceKey = hexKey(traceHex);
+        }
+        path.unshift(sourceHex);
+        return path;
+      }
+
+      if (!visited.has(neighborKey) && validHexes.has(neighborKey)) {
+        visited.add(neighborKey);
+        parent.set(neighborKey, current);
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  return null; // No path found
+}

@@ -8,6 +8,9 @@ import {
   type NodeUpdateEvent,
   type ResourcesUpdateEvent,
   type UpkeepTickEvent,
+  type EconomyProcessedEvent,
+  type PlayerEconomyResult,
+  type TransferCompletedEvent,
 } from '@/services/socket';
 
 // API response types
@@ -48,6 +51,12 @@ export const useGameStore = defineStore('game', () => {
   // Upkeep/economy tick timing for progress bar (hourly)
   const nextUpkeepAt = ref(0);
   const upkeepInterval = ref(3600000); // Default 1 hour
+
+  // Callback for economy processed events (registered by GameView)
+  let economyProcessedCallback: ((result: PlayerEconomyResult) => void) | null = null;
+
+  // Callback for transfer completed events (registered by GameView)
+  let transferCompletedCallback: ((event: TransferCompletedEvent) => void) | null = null;
 
   const nodeList = computed(() => Array.from(nodes.value.values()));
 
@@ -164,6 +173,45 @@ export const useGameStore = defineStore('game', () => {
     upkeepInterval.value = event.upkeepInterval;
   }
 
+  function handleEconomyProcessed(event: EconomyProcessedEvent, currentPlayerId: string | null): void {
+    if (!currentPlayerId) return;
+
+    // Find the current player's result
+    const playerResult = event.results.find((r) => r.playerId === currentPlayerId);
+    if (playerResult && economyProcessedCallback) {
+      console.log('[GameStore] Economy update for current player:', playerResult);
+      economyProcessedCallback(playerResult);
+    }
+  }
+
+  // Register callback for economy processed events
+  function onEconomyProcessed(callback: (result: PlayerEconomyResult) => void): void {
+    economyProcessedCallback = callback;
+  }
+
+  // Unregister callback
+  function offEconomyProcessed(): void {
+    economyProcessedCallback = null;
+  }
+
+  // Handle transfer completed events
+  function handleTransferCompleted(event: TransferCompletedEvent, currentPlayerId: string | null): void {
+    if (!currentPlayerId || event.playerId !== currentPlayerId) return;
+
+    console.log('[GameStore] Transfer completed for current player:', event.transferId, event.status);
+    transferCompletedCallback?.(event);
+  }
+
+  // Register callback for transfer completed events
+  function onTransferCompleted(callback: (event: TransferCompletedEvent) => void): void {
+    transferCompletedCallback = callback;
+  }
+
+  // Unregister transfer callback
+  function offTransferCompleted(): void {
+    transferCompletedCallback = null;
+  }
+
   // Get storage for a node
   function getNodeStorage(nodeId: string): ResourceStorage | undefined {
     return nodeStorage.value.get(nodeId);
@@ -175,7 +223,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   // Connect to WebSocket and set up handlers
-  function connectSocket(sessionId?: string): void {
+  function connectSocket(sessionId?: string, playerId?: string | null): void {
     gameSocket.on('connect', () => {
       isSocketConnected.value = true;
       // Join session room when connected
@@ -192,6 +240,8 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.on('node:claimed', handleNodeClaimed);
     gameSocket.on('resources:update', handleResourcesUpdate);
     gameSocket.on('upkeep:tick', handleUpkeepTick);
+    gameSocket.on('economy:processed', (event) => handleEconomyProcessed(event, playerId ?? null));
+    gameSocket.on('transfer:completed', (event) => handleTransferCompleted(event, playerId ?? null));
 
     gameSocket.connect();
 
@@ -214,8 +264,12 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.off('node:claimed');
     gameSocket.off('resources:update');
     gameSocket.off('upkeep:tick');
+    gameSocket.off('economy:processed');
+    gameSocket.off('transfer:completed');
     gameSocket.disconnect();
     isSocketConnected.value = false;
+    economyProcessedCallback = null;
+    transferCompletedCallback = null;
   }
 
   return {
@@ -246,5 +300,9 @@ export const useGameStore = defineStore('game', () => {
     isNodeRecentlyUpdated,
     connectSocket,
     disconnectSocket,
+    onEconomyProcessed,
+    offEconomyProcessed,
+    onTransferCompleted,
+    offTransferCompleted,
   };
 });

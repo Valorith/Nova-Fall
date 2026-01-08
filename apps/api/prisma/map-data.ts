@@ -299,11 +299,10 @@ export function generateMap(seed = 42): MapSeed {
 
   // Build node lookup map
   const hexToNode = new Map<string, NodeSeed>();
-  const nodeTypes = Object.values(NodeType).filter(t => t !== NodeType.CAPITAL);
   let nodeIndex = 0;
   let capitalIndex = 0;
 
-  // Calculate map center for tier calculation
+  // Calculate map center for tier calculation and quadrant assignment
   const mapCenterX = (minPx + maxPx) / 2; // ~950
   const mapCenterY = (minPx + maxPx) / 2; // ~950
   const maxDistanceFromCenter = Math.sqrt(
@@ -323,18 +322,81 @@ export function generateMap(seed = 42): MapSeed {
     return 1;
   }
 
+  // Pre-select Trade Hub positions: 4 per quadrant, randomly distributed
+  // Quadrants: TL (x < center, y < center), TR (x >= center, y < center),
+  //            BL (x < center, y >= center), BR (x >= center, y >= center)
+  const quadrants: { name: string; hexes: HexCoord[] }[] = [
+    { name: 'TL', hexes: [] },
+    { name: 'TR', hexes: [] },
+    { name: 'BL', hexes: [] },
+    { name: 'BR', hexes: [] },
+  ];
+
+  // Assign non-corner hexes to quadrants
+  for (const hex of nodePositions) {
+    if (cornerHexKeys.has(hexKey(hex))) continue; // Skip capitals
+
+    const pixel = hexToPixel(hex);
+    const isLeft = pixel.x < mapCenterX;
+    const isTop = pixel.y < mapCenterY;
+
+    if (isTop && isLeft) quadrants[0]!.hexes.push(hex);
+    else if (isTop && !isLeft) quadrants[1]!.hexes.push(hex);
+    else if (!isTop && isLeft) quadrants[2]!.hexes.push(hex);
+    else quadrants[3]!.hexes.push(hex);
+  }
+
+  // Select 4 Trade Hubs from each quadrant
+  const tradeHubHexKeys = new Set<string>();
+  const TRADE_HUBS_PER_QUADRANT = 4;
+
+  for (const quadrant of quadrants) {
+    // Shuffle quadrant hexes
+    const shuffled = [...quadrant.hexes];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+    }
+
+    // Take first 4 as Trade Hubs
+    for (let i = 0; i < Math.min(TRADE_HUBS_PER_QUADRANT, shuffled.length); i++) {
+      const hex = shuffled[i];
+      if (hex) {
+        tradeHubHexKeys.add(hexKey(hex));
+      }
+    }
+  }
+
+  console.log(`Pre-selected ${tradeHubHexKeys.size} Trade Hub positions (4 per quadrant)`);
+
   // Generate nodes at hex positions
+  let tradeHubIndex = 0;
   for (const hex of nodePositions) {
     const pixel = hexToPixel(hex);
     const key = hexKey(hex);
     const isCorner = cornerHexKeys.has(key);
+    const isTradeHub = tradeHubHexKeys.has(key);
 
-    // Corner nodes are CAPITAL type, others use region weights
+    // Determine node type
     const regionId = getRegionId(pixel.x, pixel.y);
-    const type = isCorner ? NodeType.CAPITAL : selectNodeType(regionId, random);
+    let type: NodeType;
+    if (isCorner) {
+      type = NodeType.CAPITAL;
+    } else if (isTradeHub) {
+      type = NodeType.TRADE_HUB;
+    } else {
+      type = selectNodeType(regionId, random);
+      // Prevent random selection from adding more Trade Hubs
+      if (type === NodeType.TRADE_HUB) {
+        type = NodeType.AGRICULTURAL; // Fallback
+      }
+    }
+
     const name = isCorner
       ? (capitalNames[capitalIndex++] ?? `Capital ${capitalIndex}`)
-      : generateNodeName(type, nodeIndex);
+      : isTradeHub
+        ? generateNodeName(NodeType.TRADE_HUB, tradeHubIndex++)
+        : generateNodeName(type, nodeIndex);
 
     // Capitals are tier 3, others based on distance from center
     const tier = isCorner ? 3 : calculateTier(pixel.x, pixel.y);

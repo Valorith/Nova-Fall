@@ -71,6 +71,7 @@ export async function getNodes(query: NodeListQuery): Promise<PaginatedResponse<
       regionId: node.regionId,
       ownerId: node.ownerId,
       status: node.status,
+      storage: node.storage as Record<string, number>,
     };
     if (node.owner?.displayName) {
       result.ownerName = node.owner.displayName;
@@ -144,6 +145,7 @@ export async function getAllNodes(sessionId?: string): Promise<MapNodeResponse[]
       regionId: node.regionId,
       ownerId: node.ownerId,
       status: node.status,
+      storage: node.storage as Record<string, number>,
     };
     if (node.owner?.displayName) {
       result.ownerName = node.owner.displayName;
@@ -155,8 +157,10 @@ export async function getAllNodes(sessionId?: string): Promise<MapNodeResponse[]
         result.isHQ = true;
       }
     }
-    // Mark crown node (either by session reference or node type)
-    if (node.type === 'CROWN' || (crownNodeId && node.id === crownNodeId)) {
+    // Mark crown node - use session's crownNodeId if available, otherwise fall back to type
+    // This ensures only the correct crown is marked when querying by session
+    const isCrown = crownNodeId ? node.id === crownNodeId : node.type === 'CROWN';
+    if (isCrown) {
       result.isCrown = true;
       // Include claimedAt for crown countdown display
       if (node.claimedAt) {
@@ -445,6 +449,7 @@ export async function claimNode(
       regionId: updatedNode.regionId,
       ownerId: updatedNode.ownerId,
       status: updatedNode.status,
+      storage: updatedNode.storage,
     };
     if (updatedNode.ownerName) {
       nodePayload.ownerName = updatedNode.ownerName;

@@ -1,6 +1,6 @@
 import { Container, Graphics, RenderTexture, Sprite, Text, TextStyle, type Application } from 'pixi.js';
 import type { MapNode } from '@nova-fall/shared';
-import { TerrainType, TERRAIN_CONFIGS } from '@nova-fall/shared';
+import { TerrainType, TERRAIN_CONFIGS, NodeType } from '@nova-fall/shared';
 import type { Camera } from '../engine/Camera';
 import type { ZoomLevel } from '../engine/GameEngine';
 import {
@@ -8,6 +8,8 @@ import {
   pixelToHex,
   hexKey,
   HEX_SIZE,
+  findPath,
+  type HexCoord,
 } from '../utils/hexGrid';
 
 // Connection data from API/mock
@@ -26,6 +28,14 @@ export interface HexMapData {
   connections: ConnectionData[];
   terrain: Map<string, TerrainType>; // hexKey -> terrain type
   gridBounds: { minQ: number; maxQ: number; minR: number; maxR: number };
+}
+
+// Transfer data for animated flow lines
+export interface TransferData {
+  id: string;
+  sourceNodeId: string;
+  destNodeId: string;
+  completesAt: string;
 }
 
 // Neutral color for unclaimed nodes
@@ -160,6 +170,52 @@ function drawCrownPath(g: Graphics, cx: number, cy: number, width: number, heigh
   g.closePath();
 }
 
+// Draw a money bag icon for Trade Hub nodes
+function drawMoneyBagPath(g: Graphics, cx: number, cy: number, size: number): void {
+  const s = size;
+
+  // Bag body (rounded bottom, narrower top)
+  g.moveTo(cx - s * 0.5, cy + s * 0.1);
+  // Left side curve down to bottom
+  g.bezierCurveTo(
+    cx - s * 0.6, cy + s * 0.4,
+    cx - s * 0.5, cy + s * 0.7,
+    cx, cy + s * 0.7
+  );
+  // Right side curve up from bottom
+  g.bezierCurveTo(
+    cx + s * 0.5, cy + s * 0.7,
+    cx + s * 0.6, cy + s * 0.4,
+    cx + s * 0.5, cy + s * 0.1
+  );
+  // Top tie/neck
+  g.lineTo(cx + s * 0.3, cy - s * 0.1);
+  g.bezierCurveTo(
+    cx + s * 0.35, cy - s * 0.35,
+    cx + s * 0.2, cy - s * 0.5,
+    cx, cy - s * 0.45
+  );
+  g.bezierCurveTo(
+    cx - s * 0.2, cy - s * 0.5,
+    cx - s * 0.35, cy - s * 0.35,
+    cx - s * 0.3, cy - s * 0.1
+  );
+  g.closePath();
+}
+
+// Draw dollar sign for money bag
+function drawDollarSign(g: Graphics, cx: number, cy: number, size: number): void {
+  const s = size * 0.3;
+  // Vertical line
+  g.moveTo(cx, cy - s * 0.8);
+  g.lineTo(cx, cy + s * 0.8);
+  // S curve (simplified as two arcs)
+  g.moveTo(cx + s * 0.4, cy - s * 0.4);
+  g.bezierCurveTo(cx + s * 0.4, cy - s * 0.6, cx - s * 0.4, cy - s * 0.6, cx - s * 0.4, cy - s * 0.3);
+  g.bezierCurveTo(cx - s * 0.4, cy, cx + s * 0.4, cy, cx + s * 0.4, cy + s * 0.3);
+  g.bezierCurveTo(cx + s * 0.4, cy + s * 0.6, cx - s * 0.4, cy + s * 0.6, cx - s * 0.4, cy + s * 0.4);
+}
+
 export class WorldRenderer {
   // Layer containers
   private terrainLayer: Container;
@@ -167,6 +223,7 @@ export class WorldRenderer {
   private nodeLayer: Container;
   private selectionLayer: Container;
   private animationLayer: Container; // For animated effects like crown pulse
+  private transferLayer: Container; // For animated transfer flow lines
   private nameplateLayer: Container; // For HQ nameplates at corners
 
   // Graphics for batch rendering
@@ -175,6 +232,7 @@ export class WorldRenderer {
   private nodeGraphics: Graphics;
   private selectionGraphics: Graphics;
   private crownPulseGraphics: Graphics; // Animated crown pulse effect
+  private transferGraphics: Graphics; // Animated transfer lines
 
   // Cached textures and sprites for performance
   private terrainTexture: RenderTexture | null = null;
@@ -203,6 +261,12 @@ export class WorldRenderer {
   private crownPulsePhase = 0;
   private crownAnimationFrame: number | null = null;
 
+  // Transfer flow animation state
+  private transferFlowPhase = 0;
+  private transferAnimationFrame: number | null = null;
+  private pendingTransfers: TransferData[] = [];
+  private transferPaths: Map<string, HexCoord[]> = new Map(); // transferId -> path
+
   constructor() {
     this.terrainLayer = new Container();
     this.terrainLayer.label = 'terrain';
@@ -219,6 +283,9 @@ export class WorldRenderer {
     this.animationLayer = new Container();
     this.animationLayer.label = 'animation';
 
+    this.transferLayer = new Container();
+    this.transferLayer.label = 'transfers';
+
     this.nameplateLayer = new Container();
     this.nameplateLayer.label = 'nameplates';
 
@@ -227,10 +294,12 @@ export class WorldRenderer {
     this.nodeGraphics = new Graphics();
     this.selectionGraphics = new Graphics();
     this.crownPulseGraphics = new Graphics();
+    this.transferGraphics = new Graphics();
 
     this.connectionLayer.addChild(this.connectionGraphics);
     this.selectionLayer.addChild(this.selectionGraphics);
     this.animationLayer.addChild(this.crownPulseGraphics);
+    this.transferLayer.addChild(this.transferGraphics);
   }
 
   setApp(app: Application): void {
@@ -261,6 +330,7 @@ export class WorldRenderer {
     parent.addChild(this.terrainLayer);
     parent.addChild(this.connectionLayer);
     parent.addChild(this.nodeLayer);
+    parent.addChild(this.transferLayer);
     parent.addChild(this.animationLayer);
     parent.addChild(this.nameplateLayer);
     parent.addChild(this.selectionLayer);
@@ -439,11 +509,14 @@ export class WorldRenderer {
     this.nodeGraphics.clear();
     this.selectionGraphics.clear();
     this.crownPulseGraphics.clear();
+    this.transferGraphics.clear();
     this.selectedNodeIds.clear();
     this.highlightedNodeId = null;
     this.nodesById.clear();
     this.playerNames.clear();
     this.nodesDirty = false;
+    this.pendingTransfers = [];
+    this.transferPaths.clear();
 
     // Cancel any pending render frame
     if (this.pendingRenderFrame !== null) {
@@ -453,6 +526,9 @@ export class WorldRenderer {
 
     // Cancel crown animation
     this.stopCrownAnimation();
+
+    // Cancel transfer animation
+    this.stopTransferAnimation();
 
     // Clean up textures
     if (this.terrainTexture) {
@@ -672,6 +748,21 @@ export class WorldRenderer {
         // Crown border (darker gold)
         g.setStrokeStyle({ width: 1.5, color: 0xb8860b, alpha: 1 });
         drawCrownPath(g, pixel.x, pixel.y, 18, 12);
+        g.stroke();
+      }
+
+      // Trade Hub icon (money bag)
+      if (node.type === NodeType.TRADE_HUB && !node.isCrown) {
+        // Money bag body
+        drawMoneyBagPath(g, pixel.x, pixel.y, 16);
+        g.fill({ color: 0xdaa520, alpha: 0.95 }); // Goldenrod fill
+        g.setStrokeStyle({ width: 1.5, color: 0x8b6914, alpha: 1 });
+        drawMoneyBagPath(g, pixel.x, pixel.y, 16);
+        g.stroke();
+
+        // Dollar sign on bag
+        g.setStrokeStyle({ width: 2, color: 0x8b6914, alpha: 0.9 });
+        drawDollarSign(g, pixel.x, pixel.y + 2, 16);
         g.stroke();
       }
     }
@@ -982,8 +1073,8 @@ export class WorldRenderer {
       nameplateContainer.y = hq.positionY + offsetY;
       nameplateContainer.rotation = rotation;
 
-      // Get player name and color
-      const playerName = this.playerNames.get(hq.ownerId!) || 'Unknown';
+      // Get player name and color - use node's ownerName directly, fallback to playerNames map
+      const playerName = hq.ownerName || this.playerNames.get(hq.ownerId!) || 'Unknown';
       const playerColor = getPlayerColor(hq.ownerId!);
 
       // Create nameplate background
@@ -1041,5 +1132,158 @@ export class WorldRenderer {
     requestAnimationFrame(() => {
       this.nameplateLayer.position.set(0, 0);
     });
+  }
+
+  // Set pending transfers and calculate paths
+  setTransfers(transfers: TransferData[]): void {
+    this.pendingTransfers = transfers;
+    this.transferPaths.clear();
+
+    if (!this.mapData || !this.currentPlayerId) return;
+
+    // Build set of valid hex keys (only nodes owned by the current player)
+    const validHexes = new Set<string>();
+    for (const node of this.mapData.nodes) {
+      if (node.ownerId === this.currentPlayerId) {
+        const hex = pixelToHex({ x: node.positionX, y: node.positionY });
+        validHexes.add(hexKey(hex));
+      }
+    }
+
+    // Calculate paths for each transfer
+    for (const transfer of transfers) {
+      const sourceNode = this.nodesById.get(transfer.sourceNodeId);
+      const destNode = this.nodesById.get(transfer.destNodeId);
+
+      if (!sourceNode || !destNode) continue;
+
+      const sourceHex = pixelToHex({ x: sourceNode.positionX, y: sourceNode.positionY });
+      const destHex = pixelToHex({ x: destNode.positionX, y: destNode.positionY });
+
+      const path = findPath(sourceHex, destHex, validHexes);
+      if (path) {
+        this.transferPaths.set(transfer.id, path);
+      }
+    }
+
+    // Start or stop animation based on whether there are transfers
+    if (transfers.length > 0 && this.transferAnimationFrame === null) {
+      this.startTransferAnimation();
+    } else if (transfers.length === 0 && this.transferAnimationFrame !== null) {
+      this.stopTransferAnimation();
+    }
+  }
+
+  // Start transfer flow animation
+  private startTransferAnimation(): void {
+    if (this.transferAnimationFrame !== null) return; // Already running
+
+    const animate = () => {
+      this.transferFlowPhase += 0.08; // Adjust speed of flow
+      if (this.transferFlowPhase > Math.PI * 2) {
+        this.transferFlowPhase -= Math.PI * 2;
+      }
+
+      this.renderTransferLines();
+      this.transferAnimationFrame = requestAnimationFrame(animate);
+    };
+
+    this.transferAnimationFrame = requestAnimationFrame(animate);
+  }
+
+  // Stop transfer flow animation
+  private stopTransferAnimation(): void {
+    if (this.transferAnimationFrame !== null) {
+      cancelAnimationFrame(this.transferAnimationFrame);
+      this.transferAnimationFrame = null;
+    }
+    this.transferGraphics.clear();
+  }
+
+  // Render animated transfer flow lines
+  private renderTransferLines(): void {
+    const g = this.transferGraphics;
+    g.clear();
+
+    if (this.pendingTransfers.length === 0) return;
+
+    // Draw each transfer path
+    for (const transfer of this.pendingTransfers) {
+      const path = this.transferPaths.get(transfer.id);
+      if (!path || path.length < 2) continue;
+
+      // Convert hex path to pixel coordinates
+      const pixelPath = path.map((hex) => hexToPixel(hex));
+
+      // Draw the base path line (semi-transparent)
+      g.setStrokeStyle({ width: 4, color: 0x818cf8, alpha: 0.3 });
+      g.moveTo(pixelPath[0]!.x, pixelPath[0]!.y);
+      for (let i = 1; i < pixelPath.length; i++) {
+        g.lineTo(pixelPath[i]!.x, pixelPath[i]!.y);
+      }
+      g.stroke();
+
+      // Draw animated flowing dots along the path
+      this.drawFlowingDots(g, pixelPath);
+    }
+  }
+
+  // Draw animated dots flowing along a path
+  private drawFlowingDots(g: Graphics, pixelPath: { x: number; y: number }[]): void {
+    if (pixelPath.length < 2) return;
+
+    // Calculate total path length
+    let totalLength = 0;
+    const segmentLengths: number[] = [];
+    for (let i = 1; i < pixelPath.length; i++) {
+      const dx = pixelPath[i]!.x - pixelPath[i - 1]!.x;
+      const dy = pixelPath[i]!.y - pixelPath[i - 1]!.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      segmentLengths.push(len);
+      totalLength += len;
+    }
+
+    // Number of dots based on path length
+    const dotSpacing = 40; // Pixels between dots
+    const numDots = Math.max(3, Math.floor(totalLength / dotSpacing));
+
+    // Draw dots at animated positions along the path
+    for (let i = 0; i < numDots; i++) {
+      // Calculate position along path (0 to 1), animated by phase
+      const baseT = i / numDots;
+      const animatedT = (baseT + this.transferFlowPhase / (Math.PI * 2)) % 1;
+
+      // Convert t to actual position on path
+      const targetDist = animatedT * totalLength;
+      let accumulatedDist = 0;
+      let dotX = pixelPath[0]!.x;
+      let dotY = pixelPath[0]!.y;
+
+      for (let j = 0; j < segmentLengths.length; j++) {
+        const segLen = segmentLengths[j]!;
+        if (accumulatedDist + segLen >= targetDist) {
+          // Dot is on this segment
+          const segT = (targetDist - accumulatedDist) / segLen;
+          const p1 = pixelPath[j]!;
+          const p2 = pixelPath[j + 1]!;
+          dotX = p1.x + (p2.x - p1.x) * segT;
+          dotY = p1.y + (p2.y - p1.y) * segT;
+          break;
+        }
+        accumulatedDist += segLen;
+      }
+
+      // Draw dot with glow effect
+      const dotSize = 5;
+      const glowAlpha = 0.3 + 0.2 * Math.sin(this.transferFlowPhase + i * 0.5);
+
+      // Outer glow
+      g.circle(dotX, dotY, dotSize + 3);
+      g.fill({ color: 0x818cf8, alpha: glowAlpha });
+
+      // Inner dot
+      g.circle(dotX, dotY, dotSize);
+      g.fill({ color: 0xc7d2fe, alpha: 0.9 });
+    }
   }
 }

@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 2 - Economy & Resources |
 | **Overall Progress**   | Phase 1 complete, Phase 2 in progress |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 24                         |
+| **Total Sessions**     | 29                         |
 
 ---
 
@@ -1659,6 +1659,426 @@ Player leaves GameView → disconnectSocket()
 
 ---
 
+## Session 25 - 2026-01-07
+
+**Duration:** ~1 hour
+**Phase:** Phase 2 - Economy & Resources
+**Focus:** Crown node tooltip countdown, bug fixes
+
+### Completed Tasks
+
+**Crown Tooltip Countdown:**
+- [x] Added `claimedAt` field to `MapNodeResponse` API type
+- [x] Updated `getAllNodes()` to return `claimedAt` for crown nodes when owned
+- [x] Added reactive countdown timer with 1-second interval updates
+- [x] Added computed properties: `crownTimeRemaining`, `crownProgress`, `crownCountdownDisplay`
+- [x] Added countdown UI with stopwatch icon, time display (HH:MM:SS format)
+- [x] Added animated progress bar with golden gradient and glow effect
+- [x] Added percentage complete text display
+- [x] Timer auto-starts/stops based on crown ownership state
+- [x] Proper cleanup on component unmount
+
+**Bug Fixes:**
+- [x] Fixed TypeScript error in GameView for DevPanel `selectedNodeName` prop
+- [x] Rebuilt shared package to expose `claimedAt` type to frontend
+- [x] Fixed nameplates showing "Unknown" for bot players
+  - Changed to use `node.ownerName` directly instead of lookup map
+- [x] Fixed duplicate crown nodes appearing after multiple game sessions
+  - Root cause: CROWN type wasn't reset when sessions ended
+  - Added crown cleanup in `endSession()` - resets CROWN back to TRADE_HUB
+  - Added safeguard in `startSession()` - skips leftover CROWN nodes
+  - Fixed `getAllNodes()` crown detection to use `session.crownNodeId` exclusively
+- [x] Claim button now validates target before being clickable
+  - Checks node is NEUTRAL and not CAPITAL/CROWN type
+  - Checks player has enough credits for tier cost
+  - Checks node is adjacent to player's owned territory
+
+**Section 2.3 Verification (Upkeep System):**
+- [x] Fixed critical bug: upkeep worker now uses session-scoped `GameSessionPlayer.resources` instead of global `Player.resources`
+- [x] Verified distance from HQ increases upkeep cost (15% per node)
+- [x] Verified UI shows base upkeep per node type in tooltip
+- [x] Verified depletion warning appears in credits tooltip when income < upkeep
+- [x] Verified decay state progression: WARNING (0-12h) → DECAY (12-36h) → COLLAPSE (36-48h) → ABANDONED (48h+)
+
+### Files Modified
+
+**Backend:**
+- `apps/api/src/modules/nodes/types.ts` - Added `claimedAt?: string | null` to MapNodeResponse
+- `apps/api/src/modules/nodes/service.ts` - Crown detection fix, claimedAt for crown nodes
+- `apps/api/src/modules/sessions/service.ts` - CROWN cleanup on end, skip CROWN on start
+- `apps/worker/src/jobs/upkeep.ts` - **Major fix:** Refactored to use session-scoped GameSessionPlayer resources
+
+**Frontend:**
+- `apps/web/src/components/game/NodeTooltip.vue` - Full countdown timer implementation
+- `apps/web/src/views/GameView.vue` - Fixed DevPanel prop, claim button validation with adjacency check
+- `apps/web/src/game/rendering/WorldRenderer.ts` - Use node.ownerName for nameplates
+
+### Technical Details
+
+**Crown Countdown Implementation:**
+```typescript
+const CROWN_HOLD_DURATION = 48 * 60 * 60 * 1000; // 48 hours in ms
+
+// Timer updates every second when crown is claimed
+countdownInterval = setInterval(() => {
+  now.value = Date.now();
+}, 1000);
+
+// Progress bar fills from 0% to 100% over 48 hours
+crownProgress = (elapsed / CROWN_HOLD_DURATION) * 100;
+```
+
+**Crown Node Detection Fix:**
+```typescript
+// Only use session's crownNodeId when querying with a session
+const isCrown = crownNodeId ? node.id === crownNodeId : node.type === 'CROWN';
+```
+
+### Notes
+
+- Crown tooltip shows 48-hour countdown when claimed
+- Progress bar has golden glow effect matching crown theme
+- Nameplates now correctly show bot names (e.g., "Helios Prime")
+- Crown node cleanup prevents orphaned CROWN nodes from accumulating
+- **Critical fix:** Upkeep worker was using global Player resources instead of session-scoped GameSessionPlayer resources
+- Section 2.3 (Upkeep System) verification complete
+- All typechecks pass
+
+### Next Session Plan
+
+1. Section 2.4 - Basic Market (NPC buy/sell)
+2. Section 2.5 - Resource Transfer (node-to-node)
+3. Complete remaining Section 1.6 items (victory conditions, WebSocket rooms)
+
+---
+
+## Session 26 - 2026-01-07
+
+**Duration:** ~1 hour (continuation)
+**Phase:** Phase 2 - Economy & Resources
+**Focus:** Section 2.4 - Basic Market (NPC buy/sell)
+
+### Completed Tasks
+
+**Section 2.4 - Basic Market Implementation:**
+
+**Backend (API):**
+- [x] Added market prices config to `packages/shared/src/config/resources.ts`:
+  - `NPC_MARKET_PRICES` with buy/sell prices for all tradeable resources
+  - `MARKET_TRANSACTION_FEE = 0.15` (15%)
+  - `TRADEABLE_RESOURCES` array
+  - `calculateBuyCost()` and `calculateSellRevenue()` helper functions
+- [x] Created `apps/api/src/modules/market/` module:
+  - `types.ts` - TradeableResource, MarketPriceInfo, BuyResourceRequest, SellResourceRequest, transaction response types
+  - `service.ts` - getMarketPrices(), getResourcePrice(), buyResource(), sellResource(), isTradeableResource()
+  - `routes.ts` - GET /market/prices, GET /market/prices/:resourceType, POST /market/buy, POST /market/sell
+  - `index.ts` - Module exports
+- [x] Registered market module in `apps/api/src/app.ts`
+
+**Frontend (Web):**
+- [x] Added market API to `apps/web/src/services/api.ts`:
+  - MarketPriceInfo, BuyResourceRequest, SellResourceRequest interfaces
+  - BuyTransactionResponse, SellTransactionResponse interfaces
+  - marketApi: getPrices(), getPrice(), buy(), sell()
+- [x] Created `apps/web/src/components/game/MarketPanel.vue`:
+  - Modal overlay with dark backdrop
+  - Resource prices grid showing buy/sell prices and player inventory
+  - Buy/Sell mode toggle
+  - Quantity input with quick buttons (1, 10, 50, 100, MAX)
+  - Transaction preview showing base cost/revenue, fee (15%), and total
+  - Error handling for insufficient credits/resources
+  - Success/error messages with auto-dismiss
+  - Refreshes player resources after successful transaction
+- [x] Integrated MarketPanel into GameView:
+  - Added amber "Market" button to top bar
+  - Added isMarketOpen state
+  - Added handleMarketTransaction() to refresh resources after trades
+
+### Verification Completed
+
+- [x] Market UI shows resource prices (5 tradeable resources with buy/sell)
+- [x] Buy resources → credits decrease, resource increases
+- [x] Sell resources → resource decreases, credits increase
+- [x] 15% transaction fee applied correctly (shown in preview)
+- [x] Cannot buy more than can afford (validation in service + UI disabled state)
+
+### Files Modified
+
+**Shared Package:**
+- `packages/shared/src/config/resources.ts` - Added market prices and calculation helpers
+
+**Backend:**
+- `apps/api/src/modules/market/types.ts` - New file
+- `apps/api/src/modules/market/service.ts` - New file
+- `apps/api/src/modules/market/routes.ts` - New file
+- `apps/api/src/modules/market/index.ts` - New file
+- `apps/api/src/app.ts` - Registered marketRoutes
+
+**Frontend:**
+- `apps/web/src/services/api.ts` - Added marketApi
+- `apps/web/src/components/game/MarketPanel.vue` - New file
+- `apps/web/src/views/GameView.vue` - Added Market button and panel integration
+
+### Market Configuration
+
+**Resource Prices (credits per unit):**
+| Resource | Buy Price | Sell Price | Spread |
+|----------|-----------|------------|--------|
+| Iron | 10 | 7 | 30% |
+| Minerals | 50 | 35 | 30% |
+| Energy | 15 | 10 | 33% |
+| Composites | 80 | 56 | 30% |
+| Tech Components | 200 | 140 | 30% |
+
+**Transaction Fee:** 15% applied to both buy and sell transactions
+
+### Notes
+
+- Market is session-scoped (requires active game session)
+- History log feature deferred (not essential for MVP)
+- Prices are fixed NPC prices (no dynamic market)
+- All typechecks pass (vue-tsc and tsc)
+
+### Additional Work (Session 26 continued)
+
+**Trade Hub Enhancements:**
+- [x] Moved Market button from top bar to Node Details panel
+- [x] Market only accessible from owned Trade Hub nodes
+- [x] Added Trade Hub money bag icon on map (rendered in WorldRenderer)
+- [x] Distributed Trade Hubs: exactly 4 per quadrant (16 total on map)
+- [x] Added "Unlocks Market" feature note to Trade Hub tooltip
+- [x] Added economy:processed WebSocket event for real-time credits updates
+- [x] Fixed credits UI not updating after economy tick without refresh
+
+**NodeTooltip.vue Updates:**
+- Added `.node-tooltip__feature` styling for special node features
+- Trade Hub tooltip now shows shopping cart icon with "Unlocks Market" text
+- Fixed border-radius to only apply to last child element
+
+---
+
+## Session 27 - 2026-01-08
+
+### Session Focus
+
+Section 2.5 - Resource Transfer implementation.
+
+### Tasks Completed
+
+**Backend:**
+- [x] Added ResourceTransfer model to Prisma schema
+- [x] Created TransferStatus enum (PENDING, COMPLETED, CANCELLED)
+- [x] Created transfers API module (types, service, routes)
+- [x] Implemented adjacency validation for transfers
+- [x] Implemented transfer creation with resource deduction from source
+- [x] Implemented transfer cancellation with resource return to source
+- [x] Added transfer completion processing in worker
+- [x] Added minute-based transfer job to worker (processes every minute)
+
+**Frontend:**
+- [x] Added transfers API to services/api.ts
+- [x] Created TransferPanel.vue component
+- [x] Integrated into GameView with modal overlay
+- [x] Added canTransferResources computed property
+- [x] Added Transfer Resources button for owned nodes with resources
+
+**Key Files:**
+- apps/api/prisma/schema.prisma - ResourceTransfer model
+- apps/api/src/modules/transfers/* - New API module
+- apps/worker/src/jobs/transfers.ts - Transfer completion processing
+- apps/worker/src/index.ts - Minute-based transfer job
+- apps/web/src/components/game/TransferPanel.vue - New component
+- apps/web/src/views/GameView.vue - Transfer integration
+- apps/web/src/services/api.ts - Transfer API endpoints
+
+### Technical Details
+
+- Transfer time: 30 seconds between adjacent nodes
+- Transfer processing: Worker job runs every minute
+- Resources deducted from source immediately on transfer creation
+- If destination node ownership changes before completion, resources return to source
+- TransferPanel shows pending transfers with countdown timer
+
+### Verification Tasks Pending
+
+- [ ] Transfer resources between two adjacent owned nodes
+- [ ] Transfer shows in pending list with ETA
+- [ ] Resources arrive at destination after transfer time
+- [ ] Cannot transfer to non-adjacent node
+- [ ] Can cancel pending transfer
+
+### Next Session Plan
+
+1. Manual verification of Section 2.5 features
+2. Complete remaining Section 1.6 items (victory conditions, WebSocket rooms)
+3. Begin Phase 3 if Phase 2 complete
+
+---
+
+## Session 28 - 2026-01-07
+
+**Duration:** ~2 hours
+**Phase:** Phase 2 - Economy & Resources
+**Focus:** Section 2.5 - Resource Transfer UX, bug fixes, and real-time updates
+
+### Completed Tasks
+
+**Transfer Time Formula:**
+- [x] Transfer time now includes both distance AND quantity factors
+- [x] Base time: 1 minute per node in the path (distance factor)
+- [x] Quantity time: 1 second per resource unit transferred
+- [x] Updated backend `createTransfer()` to calculate total quantity and apply both factors
+- [x] Updated `TRANSFER_TIME_PER_NODE_MS` from 30s to 60s (1 minute)
+- [x] Added `TRANSFER_TIME_PER_RESOURCE_MS = 1000` (1 second per unit)
+
+**Transfer UX Improvements:**
+- [x] Clicking destination node during transfer mode now selects it in Node Details panel
+- [x] Updated `completeTransferSelection()` to set `selectedNodeIds`
+
+**Animated Transfer Flow Lines:**
+- [x] Added `findPath()` BFS function to `hexGrid.ts` for calculating actual node path
+- [x] Added `TransferData` interface for transfer visualization data
+- [x] Added `transferLayer` and `transferGraphics` to WorldRenderer
+- [x] Added `setTransfers()` method to WorldRenderer with path calculation
+- [x] Added transfer animation loop with `startTransferAnimation()`/`stopTransferAnimation()`
+- [x] Added `renderTransferLines()` - draws semi-transparent base line along path
+- [x] Added `drawFlowingDots()` - animated dots flowing from source to destination
+- [x] Added `setTransfers()` public method to GameEngine
+- [x] Updated GameView `loadPendingTransfers()` to pass transfer data to renderer
+
+**Bug Fixes:**
+- [x] Fixed transfer path going through neutral nodes (path now only through owned nodes)
+- [x] Fixed countdown timer stopping early (now uses reactive `transferTimerNow` ref)
+- [x] Fixed double resource transfer bug (upkeep job was also calling processCompletedTransfers)
+- [x] Fixed UI not updating after transfer completion (added WebSocket notifications)
+
+**Real-time Transfer Updates:**
+- [x] Added `TransferCompletedEvent` to worker events
+- [x] Worker now publishes `transfer:completed` via Redis after processing
+- [x] WebSocket server subscribes to and broadcasts `transfer:completed` to session
+- [x] Frontend socket handles `transfer:completed` event
+- [x] Game store registers callback for transfer completion
+- [x] GameView reloads transfers and node data on completion
+
+**Performance Optimizations:**
+- [x] Added composite index `@@index([status, completesAt])` on ResourceTransfer
+- [x] Worker: Batch fetches all nodes in single query
+- [x] Worker: Single transaction for all DB updates
+- [x] Worker: Parallel Redis publish with `Promise.all`
+- [x] Frontend: Parallel API calls with `Promise.all`
+- [x] Removed duplicate `processCompletedTransfers` from upkeep job
+- [x] Removed unused `processCompletedTransfers` from API service
+
+### Files Modified
+
+**Database:**
+- `apps/api/prisma/schema.prisma` - Added composite index for transfers
+
+**Worker:**
+- `apps/worker/src/jobs/transfers.ts` - Optimized batch processing, WebSocket events
+- `apps/worker/src/jobs/upkeep.ts` - Removed duplicate processCompletedTransfers call
+- `apps/worker/src/lib/events.ts` - Added TransferCompletedEvent
+
+**API:**
+- `apps/api/src/modules/transfers/service.ts` - Removed unused processCompletedTransfers
+- `apps/api/src/modules/transfers/index.ts` - Updated exports
+- `apps/api/src/modules/transfers/types.ts` - Updated constants
+
+**WebSocket Server:**
+- `apps/ws-server/src/index.ts` - Subscribe to and broadcast transfer:completed
+
+**Frontend:**
+- `apps/web/src/services/socket.ts` - Added TransferCompletedEvent handler
+- `apps/web/src/stores/game.ts` - Added transfer completed callback
+- `apps/web/src/views/GameView.vue` - Reactive timer, callback registration, parallel API calls
+- `apps/web/src/game/utils/hexGrid.ts` - Added findPath BFS function
+- `apps/web/src/game/rendering/WorldRenderer.ts` - Transfer layer and animation
+- `apps/web/src/game/engine/GameEngine.ts` - Added setTransfers method
+
+### Technical Details
+
+**Transfer Time Formula:**
+```
+totalTime = (distance × 60 seconds) + (quantity × 1 second)
+
+Examples:
+- 1 node, 100 iron: 1m + 1m40s = 2m 40s
+- 3 nodes, 200 iron: 3m + 3m20s = 6m 20s
+```
+
+**Worker Query Optimization:**
+```
+Before: N transfers × 3 queries each = 3N queries
+After:  2 queries + 1 transaction = ~3 queries total
+```
+
+### Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| 1 minute per node (minimum) | Ensures non-trivial transfer time for strategy |
+| 1 second per resource unit | Large transfers take significantly longer |
+| Path through owned nodes only | Resources can't traverse enemy territory |
+| Single transfers job (not in upkeep) | Prevents race condition causing double processing |
+| WebSocket scoped to session | Only notify players in same game session |
+
+### Notes
+
+- All typechecks pass
+- Transfer animation only visible to owning player (intentional for strategy)
+- Timer auto-refreshes transfers when completion time reached
+- Full performance review completed - no significant optimizations needed
+
+### Next Session Plan
+
+1. **Test transfer system end-to-end:**
+   - Create transfer, verify countdown works
+   - Verify resources arrive at destination
+   - Verify UI updates in real-time (no page refresh needed)
+   - Verify correct amount transferred (not doubled)
+   - Verify animation flows through owned nodes only
+2. Complete remaining Section 1.6 items (victory conditions)
+3. Begin Phase 3 if Phase 2 complete
+
+---
+
+## Session 29 - 2026-01-07
+
+**Duration:** ~10 minutes
+**Phase:** Phase 2 - Economy & Resources
+**Focus:** Code verification for Session 28 bug fixes
+
+### Completed Tasks
+
+- [x] Verified all Session 28 bug fixes are in place:
+  - Worker publishes `transfer:completed` events via Redis
+  - WebSocket server subscribes and broadcasts to session rooms
+  - Frontend handles `transfer:completed` events
+  - `processCompletedTransfers` removed from upkeep.ts (prevents double processing)
+  - `transferTimerNow` reactive ref updates countdown every second
+  - Transfer path only uses owned nodes via `validHexes` filter
+- [x] All typechecks pass
+
+### Deferred Tasks
+
+- Manual testing of transfer system deferred to next session
+
+### Next Session Plan
+
+1. **FIRST PRIORITY: Test transfer system end-to-end:**
+   - Start services with `pnpm dev`
+   - Create transfer between two adjacent owned nodes
+   - Verify countdown timer counts down continuously
+   - Verify resources arrive at destination after transfer time
+   - Verify UI updates in real-time (no page refresh needed)
+   - Verify correct amount transferred (not doubled)
+   - Verify animation flows through owned nodes only
+2. Mark Section 2.5 verification tasks complete
+3. Complete remaining Section 1.6 items (victory conditions)
+4. Begin Phase 3 if Phase 2 complete
+
+---
+
 ## Blockers Log
 
 <!-- Track all blockers here for visibility -->
@@ -1750,8 +2170,8 @@ Player leaves GameView → disconnectSocket()
 - [x] Economy tick progress bar with tooltip
 - [x] Credits depletion warning in tooltip
 - [ ] Upkeep failure triggers consequences
-- [ ] NPC market buy/sell works
-- [ ] Resource display updates in real-time
+- [x] NPC market buy/sell works (via Trade Hub nodes)
+- [x] Resource display updates in real-time (economy:processed WebSocket event)
 
 ### Phase 3: Buildings & Construction
 
@@ -1826,4 +2246,4 @@ Player leaves GameView → disconnectSocket()
 
 ---
 
-_Last Updated: 2026-01-06 (Session 24 - Lobby Active Viewers & Economy Tick Display)_
+_Last Updated: 2026-01-07 (Session 28 - Resource Transfer UX Enhancements)_

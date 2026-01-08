@@ -2,11 +2,13 @@ import { Queue, Worker } from 'bullmq';
 import { redis } from './lib/redis.js';
 import { prisma } from './lib/prisma.js';
 import { processUpkeep } from './jobs/upkeep.js';
+import { processCompletedTransfers } from './jobs/transfers.js';
 
 export const VERSION = '0.1.0';
 
 // Queue names
 const UPKEEP_QUEUE = 'upkeep';
+const TRANSFERS_QUEUE = 'transfers';
 
 // Create queues
 const upkeepQueue = new Queue(UPKEEP_QUEUE, {
@@ -14,6 +16,14 @@ const upkeepQueue = new Queue(UPKEEP_QUEUE, {
   defaultJobOptions: {
     removeOnComplete: 50,
     removeOnFail: 100,
+  },
+});
+
+const transfersQueue = new Queue(TRANSFERS_QUEUE, {
+  connection: redis,
+  defaultJobOptions: {
+    removeOnComplete: 10,
+    removeOnFail: 50,
   },
 });
 
@@ -26,6 +36,17 @@ const upkeepWorker = new Worker(
   {
     connection: redis,
     concurrency: 1, // Only one upkeep job at a time
+  }
+);
+
+const transfersWorker = new Worker(
+  TRANSFERS_QUEUE,
+  async () => {
+    await processCompletedTransfers();
+  },
+  {
+    connection: redis,
+    concurrency: 1,
   }
 );
 
@@ -42,12 +63,26 @@ upkeepWorker.on('error', (err) => {
   console.error('Upkeep worker error:', err);
 });
 
+transfersWorker.on('failed', (job, err) => {
+  console.error(`Transfers job ${job?.id} failed:`, err);
+});
+
+transfersWorker.on('error', (err) => {
+  console.error('Transfers worker error:', err);
+});
+
 // Setup repeating jobs
 async function setupRepeatingJobs(): Promise<void> {
   // Remove any existing repeating jobs from upkeep queue
   const upkeepRepeatableJobs = await upkeepQueue.getRepeatableJobs();
   for (const job of upkeepRepeatableJobs) {
     await upkeepQueue.removeRepeatableByKey(job.key);
+  }
+
+  // Remove any existing repeating jobs from transfers queue
+  const transfersRepeatableJobs = await transfersQueue.getRepeatableJobs();
+  for (const job of transfersRepeatableJobs) {
+    await transfersQueue.removeRepeatableByKey(job.key);
   }
 
   // Add upkeep repeating job (every hour)
@@ -62,6 +97,19 @@ async function setupRepeatingJobs(): Promise<void> {
     }
   );
   console.log('Upkeep job scheduled every hour');
+
+  // Add transfers repeating job (every minute)
+  const ONE_MINUTE_MS = 60 * 1000;
+  await transfersQueue.add(
+    'transfers',
+    {},
+    {
+      repeat: {
+        every: ONE_MINUTE_MS,
+      },
+    }
+  );
+  console.log('Transfers job scheduled every minute');
 }
 
 // Graceful shutdown
@@ -69,7 +117,9 @@ async function shutdown(): Promise<void> {
   console.log('Shutting down worker...');
 
   await upkeepWorker.close();
+  await transfersWorker.close();
   await upkeepQueue.close();
+  await transfersQueue.close();
   await redis.quit();
   await prisma.$disconnect();
 

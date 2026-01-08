@@ -78,11 +78,19 @@ export const RESOURCES: Record<ResourceType, ResourceDefinition> = {
 // Resource type array for iteration
 export const RESOURCE_TYPES: ResourceType[] = Object.keys(RESOURCES) as ResourceType[];
 
-// Starting resources for new players (from CLAUDE.md spec)
-export const STARTING_RESOURCES: Partial<Record<ResourceType, number>> = {
-  credits: 1000,
+// Starting credits (global resource stored in GameSessionPlayer)
+export const STARTING_CREDITS = 1000;
+
+// Starting node resources (stored in HQ node storage at game start)
+export const STARTING_NODE_RESOURCES: Partial<Record<ResourceType, number>> = {
   iron: 100,
   energy: 50,
+};
+
+// Combined starting resources for display/reference (from CLAUDE.md spec)
+export const STARTING_RESOURCES: Partial<Record<ResourceType, number>> = {
+  credits: STARTING_CREDITS,
+  ...STARTING_NODE_RESOURCES,
 };
 
 // Base storage capacity per node type (matches NodeType enum)
@@ -237,4 +245,79 @@ export function deductCost(
 
 export function getTotalStorageUsed(storage: ResourceStorage): number {
   return Object.values(storage).reduce((sum, amount) => sum + (amount ?? 0), 0);
+}
+
+// Market configuration
+
+// Transaction fee (15%)
+export const MARKET_TRANSACTION_FEE = 0.15;
+
+// NPC Market fixed prices (credits per unit)
+// Buy prices are what the NPC will sell to players
+// Sell prices are what the NPC will buy from players
+export interface MarketPrice {
+  buyPrice: number;  // Price player pays to buy from NPC
+  sellPrice: number; // Price player receives when selling to NPC
+}
+
+export const NPC_MARKET_PRICES: Record<Exclude<ResourceType, 'credits'>, MarketPrice> = {
+  iron: {
+    buyPrice: 10,   // Player pays 10 credits to buy 1 iron
+    sellPrice: 7,   // Player gets 7 credits for selling 1 iron (30% spread)
+  },
+  minerals: {
+    buyPrice: 50,   // Rare minerals are expensive
+    sellPrice: 35,
+  },
+  energy: {
+    buyPrice: 15,
+    sellPrice: 10,
+  },
+  composites: {
+    buyPrice: 80,   // Processed materials
+    sellPrice: 56,
+  },
+  techComponents: {
+    buyPrice: 200,  // High-tech components are very expensive
+    sellPrice: 140,
+  },
+};
+
+// Get tradeable resource types (everything except credits)
+export const TRADEABLE_RESOURCES: Exclude<ResourceType, 'credits'>[] = [
+  'iron',
+  'minerals',
+  'energy',
+  'composites',
+  'techComponents',
+];
+
+// Calculate cost to buy resources from NPC
+export function calculateBuyCost(
+  resourceType: Exclude<ResourceType, 'credits'>,
+  quantity: number
+): { cost: number; fee: number; total: number } {
+  const price = NPC_MARKET_PRICES[resourceType];
+  const baseCost = price.buyPrice * quantity;
+  const fee = Math.ceil(baseCost * MARKET_TRANSACTION_FEE);
+  return {
+    cost: baseCost,
+    fee,
+    total: baseCost + fee,
+  };
+}
+
+// Calculate credits received from selling to NPC
+export function calculateSellRevenue(
+  resourceType: Exclude<ResourceType, 'credits'>,
+  quantity: number
+): { revenue: number; fee: number; net: number } {
+  const price = NPC_MARKET_PRICES[resourceType];
+  const baseRevenue = price.sellPrice * quantity;
+  const fee = Math.ceil(baseRevenue * MARKET_TRANSACTION_FEE);
+  return {
+    revenue: baseRevenue,
+    fee,
+    net: baseRevenue - fee,
+  };
 }

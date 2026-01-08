@@ -332,6 +332,12 @@ onUnmounted(() => {
               </div>
             </template>
           </div>
+
+          <!-- Trade Hub Feature -->
+          <div v-if="node.type === NodeType.TRADE_HUB" class="node-tooltip__feature">
+            <span class="node-tooltip__feature-icon">&#x1F6D2;</span>
+            <span class="node-tooltip__feature-text">Unlocks Market</span>
+          </div>
         </template>
       </template>
     </div>
@@ -475,8 +481,11 @@ onUnmounted(() => {
   gap: 0.375rem;
   padding: 0.5rem 0.75rem;
   background: rgba(15, 23, 42, 0.95);
-  border-radius: 0 0 0.5rem 0.5rem;
   border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.node-tooltip__bonuses:last-child {
+  border-radius: 0 0 0.5rem 0.5rem;
 }
 
 .node-tooltip__bonus {
@@ -494,6 +503,29 @@ onUnmounted(() => {
 .node-tooltip__bonus-icon {
   font-weight: 700;
   color: #4ade80;
+}
+
+/* Feature note (e.g., Trade Hub unlocks Market) */
+.node-tooltip__feature {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgb(45, 35, 15);
+  border-top: 1px solid rgba(218, 165, 32, 0.4);
+  border-radius: 0 0 0.5rem 0.5rem;
+}
+
+.node-tooltip__feature-icon {
+  font-size: 1rem;
+}
+
+.node-tooltip__feature-text {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fcd34d;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 /* Upkeep Warning */

@@ -9,6 +9,8 @@ import { authRoutes } from './modules/auth/index.js';
 import { nodeRoutes } from './modules/nodes/index.js';
 import { sessionRoutes } from './modules/sessions/index.js';
 import { gameRoutes } from './modules/game/index.js';
+import { marketRoutes } from './modules/market/index.js';
+import { transferRoutes } from './modules/transfers/index.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -41,6 +43,8 @@ export async function buildApp() {
   await app.register(nodeRoutes);
   await app.register(sessionRoutes);
   await app.register(gameRoutes);
+  await app.register(marketRoutes);
+  await app.register(transferRoutes);
 
   // API version endpoint
   app.get('/api/v1', async () => {

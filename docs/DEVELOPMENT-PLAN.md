@@ -1409,49 +1409,49 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
   - [x] Warning alerts (upkeep status in tooltip with color-coded warnings)
   - [~] Projected runway (deferred - needs player resources tracking)
 
-- [ ] **Verify Section 2.3:**
-  - [ ] Upkeep deducts from player credits hourly
-  - [ ] Distance from HQ increases upkeep cost
-  - [ ] UI shows upkeep breakdown per node
-  - [ ] Warning appears when credits low
-  - [ ] Node enters decay state when upkeep unpaid
+- [x] **Verify Section 2.3:**
+  - [x] Upkeep deducts from player credits hourly (fixed to use session-scoped resources)
+  - [x] Distance from HQ increases upkeep cost (15% per node via DISTANCE_UPKEEP_MODIFIER)
+  - [x] UI shows upkeep breakdown per node (base upkeep in tooltip)
+  - [x] Warning appears when credits low (depletion countdown in credits tooltip)
+  - [x] Node enters decay state when upkeep unpaid (WARNING→DECAY→COLLAPSE→ABANDONED)
 
 ### 2.4 Basic Market
 
-- [ ] **NPC market**
-  - [ ] Fixed buy/sell prices
-  - [ ] Available at any owned node
-  - [ ] 15% fee on transactions
+- [x] **NPC market**
+  - [x] Fixed buy/sell prices (NPC_MARKET_PRICES in shared/config/resources.ts)
+  - [x] Available at any owned node (session-scoped, not node-specific)
+  - [x] 15% fee on transactions (MARKET_TRANSACTION_FEE = 0.15)
 
-- [ ] **Market UI**
-  - [ ] Resource list with prices
-  - [ ] Buy/sell interface
-  - [ ] Transaction confirmation
-  - [ ] History log
+- [x] **Market UI**
+  - [x] Resource list with prices (MarketPanel component)
+  - [x] Buy/sell interface (toggle + quantity input)
+  - [x] Transaction confirmation (preview shows cost/fee/total)
+  - [~] History log (deferred - not essential for MVP)
 
-- [ ] **API endpoints**
-  - [ ] `GET /market/prices` - Current prices
-  - [ ] `POST /market/buy` - Buy resources
-  - [ ] `POST /market/sell` - Sell resources
+- [x] **API endpoints**
+  - [x] `GET /market/prices` - Current prices
+  - [x] `POST /market/buy` - Buy resources
+  - [x] `POST /market/sell` - Sell resources
 
-- [ ] **Verify Section 2.4:**
-  - [ ] Market UI shows resource prices
-  - [ ] Buy resources → credits decrease, resource increases
-  - [ ] Sell resources → resource decreases, credits increase
-  - [ ] 15% transaction fee applied correctly
-  - [ ] Cannot buy more than can afford
+- [x] **Verify Section 2.4:**
+  - [x] Market UI shows resource prices
+  - [x] Buy resources → credits decrease, resource increases
+  - [x] Sell resources → resource decreases, credits increase
+  - [x] 15% transaction fee applied correctly
+  - [x] Cannot buy more than can afford
 
 ### 2.5 Resource Transfer
 
-- [ ] **Node-to-node transfer**
-  - [ ] Only between adjacent nodes
-  - [ ] Transfer time based on distance
-  - [ ] Cancel in-progress transfers
+- [x] **Node-to-node transfer**
+  - [x] Only between adjacent nodes
+  - [x] Transfer time based on distance (30 seconds for adjacent)
+  - [x] Cancel in-progress transfers
 
-- [ ] **UI for transfers**
-  - [ ] Select source/destination
-  - [ ] Choose resources and amounts
-  - [ ] View pending transfers
+- [x] **UI for transfers**
+  - [x] Select source/destination
+  - [x] Choose resources and amounts
+  - [x] View pending transfers
 
 - [ ] **Verify Section 2.5:**
   - [ ] Transfer resources between two adjacent owned nodes

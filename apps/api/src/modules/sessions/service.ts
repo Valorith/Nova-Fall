@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma.js';
 import { redis } from '../../lib/redis.js';
 import type { GameType, GameSessionStatus, BotDifficulty } from '@prisma/client';
+import { STARTING_NODE_RESOURCES } from '@nova-fall/shared';
 import type {
   SessionListResponse,
   SessionDetailResponse,
@@ -538,7 +539,8 @@ export async function startSession(
 
     for (const node of availableNodes) {
       // Skip capital nodes - crown should be a contestable node
-      if (node.type === 'CAPITAL') continue;
+      // Also skip any leftover CROWN nodes from previous sessions
+      if (node.type === 'CAPITAL' || node.type === 'CROWN') continue;
 
       const distance = Math.sqrt(
         Math.pow(node.positionX - centerX, 2) + Math.pow(node.positionY - centerY, 2)
@@ -602,7 +604,7 @@ export async function startSession(
       },
     });
 
-    // Claim the HQ node for the player/bot
+    // Claim the HQ node for the player/bot and set starting resources in storage
     if (ownerId) {
       await prisma.node.update({
         where: { id: hqNode.id },
@@ -610,6 +612,7 @@ export async function startSession(
           ownerId: ownerId,
           status: 'CLAIMED',
           claimedAt: new Date(),
+          storage: STARTING_NODE_RESOURCES, // Iron, energy etc. stored in HQ
         },
       });
 
@@ -777,6 +780,16 @@ export async function endSession(
   if (session.status !== 'LOBBY' && session.status !== 'ACTIVE') {
     return { success: false, error: 'Session is already ended' };
   }
+
+  // Reset CROWN nodes back to TRADE_HUB type (they were converted during game start)
+  await prisma.node.updateMany({
+    where: { gameSessionId: sessionId, type: 'CROWN' },
+    data: {
+      type: 'TRADE_HUB',
+      name: 'Trade Hub', // Reset name from "Game Objective"
+      tier: 2,
+    },
+  });
 
   // Release all nodes assigned to this session
   await prisma.node.updateMany({

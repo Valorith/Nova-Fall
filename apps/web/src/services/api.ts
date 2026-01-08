@@ -113,3 +113,77 @@ export interface GameStatusResponse {
 export const gameApi = {
   getStatus: () => api.get<GameStatusResponse>('/game/status'),
 };
+
+// Market API
+export interface MarketPriceInfo {
+  resourceType: string;
+  name: string;
+  icon: string;
+  buyPrice: number;
+  sellPrice: number;
+  transactionFee: number;
+}
+
+export interface BuyResourceRequest {
+  nodeId: string; // Trade Hub node to receive resources
+  resourceType: string;
+  quantity: number;
+}
+
+export interface SellResourceRequest {
+  nodeId: string; // Trade Hub node to sell resources from
+  resourceType: string;
+  quantity: number;
+}
+
+export interface BuyTransactionResponse {
+  success: boolean;
+  resourceType: string;
+  quantity: number;
+  baseCost: number;
+  fee: number;
+  totalCost: number;
+  creditsRemaining: number;
+  resourceBalance: number;
+}
+
+export interface SellTransactionResponse {
+  success: boolean;
+  resourceType: string;
+  quantity: number;
+  baseRevenue: number;
+  fee: number;
+  netRevenue: number;
+  creditsBalance: number;
+  resourceRemaining: number;
+}
+
+export const marketApi = {
+  getPrices: () => api.get<{ prices: MarketPriceInfo[] }>('/market/prices'),
+  getPrice: (resourceType: string) => api.get<{ price: MarketPriceInfo }>(`/market/prices/${resourceType}`),
+  buy: (data: BuyResourceRequest) => api.post<BuyTransactionResponse>('/market/buy', data),
+  sell: (data: SellResourceRequest) => api.post<SellTransactionResponse>('/market/sell', data),
+};
+
+// Transfers API
+export interface TransferResponse {
+  id: string;
+  sourceNodeId: string;
+  destNodeId: string;
+  resources: Record<string, number>;
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  createdAt: string;
+  completesAt: string;
+}
+
+export interface CreateTransferRequest {
+  sourceNodeId: string;
+  destNodeId: string;
+  resources: Record<string, number>;
+}
+
+export const transfersApi = {
+  getAll: () => api.get<{ transfers: TransferResponse[] }>('/transfers'),
+  create: (data: CreateTransferRequest) => api.post<{ transfer: TransferResponse; message: string }>('/transfers', data),
+  cancel: (id: string) => api.delete<{ transfer: TransferResponse; message: string }>(`/transfers/${id}`),
+};

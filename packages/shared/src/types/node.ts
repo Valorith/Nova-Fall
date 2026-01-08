@@ -26,6 +26,7 @@ export interface MapNode {
   isCrown?: boolean; // True if this is the crown node for KOTH games
   upkeepStatus?: UpkeepStatus; // Current upkeep payment status
   claimedAt?: string | null; // When the node was claimed (used for crown countdown)
+  storage?: NodeResources; // Resources stored in the node
 }
 
 // Upkeep breakdown for display

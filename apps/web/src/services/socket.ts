@@ -46,6 +46,32 @@ export interface UpkeepTickEvent {
   upkeepInterval: number;
 }
 
+export interface PlayerEconomyResult {
+  playerId: string;
+  totalUpkeep: number;
+  totalIncome: number;
+  creditsBefore: number;
+  creditsAfter: number;
+  upkeepPaid: boolean;
+  nodesProcessed: number;
+  resourcesGenerated: ResourceStorage;
+}
+
+export interface EconomyProcessedEvent {
+  type: 'economy:processed';
+  results: PlayerEconomyResult[];
+  timestamp: string;
+}
+
+export interface TransferCompletedEvent {
+  transferId: string;
+  playerId: string;
+  sourceNodeId: string;
+  destNodeId: string;
+  status: 'COMPLETED' | 'CANCELLED';
+  sessionId: string;
+}
+
 // Socket event handlers
 interface EventHandlers {
   'node:update': (event: NodeUpdateEvent) => void;
@@ -54,6 +80,8 @@ interface EventHandlers {
   'battle:update': (event: BattleUpdateEvent) => void;
   'resources:update': (event: ResourcesUpdateEvent) => void;
   'upkeep:tick': (event: UpkeepTickEvent) => void;
+  'economy:processed': (event: EconomyProcessedEvent) => void;
+  'transfer:completed': (event: TransferCompletedEvent) => void;
   connect: () => void;
   disconnect: (reason: string) => void;
   connect_error: (error: Error) => void;
@@ -130,6 +158,16 @@ class GameSocket {
 
     this.socket.on('upkeep:tick', (data: UpkeepTickEvent) => {
       this.handlers['upkeep:tick']?.(data);
+    });
+
+    this.socket.on('economy:processed', (data: EconomyProcessedEvent) => {
+      console.log('[Socket] Economy processed:', data.results.length, 'players');
+      this.handlers['economy:processed']?.(data);
+    });
+
+    this.socket.on('transfer:completed', (data: TransferCompletedEvent) => {
+      console.log('[Socket] Transfer completed:', data.transferId, data.status);
+      this.handlers['transfer:completed']?.(data);
     });
   }
 
