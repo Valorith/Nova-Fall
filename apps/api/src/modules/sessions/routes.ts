@@ -57,6 +57,73 @@ export async function sessionRoutes(app: FastifyInstance) {
     return { session };
   });
 
+  // GET /sessions/my/resources - Get current player's resources in active session
+  app.get('/sessions/my/resources', {
+    preHandler: requireAuth,
+  }, async (request) => {
+    const userId = (request as FastifyRequest & { userId: string }).userId;
+    const player = await getPlayer(userId);
+
+    // Find the player's active session
+    const sessionPlayer = await prisma.gameSessionPlayer.findFirst({
+      where: {
+        playerId: player.id,
+        gameSession: {
+          status: 'ACTIVE',
+        },
+      },
+      select: {
+        resources: true,
+      },
+    });
+
+    if (!sessionPlayer) {
+      throw AppError.badRequest('No active game session');
+    }
+
+    return { resources: sessionPlayer.resources };
+  });
+
+  // PUT /sessions/my/resources - Update player's resources (DEV ONLY)
+  app.put('/sessions/my/resources', {
+    preHandler: requireAuth,
+  }, async (request) => {
+    const userId = (request as FastifyRequest & { userId: string }).userId;
+    const player = await getPlayer(userId);
+    const body = request.body as { resources: Record<string, number> };
+
+    if (!body.resources) {
+      throw AppError.badRequest('Resources object required');
+    }
+
+    // Find the player's active session
+    const sessionPlayer = await prisma.gameSessionPlayer.findFirst({
+      where: {
+        playerId: player.id,
+        gameSession: {
+          status: 'ACTIVE',
+        },
+      },
+    });
+
+    if (!sessionPlayer) {
+      throw AppError.badRequest('No active game session');
+    }
+
+    // Update resources
+    const updated = await prisma.gameSessionPlayer.update({
+      where: { id: sessionPlayer.id },
+      data: {
+        resources: body.resources,
+      },
+      select: {
+        resources: true,
+      },
+    });
+
+    return { resources: updated.resources };
+  });
+
   // GET /sessions/:id - Get session details
   app.get('/sessions/:id', {
     preHandler: requireAuth,

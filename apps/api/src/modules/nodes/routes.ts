@@ -158,7 +158,7 @@ export async function nodeRoutes(app: FastifyInstance) {
       throw AppError.badRequest(result.error ?? 'Failed to claim node');
     }
 
-    return { node: result.node };
+    return { node: result.node, resources: result.resources };
   });
 
   // POST /nodes/:id/abandon - Abandon an owned node

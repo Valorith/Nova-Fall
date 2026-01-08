@@ -600,6 +600,7 @@ enum NodeType {
   AGRICULTURAL
   POWER_PLANT
   CAPITAL
+  CROWN
 }
 
 enum NodeStatus {

@@ -101,6 +101,18 @@ export const NODE_TYPE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     color: '#4169E1',
     icon: 'capital',
   },
+  [NodeType.CROWN]: {
+    type: NodeType.CROWN,
+    displayName: 'Game Objective',
+    description: 'Hold this sacred site for 48 hours to claim victory. All factions fight for control.',
+    baseUpkeep: 0, // No upkeep - prize node
+    resourceBonuses: {},
+    buildingSlots: 0, // Cannot build
+    defaultResources: { credits: 0, iron: 0, energy: 0 },
+    claimCost: { credits: 0, iron: 0, energy: 0 }, // Claimed through combat
+    color: '#FFD700', // Gold
+    icon: 'crown',
+  },
 };
 
 // Get config for a node type

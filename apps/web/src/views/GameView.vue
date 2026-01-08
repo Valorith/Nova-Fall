@@ -2,15 +2,16 @@
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData } from '../game';
-import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, BASE_CREDIT_GENERATION, type MapNode, type ResourceStorage } from '@nova-fall/shared';
+import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, type MapNode, type ResourceStorage } from '@nova-fall/shared';
 import PlayerResourcesPanel, { type UpkeepBreakdownItem, type IncomeBreakdownItem } from '@/components/game/PlayerResourcesPanel.vue';
 import ResourceDisplay from '@/components/game/ResourceDisplay.vue';
 import NodeTooltip from '@/components/game/NodeTooltip.vue';
 import TickProgressBar from '@/components/game/TickProgressBar.vue';
+import DevPanel from '@/components/game/DevPanel.vue';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
-import { nodesApi } from '@/services/api';
+import { nodesApi, sessionsApi } from '@/services/api';
 import { hexToPixel, hexKey, hexNeighbors, type HexCoord } from '../game/utils/hexGrid';
 
 // Props - sessionId is used for session-scoped node operations
@@ -99,27 +100,15 @@ const totalUpkeep = computed(() => {
   return upkeepBreakdown.value.reduce((sum, item) => sum + item.amount, 0);
 });
 
-// Calculate income breakdown (trade hubs generate credits)
+// Calculate income breakdown (requires buildings - not implemented yet)
 const incomeBreakdown = computed<IncomeBreakdownItem[]>(() => {
-  const income: IncomeBreakdownItem[] = [];
-
-  // Trade hubs generate credits
-  const tradeHubs = ownedNodes.value.filter(node => node.type === NodeType.TRADE_HUB);
-  if (tradeHubs.length > 0) {
-    // BASE_CREDIT_GENERATION is per 30-second tick, convert to per hour (120 ticks/hour)
-    const creditsPerHour = BASE_CREDIT_GENERATION * 120 * tradeHubs.length;
-    income.push({
-      source: `Trade Hubs (${tradeHubs.length})`,
-      amount: creditsPerHour,
-    });
-  }
-
-  return income;
+  // No passive income without buildings
+  return [];
 });
 
 // Calculate total income
 const totalIncome = computed(() => {
-  return incomeBreakdown.value.reduce((sum, item) => sum + item.amount, 0);
+  return 0;
 });
 
 // Generate mock map data using hex grid placement
@@ -415,12 +404,27 @@ onMounted(async () => {
     tooltipY.value = screenY;
   };
 
+  // Set the current player ID for HQ highlighting
+  engine.value.setCurrentPlayerId(currentPlayerId.value);
+
+  // Helper to extract player names from nodes
+  const extractPlayerNames = (nodes: MapNode[]): Map<string, string> => {
+    const names = new Map<string, string>();
+    for (const node of nodes) {
+      if (node.ownerId && node.ownerName && !names.has(node.ownerId)) {
+        names.set(node.ownerId, node.ownerName);
+      }
+    }
+    return names;
+  };
+
   // Load map data - use mock data if API not available or useMockData is true
   if (useMockData.value) {
     const { nodes, connections } = generateMockMapData();
     // Store mock nodes in the game store (batch load to avoid triggering updates)
     gameStore.loadNodesBatch(nodes);
     engine.value.loadMapData(nodes, connections);
+    engine.value.setPlayerNames(extractPlayerNames(nodes));
 
     // Generate mock storage for claimed nodes
     const mockStorage: Record<string, ResourceStorage> = {};
@@ -450,12 +454,24 @@ onMounted(async () => {
       // Load from API with session scope
       await gameStore.loadMapData(props.sessionId);
       engine.value.loadMapData(gameStore.nodeList, gameStore.connections);
+      engine.value.setPlayerNames(extractPlayerNames(gameStore.nodeList));
+
+      // Load player resources from the session
+      try {
+        const resourcesResponse = await sessionsApi.getMyResources();
+        if (resourcesResponse.data.resources) {
+          playerResources.value = resourcesResponse.data.resources;
+        }
+      } catch (resourceErr) {
+        console.warn('Failed to load player resources:', resourceErr);
+      }
     } catch (err) {
       console.warn('Failed to load from API, falling back to mock data:', err);
       // Fallback to mock data
       const { nodes, connections } = generateMockMapData();
       gameStore.loadNodesBatch(nodes);
       engine.value.loadMapData(nodes, connections);
+      engine.value.setPlayerNames(extractPlayerNames(nodes));
     }
   }
 });
@@ -553,6 +569,63 @@ const canClaimNode = computed(() => {
 });
 
 // Claim a node
+async function handleDevResourceUpdate(resources: ResourceStorage) {
+  // Update UI immediately
+  playerResources.value = resources;
+
+  // Persist to server
+  try {
+    await sessionsApi.updateMyResources(resources as Record<string, number>);
+  } catch (err) {
+    console.error('Failed to update resources on server:', err);
+    toastStore.error('Failed to save resources to server');
+  }
+}
+
+// Dev: Claim node for free (bypasses cost)
+async function handleClaimNodeFree() {
+  if (!primarySelectedNode.value || isClaiming.value) return;
+
+  // Store current credits before claiming
+  const creditsBefore = playerResources.value.credits ?? 0;
+
+  isClaiming.value = true;
+
+  try {
+    const response = await nodesApi.claim(primarySelectedNode.value.id);
+    const { node, resources } = response.data;
+
+    // Update the node in the store
+    if (node) {
+      gameStore.setNode(node);
+      engine.value?.updateNode(node.id, node);
+      toastStore.success(`[DEV] Claimed ${node.name} for free!`);
+    }
+
+    // Restore credits to what they were before (free claim)
+    if (resources) {
+      const restoredResources = {
+        ...resources,
+        credits: creditsBefore,
+      };
+      playerResources.value = restoredResources;
+
+      // Persist restored credits to server
+      try {
+        await sessionsApi.updateMyResources(restoredResources as Record<string, number>);
+      } catch (restoreErr) {
+        console.error('Failed to restore credits on server:', restoreErr);
+      }
+    }
+  } catch (err) {
+    const error = err as { response?: { data?: { error?: string; message?: string } } };
+    const message = error.response?.data?.message || error.response?.data?.error || 'Failed to claim node';
+    toastStore.error(message);
+  } finally {
+    isClaiming.value = false;
+  }
+}
+
 async function handleClaimNode() {
   if (!primarySelectedNode.value || isClaiming.value) return;
 
@@ -560,7 +633,7 @@ async function handleClaimNode() {
 
   try {
     const response = await nodesApi.claim(primarySelectedNode.value.id);
-    const { node } = response.data;
+    const { node, resources } = response.data;
 
     // Update the node in the store
     if (node) {
@@ -568,6 +641,11 @@ async function handleClaimNode() {
       // Update in the renderer
       engine.value?.updateNode(node.id, node);
       toastStore.success(`Claimed ${node.name}!`);
+    }
+
+    // Update player resources with the new values from the server
+    if (resources) {
+      playerResources.value = resources;
     }
   } catch (err) {
     const error = err as { response?: { data?: { error?: string; message?: string } } };
@@ -586,6 +664,17 @@ async function handleClaimNode() {
 
     <!-- UI Overlay -->
     <div class="pointer-events-none absolute inset-0">
+      <!-- Dev Panel (top-left, below navbar) -->
+      <div class="pointer-events-auto absolute top-14 left-4 z-50">
+        <DevPanel
+          :resources="playerResources"
+          :can-claim-node="canClaimNode"
+          :selected-node-name="primarySelectedNode?.name ?? ''"
+          @update:resources="handleDevResourceUpdate"
+          @claim-free="handleClaimNodeFree"
+        />
+      </div>
+
       <!-- Top Bar -->
       <div class="pointer-events-auto flex items-center justify-between bg-gray-900/80 px-4 py-2 backdrop-blur-sm">
         <div class="flex items-center gap-4">

@@ -108,9 +108,19 @@ export async function getAllNodes(sessionId?: string): Promise<MapNodeResponse[]
     },
   });
 
-  // If we have a session, get HQ mappings from GameSessionPlayer
+  // If we have a session, get HQ mappings from GameSessionPlayer and crown node
   let sessionHQs = new Map<string, string>();
+  let crownNodeId: string | null = null;
+
   if (sessionId) {
+    // Get session info including crown node
+    const session = await prisma.gameSession.findUnique({
+      where: { id: sessionId },
+      select: { crownNodeId: true },
+    });
+    crownNodeId = session?.crownNodeId ?? null;
+
+    // Get player HQs
     const sessionPlayers = await prisma.gameSessionPlayer.findMany({
       where: { gameSessionId: sessionId },
       select: { playerId: true, hqNodeId: true },
@@ -143,6 +153,14 @@ export async function getAllNodes(sessionId?: string): Promise<MapNodeResponse[]
       const sessionHQ = sessionHQs.get(node.ownerId);
       if (sessionHQ === node.id || node.owner?.hqNodeId === node.id) {
         result.isHQ = true;
+      }
+    }
+    // Mark crown node (either by session reference or node type)
+    if (node.type === 'CROWN' || (crownNodeId && node.id === crownNodeId)) {
+      result.isCrown = true;
+      // Include claimedAt for crown countdown display
+      if (node.claimedAt) {
+        result.claimedAt = node.claimedAt.toISOString();
       }
     }
     // Include upkeep status for owned nodes
@@ -293,7 +311,7 @@ export async function claimNode(
   playerId: string,
   gameSessionId: string,
   sessionPlayerId: string
-): Promise<{ success: boolean; error?: string; node?: NodeDetailResponse }> {
+): Promise<{ success: boolean; error?: string; node?: NodeDetailResponse; resources?: ResourceStorage }> {
   // Get node with connections
   const node = await prisma.node.findUnique({
     where: { id: nodeId },
@@ -308,8 +326,11 @@ export async function claimNode(
   }
 
   // Check if node is neutral
-  if (node.status !== 'NEUTRAL' || node.ownerId !== null) {
-    return { success: false, error: 'Node is not neutral' };
+  if (node.ownerId !== null) {
+    return { success: false, error: 'Node is already owned by another player' };
+  }
+  if (node.status !== 'NEUTRAL') {
+    return { success: false, error: `Node is not neutral (status: ${node.status})` };
   }
 
   // Check if node belongs to this session (or is unassigned)
@@ -437,9 +458,9 @@ export async function claimNode(
       sessionId: gameSessionId,
     });
 
-    return { success: true, node: updatedNode };
+    return { success: true, node: updatedNode, resources: updatedResources };
   }
-  return { success: true };
+  return { success: true, resources: updatedResources };
 }
 
 // Get all connections (for map rendering) - CACHED

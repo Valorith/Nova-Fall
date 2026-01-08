@@ -10,6 +10,7 @@ export enum NodeType {
   AGRICULTURAL = 'AGRICULTURAL',
   POWER_PLANT = 'POWER_PLANT',
   CAPITAL = 'CAPITAL',
+  CROWN = 'CROWN', // Special node for King of the Hill game mode
 }
 
 export enum NodeStatus {

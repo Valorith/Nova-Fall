@@ -79,14 +79,14 @@ export function getRegionAtPosition(x: number, y: number): RegionDefinition | un
   );
 }
 
-// Map dimensions (expanded to allow panning at all zoom levels)
-// Game content is 1600x1600 centered at (950, 950) with padding
-// Bounds set very large to never restrict panning on wide viewports
+// Map dimensions matching actual game area
+// Game content: GRID_PADDING (150) to GRID_PADDING + GRID_SIZE_PX (1750)
+// Center at (950, 950)
 export const MAP_BOUNDS = {
-  minX: -2000,
-  maxX: 4000,
-  minY: -2000,
-  maxY: 4000,
-  width: 6000,
-  height: 6000,
+  minX: 150,
+  maxX: 1750,
+  minY: 150,
+  maxY: 1750,
+  width: 1600,
+  height: 1600,
 };

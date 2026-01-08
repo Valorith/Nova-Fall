@@ -165,37 +165,34 @@ export class Camera {
     return Math.max(this.minScale, Math.min(this.maxScale, scale));
   }
 
-  // Clamp position to bounds
+  // Clamp position to keep map at least partially visible
   private clampPosition() {
     // Calculate visible world size
     const visibleWidth = this.viewportWidth / this._scale;
     const visibleHeight = this.viewportHeight / this._scale;
 
-    // Calculate allowed camera range
     const halfVisibleWidth = visibleWidth / 2;
     const halfVisibleHeight = visibleHeight / 2;
 
-    const minX = this.bounds.minX + halfVisibleWidth;
-    const maxX = this.bounds.maxX - halfVisibleWidth;
-    const minY = this.bounds.minY + halfVisibleHeight;
-    const maxY = this.bounds.maxY - halfVisibleHeight;
+    // Keep at least 20% of the map visible on screen
+    const mapWidth = this.bounds.maxX - this.bounds.minX;
+    const mapHeight = this.bounds.maxY - this.bounds.minY;
+    const marginX = mapWidth * 0.2;
+    const marginY = mapHeight * 0.2;
 
-    // If viewport is larger than bounds, center the camera
-    if (minX > maxX) {
-      this._x = (this.bounds.minX + this.bounds.maxX) / 2;
-      this.targetX = this._x;
-    } else {
-      this._x = Math.max(minX, Math.min(maxX, this._x));
-      this.targetX = Math.max(minX, Math.min(maxX, this.targetX));
-    }
+    // Allow camera to move, but keep map edge within viewport (with margin)
+    // Camera can go left until map right edge reaches left side of viewport + margin
+    // Camera can go right until map left edge reaches right side of viewport - margin
+    const minX = this.bounds.minX - halfVisibleWidth + marginX;
+    const maxX = this.bounds.maxX + halfVisibleWidth - marginX;
+    const minY = this.bounds.minY - halfVisibleHeight + marginY;
+    const maxY = this.bounds.maxY + halfVisibleHeight - marginY;
 
-    if (minY > maxY) {
-      this._y = (this.bounds.minY + this.bounds.maxY) / 2;
-      this.targetY = this._y;
-    } else {
-      this._y = Math.max(minY, Math.min(maxY, this._y));
-      this.targetY = Math.max(minY, Math.min(maxY, this.targetY));
-    }
+    // Clamp camera position
+    this._x = Math.max(minX, Math.min(maxX, this._x));
+    this.targetX = Math.max(minX, Math.min(maxX, this.targetX));
+    this._y = Math.max(minY, Math.min(maxY, this._y));
+    this.targetY = Math.max(minY, Math.min(maxY, this.targetY));
   }
 
   // Clamp target position
@@ -206,18 +203,19 @@ export class Camera {
     const halfVisibleWidth = visibleWidth / 2;
     const halfVisibleHeight = visibleHeight / 2;
 
-    const minX = this.bounds.minX + halfVisibleWidth;
-    const maxX = this.bounds.maxX - halfVisibleWidth;
-    const minY = this.bounds.minY + halfVisibleHeight;
-    const maxY = this.bounds.maxY - halfVisibleHeight;
+    // Keep at least 20% of the map visible on screen
+    const mapWidth = this.bounds.maxX - this.bounds.minX;
+    const mapHeight = this.bounds.maxY - this.bounds.minY;
+    const marginX = mapWidth * 0.2;
+    const marginY = mapHeight * 0.2;
 
-    if (minX <= maxX) {
-      this.targetX = Math.max(minX, Math.min(maxX, this.targetX));
-    }
+    const minX = this.bounds.minX - halfVisibleWidth + marginX;
+    const maxX = this.bounds.maxX + halfVisibleWidth - marginX;
+    const minY = this.bounds.minY - halfVisibleHeight + marginY;
+    const maxY = this.bounds.maxY + halfVisibleHeight - marginY;
 
-    if (minY <= maxY) {
-      this.targetY = Math.max(minY, Math.min(maxY, this.targetY));
-    }
+    this.targetX = Math.max(minX, Math.min(maxX, this.targetX));
+    this.targetY = Math.max(minY, Math.min(maxY, this.targetY));
   }
 
   // Get visible world bounds

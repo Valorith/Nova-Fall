@@ -201,8 +201,8 @@ function getPlayerBreakdown(session: SessionListItem): string {
   return `(${session.humanCount} human, ${session.botCount} bot)`;
 }
 
-function handleLogout() {
-  authStore.logout();
+async function handleLogout() {
+  await authStore.logout();
   router.push('/login');
 }
 </script>

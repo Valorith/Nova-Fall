@@ -1,4 +1,4 @@
-import { Container, Graphics, RenderTexture, Sprite, type Application } from 'pixi.js';
+import { Container, Graphics, RenderTexture, Sprite, Text, TextStyle, type Application } from 'pixi.js';
 import type { MapNode } from '@nova-fall/shared';
 import { TerrainType, TERRAIN_CONFIGS } from '@nova-fall/shared';
 import type { Camera } from '../engine/Camera';
@@ -138,18 +138,43 @@ function drawStarPath(g: Graphics, cx: number, cy: number, outerRadius: number, 
   g.closePath();
 }
 
+// Draw a crown shape for KOTH crown node indicator
+function drawCrownPath(g: Graphics, cx: number, cy: number, width: number, height: number): void {
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const peakHeight = height * 0.4; // How high the peaks go
+
+  // Start at bottom left
+  g.moveTo(cx - halfW, cy + halfH);
+  // Left peak
+  g.lineTo(cx - halfW, cy - halfH + peakHeight);
+  g.lineTo(cx - halfW * 0.5, cy);
+  // Center peak (highest)
+  g.lineTo(cx, cy - halfH);
+  // Right inner
+  g.lineTo(cx + halfW * 0.5, cy);
+  // Right peak
+  g.lineTo(cx + halfW, cy - halfH + peakHeight);
+  g.lineTo(cx + halfW, cy + halfH);
+  // Bottom
+  g.closePath();
+}
+
 export class WorldRenderer {
   // Layer containers
   private terrainLayer: Container;
   private connectionLayer: Container;
   private nodeLayer: Container;
   private selectionLayer: Container;
+  private animationLayer: Container; // For animated effects like crown pulse
+  private nameplateLayer: Container; // For HQ nameplates at corners
 
   // Graphics for batch rendering
   private terrainGraphics: Graphics;
   private connectionGraphics: Graphics;
   private nodeGraphics: Graphics;
   private selectionGraphics: Graphics;
+  private crownPulseGraphics: Graphics; // Animated crown pulse effect
 
   // Cached textures and sprites for performance
   private terrainTexture: RenderTexture | null = null;
@@ -162,6 +187,9 @@ export class WorldRenderer {
   private mapData: HexMapData | null = null;
   private nodesByHexKey = new Map<string, MapNode>();
   private nodesById = new Map<string, MapNode>(); // PERFORMANCE: O(1) lookup by ID
+  private currentPlayerId: string | null = null; // Active player's ID for HQ highlighting
+  private playerNames = new Map<string, string>(); // Player ID to display name
+  private currentCameraScale = 1; // Track camera scale for nameplate sizing
 
   // Selection state
   private selectedNodeIds = new Set<string>();
@@ -170,6 +198,10 @@ export class WorldRenderer {
   // PERFORMANCE: Batch node updates to avoid re-rendering on every update
   private nodesDirty = false;
   private pendingRenderFrame: number | null = null;
+
+  // Crown pulse animation state
+  private crownPulsePhase = 0;
+  private crownAnimationFrame: number | null = null;
 
   constructor() {
     this.terrainLayer = new Container();
@@ -184,23 +216,53 @@ export class WorldRenderer {
     this.selectionLayer = new Container();
     this.selectionLayer.label = 'selection';
 
+    this.animationLayer = new Container();
+    this.animationLayer.label = 'animation';
+
+    this.nameplateLayer = new Container();
+    this.nameplateLayer.label = 'nameplates';
+
     this.terrainGraphics = new Graphics();
     this.connectionGraphics = new Graphics();
     this.nodeGraphics = new Graphics();
     this.selectionGraphics = new Graphics();
+    this.crownPulseGraphics = new Graphics();
 
     this.connectionLayer.addChild(this.connectionGraphics);
     this.selectionLayer.addChild(this.selectionGraphics);
+    this.animationLayer.addChild(this.crownPulseGraphics);
   }
 
   setApp(app: Application): void {
     this.app = app;
   }
 
+  setCurrentPlayerId(playerId: string | null): void {
+    if (this.currentPlayerId !== playerId) {
+      this.currentPlayerId = playerId;
+      // Re-render nodes if map data exists to update HQ highlight
+      if (this.mapData) {
+        this.renderNodes();
+      }
+    }
+  }
+
+  setPlayerNames(names: Map<string, string>): void {
+    this.playerNames = names;
+    // Re-render nameplates if map data exists (defer to next frame for proper rendering)
+    if (this.mapData) {
+      requestAnimationFrame(() => {
+        this.renderNameplates();
+      });
+    }
+  }
+
   addToContainer(parent: Container): void {
     parent.addChild(this.terrainLayer);
     parent.addChild(this.connectionLayer);
     parent.addChild(this.nodeLayer);
+    parent.addChild(this.animationLayer);
+    parent.addChild(this.nameplateLayer);
     parent.addChild(this.selectionLayer);
   }
 
@@ -232,7 +294,7 @@ export class WorldRenderer {
 
     this.renderTerrain();
     this.renderConnections();
-    this.renderNodes();
+    this.renderNodes(); // Also renders nameplates
   }
 
   // Generate terrain for the grid using flood-fill to match GameView approach
@@ -376,9 +438,11 @@ export class WorldRenderer {
     this.connectionGraphics.clear();
     this.nodeGraphics.clear();
     this.selectionGraphics.clear();
+    this.crownPulseGraphics.clear();
     this.selectedNodeIds.clear();
     this.highlightedNodeId = null;
     this.nodesById.clear();
+    this.playerNames.clear();
     this.nodesDirty = false;
 
     // Cancel any pending render frame
@@ -386,6 +450,9 @@ export class WorldRenderer {
       cancelAnimationFrame(this.pendingRenderFrame);
       this.pendingRenderFrame = null;
     }
+
+    // Cancel crown animation
+    this.stopCrownAnimation();
 
     // Clean up textures
     if (this.terrainTexture) {
@@ -407,6 +474,9 @@ export class WorldRenderer {
 
     this.terrainLayer.removeChildren();
     this.nodeLayer.removeChildren();
+    this.animationLayer.removeChildren();
+    this.animationLayer.addChild(this.crownPulseGraphics);
+    this.nameplateLayer.removeChildren();
     this.selectionLayer.removeChildren();
     this.selectionLayer.addChild(this.selectionGraphics);
   }
@@ -548,12 +618,60 @@ export class WorldRenderer {
 
       // HQ indicator (golden star)
       if (node.isHQ) {
+        // Check if this is the current player's HQ
+        const isMyHQ = this.currentPlayerId && node.ownerId === this.currentPlayerId;
+
+        if (isMyHQ) {
+          // Player's own HQ - add cyan/teal glow effect and border
+          // Outer glow rings
+          g.setStrokeStyle({ width: 3, color: 0x00ffff, alpha: 0.15 });
+          drawHexPath(g, pixel.x, pixel.y, HEX_SIZE + 10);
+          g.stroke();
+
+          g.setStrokeStyle({ width: 4, color: 0x00ffff, alpha: 0.25 });
+          drawHexPath(g, pixel.x, pixel.y, HEX_SIZE + 6);
+          g.stroke();
+
+          // Cyan border around the hex
+          g.setStrokeStyle({ width: 3, color: 0x00ffff, alpha: 0.8 });
+          drawHexPath(g, pixel.x, pixel.y, HEX_SIZE);
+          g.stroke();
+        }
+
         // Star background glow
         drawStarPath(g, pixel.x, pixel.y, 12, 5);
         g.fill({ color: 0xffd700, alpha: 0.9 });
         // Star border
         g.setStrokeStyle({ width: 1.5, color: 0xffa500, alpha: 1 });
         drawStarPath(g, pixel.x, pixel.y, 12, 5);
+        g.stroke();
+      }
+
+      // Crown node indicator (gold crown for KOTH)
+      if (node.isCrown) {
+        // If claimed, add gold border and glow effect
+        if (node.ownerId) {
+          // Outer gold pulse glow (multiple rings for pulse effect)
+          g.setStrokeStyle({ width: 3, color: 0xffd700, alpha: 0.2 });
+          drawHexPath(g, pixel.x, pixel.y, HEX_SIZE + 8);
+          g.stroke();
+
+          g.setStrokeStyle({ width: 4, color: 0xffd700, alpha: 0.4 });
+          drawHexPath(g, pixel.x, pixel.y, HEX_SIZE + 5);
+          g.stroke();
+
+          // Gold border (replaces the normal gray border)
+          g.setStrokeStyle({ width: 3, color: 0xffd700, alpha: 1 });
+          drawHexPath(g, pixel.x, pixel.y, HEX_SIZE - 1);
+          g.stroke();
+        }
+
+        // Gold crown icon (always shown)
+        drawCrownPath(g, pixel.x, pixel.y, 18, 12);
+        g.fill({ color: 0xffd700, alpha: 0.95 });
+        // Crown border (darker gold)
+        g.setStrokeStyle({ width: 1.5, color: 0xb8860b, alpha: 1 });
+        drawCrownPath(g, pixel.x, pixel.y, 18, 12);
         g.stroke();
       }
     }
@@ -591,6 +709,12 @@ export class WorldRenderer {
 
     // Clear the graphics
     g.clear();
+
+    // Update crown animation state
+    this.updateCrownAnimation();
+
+    // Re-render nameplates (HQ ownership may have changed)
+    this.renderNameplates();
   }
 
   // Update a single node - batches re-renders for performance
@@ -605,6 +729,7 @@ export class WorldRenderer {
     const visualPropsChanged =
       data.ownerId !== undefined && data.ownerId !== existingNode.ownerId ||
       data.isHQ !== undefined && data.isHQ !== existingNode.isHQ ||
+      data.isCrown !== undefined && data.isCrown !== existingNode.isCrown ||
       data.status !== undefined && data.status !== existingNode.status;
 
     // Update the node data
@@ -648,6 +773,18 @@ export class WorldRenderer {
   // Visibility culling - no longer needed with texture caching
   updateVisibility(): void {
     // No-op: textures don't need visibility culling
+  }
+
+  // Update nameplate scale to maintain consistent screen size
+  updateNameplateScale(cameraScale: number): void {
+    if (this.currentCameraScale === cameraScale) return;
+    this.currentCameraScale = cameraScale;
+
+    // Apply inverse scale so nameplates stay same size on screen
+    const inverseScale = 1 / cameraScale;
+    for (const child of this.nameplateLayer.children) {
+      child.scale.set(inverseScale);
+    }
   }
 
   // Hit testing
@@ -712,5 +849,197 @@ export class WorldRenderer {
         g.stroke();
       }
     }
+  }
+
+  // Start crown pulse animation for claimed crown nodes
+  private startCrownAnimation(): void {
+    if (this.crownAnimationFrame !== null) return; // Already running
+
+    const animate = () => {
+      this.crownPulsePhase += 0.03; // Adjust speed
+      if (this.crownPulsePhase > Math.PI * 2) {
+        this.crownPulsePhase -= Math.PI * 2;
+      }
+
+      this.renderCrownPulse();
+      this.crownAnimationFrame = requestAnimationFrame(animate);
+    };
+
+    this.crownAnimationFrame = requestAnimationFrame(animate);
+  }
+
+  // Stop crown pulse animation
+  private stopCrownAnimation(): void {
+    if (this.crownAnimationFrame !== null) {
+      cancelAnimationFrame(this.crownAnimationFrame);
+      this.crownAnimationFrame = null;
+    }
+    this.crownPulseGraphics.clear();
+  }
+
+  // Render animated pulse effect for claimed crown nodes
+  private renderCrownPulse(): void {
+    if (!this.mapData) return;
+
+    const g = this.crownPulseGraphics;
+    g.clear();
+
+    // Find claimed crown nodes
+    for (const node of this.mapData.nodes) {
+      if (!node.isCrown || !node.ownerId) continue;
+
+      const hex = pixelToHex({ x: node.positionX, y: node.positionY });
+      const pixel = hexToPixel(hex);
+
+      // Animated pulse rings - sine wave for smooth pulsing
+      const pulseAlpha = 0.2 + Math.sin(this.crownPulsePhase) * 0.15;
+      const pulseSize = HEX_SIZE + 6 + Math.sin(this.crownPulsePhase) * 3;
+
+      // Outer expanding ring
+      g.setStrokeStyle({ width: 2, color: 0xffd700, alpha: pulseAlpha });
+      drawHexPath(g, pixel.x, pixel.y, pulseSize + 4);
+      g.stroke();
+
+      // Middle ring
+      g.setStrokeStyle({ width: 3, color: 0xffd700, alpha: pulseAlpha + 0.1 });
+      drawHexPath(g, pixel.x, pixel.y, pulseSize);
+      g.stroke();
+    }
+  }
+
+  // Check if we need to start/stop crown animation based on node state
+  private updateCrownAnimation(): void {
+    if (!this.mapData) {
+      this.stopCrownAnimation();
+      return;
+    }
+
+    // Check if there's a claimed crown node
+    const hasClaimedCrown = this.mapData.nodes.some(
+      (node) => node.isCrown && node.ownerId
+    );
+
+    if (hasClaimedCrown && this.crownAnimationFrame === null) {
+      this.startCrownAnimation();
+    } else if (!hasClaimedCrown && this.crownAnimationFrame !== null) {
+      this.stopCrownAnimation();
+    }
+  }
+
+  // Render stylized nameplates at each corner for HQs
+  private renderNameplates(): void {
+    if (!this.mapData) return;
+
+    // Clear existing nameplates
+    this.nameplateLayer.removeChildren();
+
+    // Find all HQ nodes
+    const hqNodes = this.mapData.nodes.filter((node) => node.isHQ && node.ownerId);
+    if (hqNodes.length === 0) return;
+
+    // Map boundaries for determining corner positions
+    const GRID_PADDING = 150;
+    const GRID_SIZE_PX = 1600;
+    const centerX = GRID_PADDING + GRID_SIZE_PX / 2;
+    const centerY = GRID_PADDING + GRID_SIZE_PX / 2;
+
+    // Determine which corner each HQ is in and create nameplates
+    for (const hq of hqNodes) {
+      const isLeft = hq.positionX < centerX;
+      const isTop = hq.positionY < centerY;
+
+      // Determine rotation based on corner
+      // Top left: -45deg, Top right: +45deg, Bottom right: -45deg, Bottom left: +45deg
+      let rotation: number;
+      let offsetX: number;
+      let offsetY: number;
+
+      if (isTop && isLeft) {
+        // Top left corner - rotate counter-clockwise (-45 degrees)
+        rotation = -Math.PI / 4;
+        offsetX = -80;
+        offsetY = -80;
+      } else if (isTop && !isLeft) {
+        // Top right corner - rotate clockwise (+45 degrees)
+        rotation = Math.PI / 4;
+        offsetX = 80;
+        offsetY = -80;
+      } else if (!isTop && !isLeft) {
+        // Bottom right corner - rotate counter-clockwise (-45 degrees)
+        rotation = -Math.PI / 4;
+        offsetX = 80;
+        offsetY = 80;
+      } else {
+        // Bottom left corner - rotate clockwise (+45 degrees)
+        rotation = Math.PI / 4;
+        offsetX = -80;
+        offsetY = 80;
+      }
+
+      // Create nameplate container
+      const nameplateContainer = new Container();
+      nameplateContainer.x = hq.positionX + offsetX;
+      nameplateContainer.y = hq.positionY + offsetY;
+      nameplateContainer.rotation = rotation;
+
+      // Get player name and color
+      const playerName = this.playerNames.get(hq.ownerId!) || 'Unknown';
+      const playerColor = getPlayerColor(hq.ownerId!);
+
+      // Create nameplate background
+      const bg = new Graphics();
+      const plateWidth = 140;
+      const plateHeight = 36;
+      const cornerRadius = 6;
+
+      // Dark background with player color accent
+      bg.roundRect(-plateWidth / 2, -plateHeight / 2, plateWidth, plateHeight, cornerRadius);
+      bg.fill({ color: 0x1a1a2e, alpha: 0.9 });
+
+      // Player color border
+      bg.setStrokeStyle({ width: 2, color: playerColor, alpha: 1 });
+      bg.roundRect(-plateWidth / 2, -plateHeight / 2, plateWidth, plateHeight, cornerRadius);
+      bg.stroke();
+
+      // Accent line at top
+      bg.setStrokeStyle({ width: 3, color: playerColor, alpha: 0.8 });
+      bg.moveTo(-plateWidth / 2 + cornerRadius, -plateHeight / 2);
+      bg.lineTo(plateWidth / 2 - cornerRadius, -plateHeight / 2);
+      bg.stroke();
+
+      nameplateContainer.addChild(bg);
+
+      // Create player name text
+      const textStyle = new TextStyle({
+        fontFamily: 'Arial, sans-serif',
+        fontSize: 14,
+        fontWeight: 'bold',
+        fill: '#ffffff',
+        align: 'center',
+      });
+
+      const nameText = new Text({
+        text: playerName,
+        style: textStyle,
+      });
+      nameText.anchor.set(0.5, 0.5);
+      nameText.x = 0;
+      nameText.y = 0;
+
+      nameplateContainer.addChild(nameText);
+
+      // Apply current camera scale so nameplate is readable immediately
+      if (this.currentCameraScale !== 1) {
+        nameplateContainer.scale.set(1 / this.currentCameraScale);
+      }
+
+      this.nameplateLayer.addChild(nameplateContainer);
+    }
+
+    // Force PixiJS to recognize the new children by updating position
+    this.nameplateLayer.position.set(0.001, 0.001);
+    requestAnimationFrame(() => {
+      this.nameplateLayer.position.set(0, 0);
+    });
   }
 }

@@ -27,6 +27,28 @@ Before starting ANY work session, you MUST read these files:
 
 ## Development Rules
 
+### WSL vs Windows Environment (CRITICAL)
+
+**The dev server runs on Windows PowerShell, NOT WSL.**
+
+Node packages contain platform-specific binaries (esbuild, tsx, etc.) that differ between Windows and Linux. Installing packages from WSL will install Linux binaries that break the Windows dev server.
+
+**NEVER do the following from WSL:**
+
+- ❌ `pnpm install` - Installs Linux binaries that break Windows
+- ❌ `rm -rf node_modules` - Forces reinstall which will use wrong platform
+- ❌ Any command that modifies `node_modules`
+
+**If node_modules gets corrupted**, instruct the user to run these commands in **PowerShell**:
+
+```powershell
+Remove-Item -Recurse -Force node_modules, apps\api\node_modules, apps\web\node_modules, apps\ws-server\node_modules, apps\worker\node_modules, packages\shared\node_modules, packages\game-logic\node_modules -ErrorAction SilentlyContinue
+pnpm install
+pnpm db:generate
+```
+
+---
+
 ### Checklist Discipline (CRITICAL)
 
 The development plan is the single source of truth. Adherence is mandatory.
@@ -293,6 +315,7 @@ INITIATION → PREPARATION (20-28h) → LOCKED (1h) → COMBAT (30m) → COOLDOW
 8. ❌ Use external services beyond Railway
 9. ❌ Add authentication providers beyond Discord/Google
 10. ❌ Change game balance values without approval
+11. ❌ **Run `pnpm install` or delete `node_modules` from WSL** (breaks Windows dev server)
 
 ---
 

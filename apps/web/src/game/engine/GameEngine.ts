@@ -328,6 +328,9 @@ export class GameEngine {
       // Update visibility (culling)
       this.worldRenderer.updateVisibility();
 
+      // Update nameplate scale to maintain readable size
+      this.worldRenderer.updateNameplateScale(this.camera.scale);
+
       this.animationFrameId = requestAnimationFrame(update);
     };
 
@@ -470,6 +473,16 @@ export class GameEngine {
       // Queue for when ready
       this._pendingMapData = { nodes, connections };
     }
+  }
+
+  // Set the current player ID for HQ highlighting
+  public setCurrentPlayerId(playerId: string | null) {
+    this.worldRenderer.setCurrentPlayerId(playerId);
+  }
+
+  // Set player names for HQ nameplates
+  public setPlayerNames(names: Map<string, string>) {
+    this.worldRenderer.setPlayerNames(names);
   }
 
   // Update a single node (for real-time updates)

@@ -509,11 +509,60 @@ export async function startSession(
     }
   }
 
-  // Assign all nodes to this session
+  // Assign all nodes to this session and reset to neutral state
   await prisma.node.updateMany({
     where: { id: { in: availableNodes.map((n) => n.id) } },
-    data: { gameSessionId: sessionId },
+    data: {
+      gameSessionId: sessionId,
+      status: 'NEUTRAL',
+      ownerId: null,
+      claimedAt: null,
+      upkeepPaid: null,
+      upkeepDue: null,
+      upkeepStatus: 'PAID',
+    },
   });
+
+  // For KOTH games, find the central node and set it as the crown
+  let crownNodeId: string | null = null;
+  if (session.gameType === 'KING_OF_THE_HILL') {
+    // Calculate the center of the map based on all node positions
+    const allX = availableNodes.map((n) => n.positionX);
+    const allY = availableNodes.map((n) => n.positionY);
+    const centerX = (Math.min(...allX) + Math.max(...allX)) / 2;
+    const centerY = (Math.min(...allY) + Math.max(...allY)) / 2;
+
+    // Find the node closest to the center (excluding capitals)
+    let closestNode = availableNodes[0];
+    let closestDistance = Infinity;
+
+    for (const node of availableNodes) {
+      // Skip capital nodes - crown should be a contestable node
+      if (node.type === 'CAPITAL') continue;
+
+      const distance = Math.sqrt(
+        Math.pow(node.positionX - centerX, 2) + Math.pow(node.positionY - centerY, 2)
+      );
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestNode = node;
+      }
+    }
+
+    if (closestNode) {
+      crownNodeId = closestNode.id;
+
+      // Convert the selected node to a CROWN type with special name
+      await prisma.node.update({
+        where: { id: crownNodeId },
+        data: {
+          type: 'CROWN',
+          name: 'Game Objective',
+          tier: 3, // High tier for importance
+        },
+      });
+    }
+  }
 
   // Assign HQ nodes to players and claim them
   for (let i = 0; i < session.players.length; i++) {
@@ -580,6 +629,7 @@ export async function startSession(
     data: {
       status: 'ACTIVE',
       startedAt: new Date(),
+      crownNodeId: crownNodeId, // Set crown node for KOTH games (null for other game types)
     },
   });
 

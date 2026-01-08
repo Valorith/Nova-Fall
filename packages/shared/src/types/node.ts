@@ -23,7 +23,9 @@ export interface MapNode {
   ownerName?: string;
   status: NodeStatus;
   isHQ?: boolean; // True if this is the owner's headquarters
+  isCrown?: boolean; // True if this is the crown node for KOTH games
   upkeepStatus?: UpkeepStatus; // Current upkeep payment status
+  claimedAt?: string | null; // When the node was claimed (used for crown countdown)
 }
 
 // Upkeep breakdown for display
