@@ -1,14 +1,16 @@
 import { Queue, Worker } from 'bullmq';
-import { redis } from './lib/redis.js';
+import { redis, subscriberRedis } from './lib/redis.js';
 import { prisma } from './lib/prisma.js';
 import { processUpkeep } from './jobs/upkeep.js';
 import { processCompletedTransfers } from './jobs/transfers.js';
+import { processKOTHVictory, handleCrownOwnershipChange, checkDominationVictory } from './jobs/victory.js';
 
 export const VERSION = '0.1.0';
 
 // Queue names
 const UPKEEP_QUEUE = 'upkeep';
 const TRANSFERS_QUEUE = 'transfers';
+const VICTORY_QUEUE = 'victory';
 
 // Create queues
 const upkeepQueue = new Queue(UPKEEP_QUEUE, {
@@ -20,6 +22,14 @@ const upkeepQueue = new Queue(UPKEEP_QUEUE, {
 });
 
 const transfersQueue = new Queue(TRANSFERS_QUEUE, {
+  connection: redis,
+  defaultJobOptions: {
+    removeOnComplete: 10,
+    removeOnFail: 50,
+  },
+});
+
+const victoryQueue = new Queue(VICTORY_QUEUE, {
   connection: redis,
   defaultJobOptions: {
     removeOnComplete: 10,
@@ -50,6 +60,21 @@ const transfersWorker = new Worker(
   }
 );
 
+// Victory worker processes delayed KOTH victory jobs
+// Jobs are scheduled 48h after a player claims the crown
+const victoryWorker = new Worker(
+  VICTORY_QUEUE,
+  async (job) => {
+    if (job.name === 'koth-victory') {
+      await processKOTHVictory(job.data.sessionId, job.data.expectedHolderId);
+    }
+  },
+  {
+    connection: redis,
+    concurrency: 1,
+  }
+);
+
 // Handle worker events
 upkeepWorker.on('completed', () => {
   // Silent completion - logged in job itself
@@ -71,6 +96,14 @@ transfersWorker.on('error', (err) => {
   console.error('Transfers worker error:', err);
 });
 
+victoryWorker.on('failed', (job, err) => {
+  console.error(`Victory job ${job?.id} failed:`, err);
+});
+
+victoryWorker.on('error', (err) => {
+  console.error('Victory worker error:', err);
+});
+
 // Setup repeating jobs
 async function setupRepeatingJobs(): Promise<void> {
   // Remove any existing repeating jobs from upkeep queue
@@ -84,6 +117,13 @@ async function setupRepeatingJobs(): Promise<void> {
   for (const job of transfersRepeatableJobs) {
     await transfersQueue.removeRepeatableByKey(job.key);
   }
+
+  // Remove any existing repeating jobs from victory queue (legacy cleanup)
+  const victoryRepeatableJobs = await victoryQueue.getRepeatableJobs();
+  for (const job of victoryRepeatableJobs) {
+    await victoryQueue.removeRepeatableByKey(job.key);
+  }
+  // Note: Victory queue now only processes delayed KOTH jobs (scheduled by API)
 
   // Run upkeep immediately on startup to initialize timer and process any pending work
   console.log('Running initial upkeep job...');
@@ -127,14 +167,45 @@ async function setupRepeatingJobs(): Promise<void> {
   console.log(`Transfers job aligned to epoch (first tick in ${delayUntilNextTick}ms, then every 30s)`);
 }
 
+// Setup victory event subscriptions
+async function setupVictoryEventSubscription(): Promise<void> {
+  // Subscribe to victory-related events from API
+  await subscriberRedis.subscribe('crown:changed', 'hq:captured');
+
+  subscriberRedis.on('message', async (channel, message) => {
+    try {
+      const data = JSON.parse(message);
+
+      switch (channel) {
+        case 'crown:changed':
+          // Crown node ownership changed - update tracking and schedule/cancel victory
+          await handleCrownOwnershipChange(data.sessionId, data.crownNodeId);
+          break;
+
+        case 'hq:captured':
+          // HQ was captured - check if game is over (Domination)
+          await checkDominationVictory(data.sessionId);
+          break;
+      }
+    } catch (err) {
+      console.error(`[Worker] Error handling ${channel} event:`, err);
+    }
+  });
+
+  console.log('Victory event subscriptions active');
+}
+
 // Graceful shutdown
 async function shutdown(): Promise<void> {
   console.log('Shutting down worker...');
 
   await upkeepWorker.close();
   await transfersWorker.close();
+  await victoryWorker.close();
   await upkeepQueue.close();
   await transfersQueue.close();
+  await victoryQueue.close();
+  await subscriberRedis.quit();
   await redis.quit();
   await prisma.$disconnect();
 
@@ -157,6 +228,9 @@ async function main(): Promise<void> {
 
     // Setup repeating jobs
     await setupRepeatingJobs();
+
+    // Setup victory event subscriptions
+    await setupVictoryEventSubscription();
 
     console.log('Worker ready and processing jobs');
   } catch (error) {

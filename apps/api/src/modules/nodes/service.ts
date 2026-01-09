@@ -1,6 +1,6 @@
 import { prisma } from '../../lib/prisma.js';
 import { redis } from '../../lib/redis.js';
-import { publishNodeClaimed } from '../../lib/events.js';
+import { publishNodeClaimed, publishCrownChanged } from '../../lib/events.js';
 import { NODE_CLAIM_COST_BY_TIER, type ResourceStorage } from '@nova-fall/shared';
 import type { NodeStatus, NodeType } from '@prisma/client';
 import type {
@@ -462,6 +462,19 @@ export async function claimNode(
       playerName: player.displayName,
       sessionId: gameSessionId,
     });
+
+    // Check if this is the crown node for a KOTH game
+    const session = await prisma.gameSession.findUnique({
+      where: { id: gameSessionId },
+      select: { crownNodeId: true, gameType: true },
+    });
+
+    if (session?.gameType === 'KING_OF_THE_HILL' && session.crownNodeId === nodeId) {
+      await publishCrownChanged({
+        sessionId: gameSessionId,
+        crownNodeId: nodeId,
+      });
+    }
 
     return { success: true, node: updatedNode, resources: updatedResources };
   }

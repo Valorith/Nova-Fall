@@ -1275,33 +1275,33 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
 
 #### 1.6.6 WebSocket Session Scoping
 
-- [ ] **Add session room management**
-  - [ ] Session rooms: `session:{sessionId}`
-  - [ ] Clients join room on game load
+- [x] **Add session room management**
+  - [x] Session rooms: `session:{sessionId}`
+  - [x] Clients join room on game load
 
-- [ ] **Update event publishers**
-  - [ ] Include sessionId in all events
-  - [ ] Publish to session-specific rooms
+- [x] **Update event publishers**
+  - [x] Include sessionId in all events
+  - [x] Publish to session-specific rooms
 
-- [ ] **Update frontend socket service**
-  - [ ] Join/leave session rooms
-  - [ ] Filter events by session
+- [x] **Update frontend socket service**
+  - [x] Join/leave session rooms
+  - [x] Filter events by session
 
 #### 1.6.7 Victory Conditions
 
-- [ ] **King of the Hill victory check**
-  - [ ] Worker checks crown node holder
-  - [ ] Track continuous hold time
-  - [ ] Trigger victory at 48 hours
+- [x] **King of the Hill victory check**
+  - [x] Worker checks crown node holder
+  - [x] Track continuous hold time
+  - [x] Trigger victory at 48 hours
 
-- [ ] **Domination victory check**
-  - [ ] Check for single remaining player with HQ
-  - [ ] Handle HQ conquest (eliminate player, neutralize nodes)
+- [x] **Domination victory check**
+  - [x] Check for single remaining player with HQ
+  - [x] Handle HQ conquest (eliminate player, neutralize nodes)
 
-- [ ] **Victory event and UI**
-  - [ ] Publish victory event
-  - [ ] Display victory modal
-  - [ ] Transition session to COMPLETED status
+- [x] **Victory event and UI**
+  - [x] Publish victory event
+  - [x] Display victory modal
+  - [x] Transition session to COMPLETED status
 
 - [ ] **Verify Section 1.6:**
   - [ ] User lands at lobby after login
@@ -1453,12 +1453,12 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
   - [x] Choose resources and amounts
   - [x] View pending transfers
 
-- [ ] **Verify Section 2.5:**
-  - [ ] Transfer resources between two adjacent owned nodes
-  - [ ] Transfer shows in pending list with ETA
-  - [ ] Resources arrive at destination after transfer time
-  - [ ] Cannot transfer to non-adjacent node
-  - [ ] Can cancel pending transfer
+- [x] **Verify Section 2.5:**
+  - [x] Transfer resources between two adjacent owned nodes
+  - [x] Transfer shows in pending list with ETA
+  - [x] Resources arrive at destination after transfer time
+  - [x] Cannot transfer to non-adjacent node
+  - [x] Can cancel pending transfer
 
 ### Phase 2 Deliverable
 

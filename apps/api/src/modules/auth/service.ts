@@ -54,7 +54,7 @@ async function assignHQToPlayer(playerId: string, playerName: string, nodeId: st
     where: { id: nodeId },
   });
 
-  if (node) {
+  if (node && node.gameSessionId) {
     await publishNodeClaimed({
       nodeId,
       node: {
@@ -71,6 +71,7 @@ async function assignHQToPlayer(playerId: string, playerName: string, nodeId: st
       },
       playerId,
       playerName,
+      sessionId: node.gameSessionId,
     });
   }
 }

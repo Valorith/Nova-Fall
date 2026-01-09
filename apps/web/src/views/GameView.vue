@@ -10,6 +10,8 @@ import TickProgressBar from '@/components/game/TickProgressBar.vue';
 import DevPanel from '@/components/game/DevPanel.vue';
 import MarketPanel from '@/components/game/MarketPanel.vue';
 import TransferPanel from '@/components/game/TransferPanel.vue';
+import VictoryModal from '@/components/game/VictoryModal.vue';
+import type { VictoryEvent } from '@/services/socket';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
@@ -46,6 +48,9 @@ const mousePosition = ref({ x: 0, y: 0 });
 const pendingTransfers = ref<TransferResponse[]>([]);
 const transferTimerNow = ref(Date.now()); // Reactive timer for transfer countdowns
 let transferTimerInterval: ReturnType<typeof setInterval> | null = null;
+
+// Victory state
+const victoryInfo = ref<VictoryEvent | null>(null);
 
 // Tooltip state
 const hoveredNode = ref<MapNode | null>(null);
@@ -146,15 +151,29 @@ const totalUpkeep = computed(() => {
   return upkeepBreakdown.value.reduce((sum, item) => sum + item.amount, 0);
 });
 
-// Calculate income breakdown (requires buildings - not implemented yet)
+// Calculate income breakdown
 const incomeBreakdown = computed<IncomeBreakdownItem[]>(() => {
-  // No passive income without buildings
-  return [];
+  const breakdown: IncomeBreakdownItem[] = [];
+  const playerId = authStore.user?.playerId;
+  if (!playerId) return breakdown;
+
+  // HQ produces 20 credits per tick
+  const hqNodes = gameStore.nodeList.filter(
+    (n) => n.ownerId === playerId && n.type === NodeType.CAPITAL
+  );
+  for (const hq of hqNodes) {
+    breakdown.push({
+      source: `${hq.name} (HQ)`,
+      amount: 20,
+    });
+  }
+
+  return breakdown;
 });
 
 // Calculate total income
 const totalIncome = computed(() => {
-  return 0;
+  return incomeBreakdown.value.reduce((sum, item) => sum + item.amount, 0);
 });
 
 // Generate mock map data using hex grid placement
@@ -563,6 +582,12 @@ onMounted(async () => {
         }
       });
 
+      // Register callback to handle victory events
+      gameStore.onVictory((event) => {
+        console.log('[GameView] Victory event received:', event);
+        victoryInfo.value = event;
+      });
+
       // Load from API with session scope
       await gameStore.loadMapData(props.sessionId);
       engine.value.loadMapData(gameStore.nodeList, gameStore.connections);
@@ -591,10 +616,17 @@ onMounted(async () => {
   }
 });
 
+// Handle returning to lobby after game ends
+const handleReturnToLobby = () => {
+  victoryInfo.value = null;
+  router.push('/lobby');
+};
+
 onUnmounted(() => {
   // Unregister callbacks
   gameStore.offEconomyProcessed();
   gameStore.offTransferCompleted();
+  gameStore.offVictory();
 
   // Disconnect from WebSocket
   gameStore.disconnectSocket();
@@ -672,7 +704,40 @@ function getZoomLevelLabel(level: ZoomLevel): string {
 }
 
 function getNodeTypeConfig(type: NodeType) {
-  return NODE_TYPE_CONFIGS[type];
+  const config = NODE_TYPE_CONFIGS[type];
+  if (!config) {
+    // Fallback for unknown types
+    console.warn(`Unknown node type: ${type}`);
+    return {
+      type,
+      displayName: String(type),
+      description: 'Unknown node type',
+      baseUpkeep: 50,
+      resourceBonuses: {},
+      buildingSlots: 4,
+      defaultResources: {},
+      claimCost: { credits: 500, iron: 50, energy: 25 },
+      color: '#808080',
+      icon: 'unknown',
+    };
+  }
+  return config;
+}
+
+// Map icon string keys to emoji characters
+function getNodeIcon(icon: string): string {
+  const iconMap: Record<string, string> = {
+    mining: '\u26CF\uFE0F',      // Pick
+    refinery: '\u2699\uFE0F',    // Gear
+    research: '\uD83D\uDD2C',    // Microscope
+    trade: '\uD83D\uDCB0',       // Money bag
+    barracks: '\u2694\uFE0F',    // Crossed swords
+    agricultural: '\uD83C\uDF3E', // Wheat
+    power: '\u26A1',             // Lightning
+    capital: '\u2B50',           // Star
+    crown: '\uD83D\uDC51',       // Crown
+  };
+  return iconMap[icon] || '\u2753'; // Question mark
 }
 
 function getStatusLabel(status: NodeStatus): string {
@@ -881,8 +946,8 @@ const canClaimNode = computed(() => {
   if (useMockData.value) return false; // Can't claim with mock data
   if (node.status !== NodeStatus.NEUTRAL) return false;
 
-  // CAPITAL and CROWN nodes cannot be claimed directly
-  if (node.type === NodeType.CAPITAL || node.type === NodeType.CROWN) return false;
+  // CAPITAL nodes cannot be claimed directly (HQs are assigned at game start)
+  if (node.type === NodeType.CAPITAL) return false;
 
   // Check if player has enough credits
   const claimCost = NODE_CLAIM_COST_BY_TIER[node.tier] ?? NODE_CLAIM_COST_BY_TIER[1] ?? 100;
@@ -896,6 +961,38 @@ const canClaimNode = computed(() => {
 
   // If player has no nodes, they can claim any valid neutral node (first claim via HQ assignment)
   // But in practice, HQ is assigned at game start, so this shouldn't happen
+  if (ownedNodes.length === 0) return true;
+
+  // Check if target node is adjacent to any owned node
+  const targetHex = pixelToHex({ x: node.positionX, y: node.positionY });
+  const neighborHexKeys = hexNeighbors(targetHex).map((h) => hexKey(h));
+
+  const isAdjacent = ownedNodes.some((ownedNode) => {
+    const ownedHex = pixelToHex({ x: ownedNode.positionX, y: ownedNode.positionY });
+    return neighborHexKeys.includes(hexKey(ownedHex));
+  });
+
+  return isAdjacent;
+});
+
+// Check if selected node can be claimed for free (dev panel - ignores credit check)
+const canClaimNodeFree = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node) return false;
+  if (!authStore.isAuthenticated) return false;
+  if (useMockData.value) return false;
+  if (node.status !== NodeStatus.NEUTRAL) return false;
+
+  // CAPITAL nodes cannot be claimed directly (HQs are assigned at game start)
+  if (node.type === NodeType.CAPITAL) return false;
+
+  // Check adjacency - need to own at least one adjacent node (unless first claim)
+  const playerId = authStore.user?.playerId;
+  if (!playerId) return false;
+
+  const ownedNodes = gameStore.nodeList.filter((n) => n.ownerId === playerId);
+
+  // If player has no nodes, they can claim any valid neutral node
   if (ownedNodes.length === 0) return true;
 
   // Check if target node is adjacent to any owned node
@@ -928,41 +1025,51 @@ async function handleDevResourceUpdate(resources: ResourceStorage) {
 async function handleClaimNodeFree() {
   if (!primarySelectedNode.value || isClaiming.value) return;
 
-  // Store current credits before claiming
+  const node = primarySelectedNode.value;
   const creditsBefore = playerResources.value.credits ?? 0;
+  const claimCost = NODE_CLAIM_COST_BY_TIER[node.tier] ?? NODE_CLAIM_COST_BY_TIER[1] ?? 200;
 
   isClaiming.value = true;
 
   try {
-    const response = await nodesApi.claim(primarySelectedNode.value.id);
-    const { node, resources } = response.data;
-
-    // Update the node in the store
-    if (node) {
-      gameStore.setNode(node);
-      engine.value?.updateNode(node.id, node);
-      toastStore.success(`[DEV] Claimed ${node.name} for free!`);
+    // Step 1: If we don't have enough credits, temporarily give ourselves enough
+    if (creditsBefore < claimCost) {
+      const tempResources = { ...playerResources.value, credits: claimCost + 100 };
+      await sessionsApi.updateMyResources(tempResources as Record<string, number>);
     }
 
-    // Restore credits to what they were before (free claim)
+    // Step 2: Claim the node
+    const response = await nodesApi.claim(node.id);
+    const { node: claimedNode, resources } = response.data;
+
+    // Update the node in the store
+    if (claimedNode) {
+      gameStore.setNode(claimedNode);
+      engine.value?.updateNode(claimedNode.id, claimedNode);
+      toastStore.success(`[DEV] Claimed ${claimedNode.name} for free!`);
+    }
+
+    // Step 3: Restore credits to what they were before (free claim)
     if (resources) {
       const restoredResources = {
         ...resources,
         credits: creditsBefore,
       };
       playerResources.value = restoredResources;
-
-      // Persist restored credits to server
-      try {
-        await sessionsApi.updateMyResources(restoredResources as Record<string, number>);
-      } catch (restoreErr) {
-        console.error('Failed to restore credits on server:', restoreErr);
-      }
+      await sessionsApi.updateMyResources(restoredResources as Record<string, number>);
     }
   } catch (err) {
     const error = err as { response?: { data?: { error?: string; message?: string } } };
     const message = error.response?.data?.message || error.response?.data?.error || 'Failed to claim node';
     toastStore.error(message);
+
+    // Try to restore original credits on failure
+    try {
+      await sessionsApi.updateMyResources({ ...playerResources.value, credits: creditsBefore } as Record<string, number>);
+      playerResources.value = { ...playerResources.value, credits: creditsBefore };
+    } catch {
+      // Ignore restore failure
+    }
   } finally {
     isClaiming.value = false;
   }
@@ -998,15 +1105,25 @@ async function handleClaimNode() {
   }
 }
 
-// Handle market transaction - refresh resources from server
+// Handle market transaction - refresh resources and node storage from server
 async function handleMarketTransaction() {
   try {
+    // Refresh player's global resources (credits)
     const resourcesResponse = await sessionsApi.getMyResources();
     if (resourcesResponse.data.resources) {
       playerResources.value = resourcesResponse.data.resources;
     }
+
+    // Refresh the trade hub node's storage
+    const tradeHub = selectedTradeHub.value;
+    if (tradeHub) {
+      const nodeResponse = await nodesApi.getById(tradeHub.id);
+      if (nodeResponse.data) {
+        gameStore.setNode(nodeResponse.data);
+      }
+    }
   } catch (err) {
-    console.warn('Failed to refresh resources after transaction:', err);
+    console.warn('Failed to refresh data after transaction:', err);
   }
 }
 
@@ -1086,7 +1203,7 @@ async function handleTransferCreated() {
       <div class="pointer-events-auto absolute top-14 left-4 z-50">
         <DevPanel
           :resources="playerResources"
-          :can-claim-node="canClaimNode"
+          :can-claim-node="canClaimNodeFree"
           :selected-node-name="primarySelectedNode?.name ?? ''"
           @update:resources="handleDevResourceUpdate"
           @claim-free="handleClaimNodeFree"
@@ -1214,7 +1331,7 @@ async function handleTransferCreated() {
                   class="text-2xl"
                   :style="{ color: getNodeTypeConfig(primarySelectedNode.type).color }"
                 >
-                  {{ getNodeTypeConfig(primarySelectedNode.type).icon }}
+                  {{ getNodeIcon(getNodeTypeConfig(primarySelectedNode.type).icon) }}
                 </span>
                 <div class="flex-1">
                   <div class="flex items-center gap-2">
@@ -1252,6 +1369,15 @@ async function handleTransferCreated() {
               <p class="text-xs text-gray-500 uppercase tracking-wide">Owner</p>
               <p class="text-sm font-medium" :class="primarySelectedNode.ownerName ? 'text-blue-400' : 'text-gray-500'">
                 {{ primarySelectedNode.ownerName ?? 'Unclaimed' }}
+              </p>
+            </div>
+
+            <!-- HQ Income -->
+            <div v-if="primarySelectedNode.type === NodeType.CAPITAL" class="bg-green-900/30 border border-green-500/30 rounded px-3 py-2">
+              <p class="text-xs text-gray-500 uppercase tracking-wide">Passive Income</p>
+              <p class="text-sm font-medium text-green-400 flex items-center gap-1">
+                <span>💰</span>
+                <span>+20 Credits/tick</span>
               </p>
             </div>
 
@@ -1394,7 +1520,7 @@ async function handleTransferCreated() {
               class="flex items-center gap-2 bg-gray-800/50 rounded px-3 py-2"
             >
               <span :style="{ color: getNodeTypeConfig(node.type).color }">
-                {{ getNodeTypeConfig(node.type).icon }}
+                {{ getNodeIcon(getNodeTypeConfig(node.type).icon) }}
               </span>
               <span class="text-sm text-white">{{ node.name }}</span>
               <span :class="['text-xs ml-auto', getStatusColor(node.status)]">
@@ -1438,6 +1564,14 @@ async function handleTransferCreated() {
         />
       </div>
     </Teleport>
+
+    <!-- Victory Modal -->
+    <VictoryModal
+      :victory="victoryInfo"
+      :current-player-id="authStore.user?.playerId ?? null"
+      @close="victoryInfo = null"
+      @return-to-lobby="handleReturnToLobby"
+    />
   </div>
 </template>
 

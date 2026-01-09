@@ -382,6 +382,12 @@ onUnmounted(() => {
             <span class="node-tooltip__feature-icon">&#x1F6D2;</span>
             <span class="node-tooltip__feature-text">Unlocks Market</span>
           </div>
+
+          <!-- HQ Income -->
+          <div v-if="node.type === NodeType.CAPITAL" class="node-tooltip__feature node-tooltip__feature--income">
+            <span class="node-tooltip__feature-icon">&#x1F4B0;</span>
+            <span class="node-tooltip__feature-text">+20 Credits/tick</span>
+          </div>
         </template>
       </template>
     </div>
@@ -622,6 +628,16 @@ onUnmounted(() => {
   color: #fcd34d;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* Income feature variant (HQ) */
+.node-tooltip__feature--income {
+  background: rgb(15, 45, 25);
+  border-top: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.node-tooltip__feature--income .node-tooltip__feature-text {
+  color: #4ade80;
 }
 
 /* Upkeep Warning */

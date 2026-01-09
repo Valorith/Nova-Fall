@@ -79,6 +79,8 @@ redisSub.subscribe(
   'upkeep:tick',
   'economy:processed',
   'transfer:completed',
+  'game:victory',
+  'player:eliminated',
   (err, count) => {
     if (err) {
       logger.error({ err }, 'Failed to subscribe to Redis channels');
@@ -96,23 +98,39 @@ redisSub.on('message', (channel, message) => {
 
     switch (channel) {
       case 'node:update':
-        // Broadcast node update to all connected clients
-        io.emit('node:update', data);
+        // Broadcast node update to session room if sessionId provided
+        if (data.sessionId) {
+          io.to(`session:${data.sessionId}`).emit('node:update', data);
+        } else {
+          io.emit('node:update', data);
+        }
         break;
 
       case 'node:claimed':
-        // Broadcast node claimed event
-        io.emit('node:claimed', data);
+        // Broadcast node claimed event to session room
+        if (data.sessionId) {
+          io.to(`session:${data.sessionId}`).emit('node:claimed', data);
+        } else {
+          io.emit('node:claimed', data);
+        }
         break;
 
       case 'battle:start':
-        // Notify relevant players about battle
-        io.emit('battle:start', data);
+        // Notify relevant players about battle in session
+        if (data.sessionId) {
+          io.to(`session:${data.sessionId}`).emit('battle:start', data);
+        } else {
+          io.emit('battle:start', data);
+        }
         break;
 
       case 'battle:update':
-        // Broadcast battle state updates
-        io.emit('battle:update', data);
+        // Broadcast battle state updates to session
+        if (data.sessionId) {
+          io.to(`session:${data.sessionId}`).emit('battle:update', data);
+        } else {
+          io.emit('battle:update', data);
+        }
         break;
 
       case 'resources:update':
@@ -126,14 +144,50 @@ redisSub.on('message', (channel, message) => {
         break;
 
       case 'economy:processed':
-        // Broadcast economy results (upkeep + income processed)
-        io.emit('economy:processed', data);
+        // Broadcast economy results to each session
+        // Group results by sessionId and emit to each session room
+        if (data.results && Array.isArray(data.results)) {
+          const resultsBySession = new Map<string, typeof data.results>();
+          for (const result of data.results) {
+            if (result.sessionId) {
+              const existing = resultsBySession.get(result.sessionId) ?? [];
+              existing.push(result);
+              resultsBySession.set(result.sessionId, existing);
+            }
+          }
+          // Emit to each session with only their relevant results
+          for (const [sessionId, sessionResults] of resultsBySession) {
+            io.to(`session:${sessionId}`).emit('economy:processed', {
+              ...data,
+              results: sessionResults,
+            });
+          }
+        } else {
+          // Fallback for events without sessionId
+          io.emit('economy:processed', data);
+        }
         break;
 
       case 'transfer:completed':
         // Broadcast transfer completion to session
         if (data.sessionId) {
           io.to(`session:${data.sessionId}`).emit('transfer:completed', data);
+        }
+        break;
+
+      case 'game:victory':
+        // Broadcast victory event to session
+        if (data.sessionId) {
+          io.to(`session:${data.sessionId}`).emit('game:victory', data);
+          logger.info({ sessionId: data.sessionId, winnerId: data.winnerId }, 'Victory event broadcast');
+        }
+        break;
+
+      case 'player:eliminated':
+        // Broadcast player elimination to session
+        if (data.sessionId) {
+          io.to(`session:${data.sessionId}`).emit('player:eliminated', data);
+          logger.info({ sessionId: data.sessionId, playerId: data.playerId }, 'Player eliminated event broadcast');
         }
         break;
 
@@ -220,9 +274,21 @@ process.on('SIGTERM', () => {
   });
 });
 
+// Clear stale viewer counts on startup (from previous server instances)
+async function clearStaleViewerCounts(): Promise<void> {
+  const pattern = 'session:*:viewers';
+  const keys = await redis.keys(pattern);
+  if (keys.length > 0) {
+    await redis.del(...keys);
+    logger.info({ count: keys.length }, 'Cleared stale viewer counts on startup');
+  }
+}
+
 // Start server
-httpServer.listen(PORT, () => {
-  logger.info({ port: PORT }, 'WebSocket server started');
+clearStaleViewerCounts().then(() => {
+  httpServer.listen(PORT, () => {
+    logger.info({ port: PORT }, 'WebSocket server started');
+  });
 });
 
 export { io };

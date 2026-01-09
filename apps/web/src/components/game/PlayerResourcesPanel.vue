@@ -34,16 +34,14 @@ const primaryResources = computed(() => {
   }));
 });
 
-// Get secondary resources (only if player has them)
+// Get secondary resources (always visible)
 const secondaryResources = computed(() => {
   const secondary = ['minerals', 'composites', 'techComponents'] as const;
-  return secondary
-    .filter(type => (props.resources[type] ?? 0) > 0)
-    .map(type => ({
-      type,
-      amount: props.resources[type] ?? 0,
-      def: RESOURCES[type],
-    }));
+  return secondary.map(type => ({
+    type,
+    amount: props.resources[type] ?? 0,
+    def: RESOURCES[type],
+  }));
 });
 
 // Calculate net credit change per hour
@@ -165,10 +163,10 @@ const depletionText = computed(() => {
       </div>
     </template>
 
-    <!-- Separator if there are secondary resources -->
-    <div v-if="secondaryResources.length > 0" class="w-px h-4 bg-gray-700 mx-1" />
+    <!-- Separator between primary and secondary resources -->
+    <div class="w-px h-4 bg-gray-700 mx-1" />
 
-    <!-- Secondary resources (only if player has them) -->
+    <!-- Secondary resources (always visible) -->
     <div
       v-for="{ type, amount, def } in secondaryResources"
       :key="type"

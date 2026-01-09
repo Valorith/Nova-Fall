@@ -22,3 +22,12 @@ export const publisherRedis = new Redis(config.redis.url, {
 publisherRedis.on('error', (err) => {
   console.error('Publisher Redis connection error:', err);
 });
+
+// Separate connection for subscribing to events
+export const subscriberRedis = new Redis(config.redis.url, {
+  maxRetriesPerRequest: 3,
+});
+
+subscriberRedis.on('error', (err) => {
+  console.error('Subscriber Redis connection error:', err);
+});

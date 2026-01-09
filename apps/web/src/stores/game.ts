@@ -11,6 +11,7 @@ import {
   type EconomyProcessedEvent,
   type PlayerEconomyResult,
   type TransferCompletedEvent,
+  type VictoryEvent,
 } from '@/services/socket';
 
 // API response types
@@ -57,6 +58,9 @@ export const useGameStore = defineStore('game', () => {
 
   // Callback for transfer completed events (registered by GameView)
   let transferCompletedCallback: ((event: TransferCompletedEvent) => void) | null = null;
+
+  // Callback for victory events (registered by GameView)
+  let victoryCallback: ((event: VictoryEvent) => void) | null = null;
 
   const nodeList = computed(() => Array.from(nodes.value.values()));
 
@@ -212,6 +216,22 @@ export const useGameStore = defineStore('game', () => {
     transferCompletedCallback = null;
   }
 
+  // Handle victory events
+  function handleVictory(event: VictoryEvent): void {
+    console.log('[GameStore] Victory event:', event.winnerName, 'wins by', event.reason);
+    victoryCallback?.(event);
+  }
+
+  // Register callback for victory events
+  function onVictory(callback: (event: VictoryEvent) => void): void {
+    victoryCallback = callback;
+  }
+
+  // Unregister victory callback
+  function offVictory(): void {
+    victoryCallback = null;
+  }
+
   // Get storage for a node
   function getNodeStorage(nodeId: string): ResourceStorage | undefined {
     return nodeStorage.value.get(nodeId);
@@ -243,6 +263,7 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.on('upkeep:tick', handleUpkeepTick);
     gameSocket.on('economy:processed', (event) => handleEconomyProcessed(event, playerId ?? null));
     gameSocket.on('transfer:completed', (event) => handleTransferCompleted(event, playerId ?? null));
+    gameSocket.on('game:victory', handleVictory);
 
     gameSocket.connect();
 
@@ -306,5 +327,7 @@ export const useGameStore = defineStore('game', () => {
     offEconomyProcessed,
     onTransferCompleted,
     offTransferCompleted,
+    onVictory,
+    offVictory,
   };
 });

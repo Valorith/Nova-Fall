@@ -48,6 +48,7 @@ export interface UpkeepTickEvent {
 
 export interface PlayerEconomyResult {
   playerId: string;
+  sessionId: string;
   totalUpkeep: number;
   totalIncome: number;
   creditsBefore: number;
@@ -74,6 +75,21 @@ export interface TransferCompletedEvent {
   destStorage?: Record<string, number>;
 }
 
+export interface VictoryEvent {
+  sessionId: string;
+  winnerId: string;
+  winnerName: string;
+  gameType: 'KING_OF_THE_HILL' | 'DOMINATION';
+  reason: string;
+}
+
+export interface PlayerEliminatedEvent {
+  sessionId: string;
+  playerId: string;
+  playerName: string;
+  reason: string;
+}
+
 // Socket event handlers
 interface EventHandlers {
   'node:update': (event: NodeUpdateEvent) => void;
@@ -84,6 +100,8 @@ interface EventHandlers {
   'upkeep:tick': (event: UpkeepTickEvent) => void;
   'economy:processed': (event: EconomyProcessedEvent) => void;
   'transfer:completed': (event: TransferCompletedEvent) => void;
+  'game:victory': (event: VictoryEvent) => void;
+  'player:eliminated': (event: PlayerEliminatedEvent) => void;
   connect: () => void;
   disconnect: (reason: string) => void;
   connect_error: (error: Error) => void;
@@ -170,6 +188,16 @@ class GameSocket {
     this.socket.on('transfer:completed', (data: TransferCompletedEvent) => {
       console.log('[Socket] Transfer completed:', data.transferId, data.status);
       this.handlers['transfer:completed']?.(data);
+    });
+
+    this.socket.on('game:victory', (data: VictoryEvent) => {
+      console.log('[Socket] Victory!', data.winnerName, 'wins by', data.reason);
+      this.handlers['game:victory']?.(data);
+    });
+
+    this.socket.on('player:eliminated', (data: PlayerEliminatedEvent) => {
+      console.log('[Socket] Player eliminated:', data.playerName, data.reason);
+      this.handlers['player:eliminated']?.(data);
     });
   }
 

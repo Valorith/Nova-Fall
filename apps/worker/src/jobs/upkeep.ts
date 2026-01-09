@@ -17,19 +17,21 @@ import {
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
 // Hourly production rates (resources generated per hour per node type)
+// Note: Credits only come from HQ (passively) or trading/selling at market
 const HOURLY_PRODUCTION: Record<string, Partial<Record<ResourceType, number>>> = {
   MINING: { iron: 100 },
   POWER_PLANT: { energy: 80 },
   REFINERY: { composites: 20 },
   RESEARCH: { minerals: 15 },
-  AGRICULTURAL: { credits: 50 },
-  TRADE_HUB: { credits: 200 },
-  CAPITAL: { credits: 100, iron: 25, energy: 25 },
+  AGRICULTURAL: {}, // Food production (future)
+  TRADE_HUB: {}, // Enables market access, no passive production
+  CAPITAL: { credits: 20, iron: 25, energy: 25 }, // Only source of passive credits
   BARRACKS: {},
 };
 
 interface PlayerEconomyResult {
   playerId: string;
+  sessionId: string;
   totalUpkeep: number;
   totalIncome: number;
   creditsBefore: number;
@@ -278,6 +280,7 @@ export async function processUpkeep(): Promise<void> {
 
       results.push({
         playerId: sessionPlayer.playerId ?? sessionPlayer.id,
+        sessionId: sessionPlayer.gameSessionId,
         totalUpkeep,
         totalIncome,
         creditsBefore,

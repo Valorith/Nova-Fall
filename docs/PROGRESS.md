@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 2 - Economy & Resources |
 | **Overall Progress**   | Phase 1 complete, Phase 2 in progress |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 29                         |
+| **Total Sessions**     | 32                         |
 
 ---
 
@@ -2079,6 +2079,224 @@ After:  2 queries + 1 transaction = ~3 queries total
 
 ---
 
+## Session 30 - 2026-01-08
+
+**Duration:** ~1 hour
+**Phase:** Phase 2 - Economy & Resources
+**Focus:** Bug fixes, rename Fortress to Barracks, transfer system optimization
+
+### Completed Tasks
+
+- [x] **Fix economy tick counter hanging at 0:**
+  - Worker now runs upkeep job immediately on startup
+  - TickProgressBar shows "Processing..." state when timer reaches 0
+
+- [x] **Show node resources in tooltip:**
+  - Added resources section to NodeTooltip.vue with icons
+  - Displays credits, iron, energy values from node storage
+
+- [x] **Rename Fortress to Barracks:**
+  - Updated NodeType enum across all files
+  - Created Prisma migration `20260108100000_rename_fortress_to_barracks`
+  - Updated GAME-DESIGN-DOCUMENT.md node types table
+
+- [x] **Neutral nodes start without credits:**
+  - Updated defaultResources in nodes.ts to only include iron (30) and energy (10)
+
+- [x] **Transfer system performance optimization:**
+  - Optimized `calculatePathDistance` to fetch only owned nodes
+  - Implemented epoch-based tick alignment (30-second boundaries from Unix epoch)
+  - Both API and worker use same formula: `timestamp % 30000`
+  - Eliminates clock drift between services
+  - Transfer completion times align exactly with job execution
+
+- [x] **Transfer UI real-time updates:**
+  - Changed from reloading entire map (1000 nodes) to fetching only affected nodes
+  - Storage data now included directly in WebSocket `transfer:completed` event
+  - Fresh storage fetched after transaction commits (prevents race conditions)
+  - Node details panel updates immediately on transfer completion
+
+- [x] **Section 2.5 verification complete:**
+  - Transfer resources between adjacent owned nodes works
+  - Transfer shows in pending list with ETA
+  - Resources arrive at destination after transfer time
+  - Cannot transfer to non-adjacent nodes
+  - Can cancel pending transfers
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Epoch-based tick alignment | Eliminates clock drift between API and worker services |
+| 30-second transfer job interval | Balances responsiveness with performance |
+| Storage in WebSocket event | Eliminates extra API call and race condition |
+
+### Technical Details
+
+**Epoch-based tick alignment:**
+```typescript
+// Both API and worker calculate ticks identically
+const remainder = timestamp % TRANSFER_JOB_INTERVAL_MS;
+const nextTick = timestamp + (TRANSFER_JOB_INTERVAL_MS - remainder);
+```
+
+**WebSocket event with storage:**
+```typescript
+publishTransferCompleted({
+  transferId, playerId, sourceNodeId, destNodeId, status, sessionId,
+  sourceStorage, destStorage  // Fresh values from DB
+});
+```
+
+### Next Session Plan
+
+1. Complete remaining Section 1.6 items (victory conditions 1.6.6-1.6.7)
+2. Review Phase 2 completion status
+3. Begin Phase 3 (Buildings & Construction) if Phase 2 complete
+
+---
+
+## Session 31 - 2026-01-08
+
+**Duration:** ~1 hour
+**Phase:** Phase 2 - Economy & Resources
+**Focus:** WebSocket session scoping, victory conditions, credit economy refactor
+
+### Completed Tasks
+
+- [x] **Section 1.6.6 - WebSocket Session Scoping:**
+  - All events now route to session rooms (`session:{sessionId}`)
+  - Added sessionId to PlayerEconomyResult in worker
+  - Made sessionId required in all API event types
+  - Fixed TypeScript errors in auth service for publishNodeClaimed
+
+- [x] **Section 1.6.7 - Victory Conditions:**
+  - Created event-based victory system (no polling)
+  - KOTH: BullMQ delayed job schedules 48h after crown claim
+  - Domination: Checks immediately when HQ captured
+  - Worker subscribes to `crown:changed` and `hq:captured` Redis channels
+  - Added publishCrownChanged and publishHQCaptured to API events
+  - Created VictoryModal.vue component
+  - Added game:victory and player:eliminated WebSocket events
+  - Updated GameView.vue with victory handling
+
+- [x] **Credit Economy Refactor:**
+  - Changed passive credit generation to HQ only (20/hour)
+  - Removed credit production from AGRICULTURAL and TRADE_HUB node types
+  - All other credits must come from trading/selling resources
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Event-based victory system | Eliminates unnecessary polling; only check on relevant events |
+| HQ-only credit income | Makes trading meaningful; credits become strategic resource |
+
+### Technical Details
+
+**Victory Event Flow:**
+```
+API: Node claimed → Check if crown node → Publish crown:changed
+Worker: Receives event → Schedule 48h delayed KOTH victory job
+(If crown changes hands, cancel old job, schedule new one)
+```
+
+**Credit Economy:**
+```typescript
+// Only HQ produces passive credits now
+CAPITAL: { credits: 20, iron: 25, energy: 25 },
+// Other node types have {} for credits
+```
+
+### Files Modified
+
+- `apps/worker/src/jobs/victory.ts` - Created event-based victory handlers
+- `apps/worker/src/jobs/upkeep.ts` - Credit economy changes
+- `apps/worker/src/index.ts` - Redis subscription for victory events
+- `apps/worker/src/lib/redis.ts` - Added subscriberRedis
+- `apps/api/src/lib/events.ts` - New publish functions, required sessionId
+- `apps/api/src/modules/nodes/service.ts` - Crown changed event publishing
+- `apps/ws-server/src/index.ts` - Session room broadcasting
+- `apps/web/src/components/game/VictoryModal.vue` - Created
+- `apps/web/src/views/GameView.vue` - Victory handling
+- `apps/web/src/stores/game.ts` - Victory event callbacks
+- `apps/web/src/services/socket.ts` - Victory event types
+
+### Next Session Plan
+
+1. Manual testing of Section 1.6 verification tasks (lobby flow, victory conditions)
+2. Complete "Show session name and victory progress" (Section 1.6.5)
+3. Review Phase 2 completion status
+
+---
+
+## Session 32 - 2026-01-08
+
+**Duration:** ~1 hour
+**Phase:** Phase 2 - Economy & Resources
+**Focus:** Bug fixes during manual testing, UI improvements
+
+### Completed Tasks
+
+- [x] **GameView TypeError fix:**
+  - Added fallback in `getNodeTypeConfig` for unknown node types
+  - Created `getNodeIcon` function to map icon strings to emoji characters
+  - Fixed "Unknown node type: BARRACKS" warning by rebuilding shared package
+
+- [x] **Stale Redis viewer count fix:**
+  - Added `clearStaleViewerCounts()` function to ws-server startup
+  - Clears all `session:*:viewers` keys on server restart
+  - Fixes "7 Active Players" showing incorrectly after server restarts
+
+- [x] **Market purchase bug fix:**
+  - `handleMarketTransaction` now refreshes trade hub node data after purchase
+  - Resources now correctly appear in node storage after buying
+
+- [x] **Resource counters always visible:**
+  - Changed PlayerResourcesPanel to always show all secondary resources
+  - Removed filter that hid resources with 0 count
+
+- [x] **Dev panel "Claim for Free" fixes:**
+  - Created `canClaimNodeFree` computed that ignores credit check
+  - Updated `handleClaimNodeFree` to temporarily give credits, claim, then restore
+  - Button now shows and works regardless of player's credit balance
+
+- [x] **HQ income display:**
+  - Added `incomeBreakdown` computed to include HQ passive income
+  - Updated NodeTooltip.vue to show +20 credits/tick for CAPITAL nodes
+  - Added "Passive Income" section in GameView sidebar for HQ
+
+- [x] **Crown node claiming fix:**
+  - Removed `NodeType.CROWN` from claim restrictions
+  - Crown nodes can now be claimed when adjacent to owned nodes
+
+### Issues Encountered
+
+- **Auth broken:** User forgot to start API server (not a code issue)
+- **BARRACKS unknown type:** Stale shared package dist files after FORTRESS→BARRACKS rename
+  - Resolution: Rebuilt shared package, user restarted frontend dev server
+
+### Files Modified
+
+- `apps/web/src/views/GameView.vue` - Multiple bug fixes and HQ income display
+- `apps/web/src/components/game/PlayerResourcesPanel.vue` - Always show all resources
+- `apps/web/src/components/game/NodeTooltip.vue` - HQ income indicator
+- `apps/ws-server/src/index.ts` - Stale viewer count cleanup on startup
+
+### Notes
+
+- User confirmed crown node claiming works after the fix
+- All bugs discovered during manual testing were fixed in this session
+- Section 1.6 verification tasks still need completion (user testing)
+
+### Next Session Plan
+
+1. Complete Section 1.6 verification tasks (manual testing)
+2. Complete "Show session name and victory progress" (Section 1.6.5)
+3. Begin Phase 3 if Phase 2 complete
+
+---
+
 ## Blockers Log
 
 <!-- Track all blockers here for visibility -->
@@ -2246,4 +2464,4 @@ After:  2 queries + 1 transaction = ~3 queries total
 
 ---
 
-_Last Updated: 2026-01-07 (Session 28 - Resource Transfer UX Enhancements)_
+_Last Updated: 2026-01-08 (Session 32 - Bug fixes during manual testing, UI improvements)_

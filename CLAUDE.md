@@ -238,11 +238,11 @@ Examples:
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
 | **Current Phase**  | Phase 2 - Economy & Resources             |
-| **Phase Progress** | Section 2.5 code complete, awaiting manual testing |
-| **Current Task**   | Test transfer system end-to-end (FIRST PRIORITY) |
+| **Phase Progress** | Section 2.5 complete, Section 1.6 verification pending |
+| **Current Task**   | Complete Section 1.6 verification tasks   |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 29 - 2026-01-07                   |
-| **Last Updated**   | 2026-01-07                                |
+| **Last Session**   | Session 32 - 2026-01-08                   |
+| **Last Updated**   | 2026-01-08                                |
 
 ---
 
@@ -299,6 +299,8 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-07 | Single transfers job (removed from upkeep)| Prevents race condition causing double resource transfer | Claude   |
 | 2026-01-07 | WebSocket transfer:completed event        | Real-time UI updates without page refresh            | Claude      |
 | 2026-01-07 | Transfer animations private to owner      | Strategic - opponents can't see your resource movements | User     |
+| 2026-01-08 | Event-based victory conditions            | No polling; crown/HQ events trigger victory checks     | User        |
+| 2026-01-08 | HQ only passive credit income (20/hr)     | All other credits come from trading/selling resources  | User        |
 
 ---
 
@@ -436,5 +438,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-_Last Updated: 2026-01-07 (Session 28)_
+_Last Updated: 2026-01-08 (Session 32)_
 _Version: 1.0.1_
