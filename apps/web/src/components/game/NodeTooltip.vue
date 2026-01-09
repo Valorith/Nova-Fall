@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import type { MapNode } from '@nova-fall/shared';
-import { NODE_TYPE_CONFIGS, NODE_CLAIM_COST_BY_TIER, NodeStatus, NodeType, UpkeepStatus } from '@nova-fall/shared';
+import type { MapNode, ResourceType } from '@nova-fall/shared';
+import { NODE_TYPE_CONFIGS, NODE_CLAIM_COST_BY_TIER, NodeStatus, NodeType, UpkeepStatus, RESOURCES } from '@nova-fall/shared';
 
 const props = defineProps<{
   node: MapNode | null;
@@ -39,7 +39,7 @@ function getNodeIcon(icon: string): string {
     refinery: '\u2699\uFE0F',    // Gear
     research: '\uD83D\uDD2C',    // Microscope
     trade: '\uD83D\uDCB0',       // Money bag
-    fortress: '\uD83C\uDFF0',    // Castle
+    barracks: '\u2694\uFE0F',     // Crossed swords
     agricultural: '\uD83C\uDF3E', // Wheat
     power: '\u26A1',             // Lightning
     capital: '\u2B50',           // Star
@@ -76,6 +76,32 @@ const claimCost = computed(() => {
 const canBeClaimed = computed(() => {
   return props.node?.status === NodeStatus.NEUTRAL && !props.node?.ownerId;
 });
+
+// Get node resources that have non-zero values
+const nodeResources = computed(() => {
+  if (!props.node?.storage) return [];
+
+  const resources: Array<{ type: ResourceType; amount: number; icon: string; name: string }> = [];
+
+  for (const [type, amount] of Object.entries(props.node.storage)) {
+    if (amount && amount > 0) {
+      const resourceDef = RESOURCES[type as ResourceType];
+      if (resourceDef) {
+        resources.push({
+          type: type as ResourceType,
+          amount,
+          icon: resourceDef.icon,
+          name: resourceDef.name,
+        });
+      }
+    }
+  }
+
+  return resources;
+});
+
+// Check if node has any resources
+const hasResources = computed(() => nodeResources.value.length > 0);
 
 // Get upkeep status display info
 const upkeepInfo = computed(() => {
@@ -304,6 +330,24 @@ onUnmounted(() => {
             </div>
           </div>
 
+          <!-- Node Resources -->
+          <div v-if="hasResources" class="node-tooltip__resources">
+            <div class="node-tooltip__resources-header">
+              <span class="node-tooltip__resources-icon">&#x1F4E6;</span>
+              <span class="node-tooltip__resources-label">Storage</span>
+            </div>
+            <div class="node-tooltip__resources-list">
+              <div
+                v-for="resource in nodeResources"
+                :key="resource.type"
+                class="node-tooltip__resource"
+              >
+                <span class="node-tooltip__resource-icon">{{ resource.icon }}</span>
+                <span class="node-tooltip__resource-amount">{{ resource.amount.toLocaleString() }}</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Claim Cost (for neutral nodes) -->
           <div v-if="canBeClaimed" class="node-tooltip__claim-cost">
             <span class="node-tooltip__claim-cost-label">Claim Cost:</span>
@@ -503,6 +547,58 @@ onUnmounted(() => {
 .node-tooltip__bonus-icon {
   font-weight: 700;
   color: #4ade80;
+}
+
+/* Node Resources */
+.node-tooltip__resources {
+  padding: 0.5rem 0.75rem;
+  background: rgba(15, 23, 42, 0.95);
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.node-tooltip__resources-header {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.375rem;
+}
+
+.node-tooltip__resources-icon {
+  font-size: 0.75rem;
+}
+
+.node-tooltip__resources-label {
+  font-size: 0.625rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.node-tooltip__resources-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.node-tooltip__resource {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 0.25rem;
+}
+
+.node-tooltip__resource-icon {
+  font-size: 0.75rem;
+}
+
+.node-tooltip__resource-amount {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #e2e8f0;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Feature note (e.g., Trade Hub unlocks Market) */

@@ -99,7 +99,7 @@ function generateNodeName(type: NodeType, index: number): string {
     [NodeType.REFINERY]: ['Smelter', 'Foundry', 'Processing Hub', 'Alloy Works', 'Metal Forge'],
     [NodeType.RESEARCH]: ['Lab', 'Observatory', 'Science Post', 'Research Center', 'Data Hub'],
     [NodeType.TRADE_HUB]: ['Market', 'Exchange', 'Trading Post', 'Commerce Hub', 'Bazaar'],
-    [NodeType.FORTRESS]: ['Bastion', 'Stronghold', 'Citadel', 'Outpost', 'Watchtower'],
+    [NodeType.BARRACKS]: ['Barracks', 'Training Camp', 'Military Post', 'War Academy', 'Garrison'],
     [NodeType.AGRICULTURAL]: ['Farm', 'Greenhouse', 'Bio-Dome', 'Harvest Station', 'Agri-Hub'],
     [NodeType.POWER_PLANT]: ['Generator', 'Power Grid', 'Energy Core', 'Reactor', 'Solar Array'],
     [NodeType.CAPITAL]: ['Capital', 'Headquarters', 'Command Center', 'Home Base', 'Core'],
@@ -122,7 +122,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.REFINERY]: 1,
     [NodeType.RESEARCH]: 1,
     [NodeType.TRADE_HUB]: 2,
-    [NodeType.FORTRESS]: 0.5,
+    [NodeType.BARRACKS]: 0.5,
     [NodeType.AGRICULTURAL]: 2,
     [NodeType.POWER_PLANT]: 1,
     [NodeType.CAPITAL]: 0,
@@ -132,7 +132,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.REFINERY]: 2,
     [NodeType.RESEARCH]: 0.5,
     [NodeType.TRADE_HUB]: 0.5,
-    [NodeType.FORTRESS]: 1,
+    [NodeType.BARRACKS]: 1,
     [NodeType.AGRICULTURAL]: 0.25,
     [NodeType.POWER_PLANT]: 0.5,
     [NodeType.CAPITAL]: 0,
@@ -142,7 +142,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.REFINERY]: 1,
     [NodeType.RESEARCH]: 1.5,
     [NodeType.TRADE_HUB]: 0.5,
-    [NodeType.FORTRESS]: 1,
+    [NodeType.BARRACKS]: 1,
     [NodeType.AGRICULTURAL]: 0.5,
     [NodeType.POWER_PLANT]: 3,
     [NodeType.CAPITAL]: 0,
@@ -152,7 +152,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.REFINERY]: 0.5,
     [NodeType.RESEARCH]: 3,
     [NodeType.TRADE_HUB]: 1,
-    [NodeType.FORTRESS]: 0.5,
+    [NodeType.BARRACKS]: 0.5,
     [NodeType.AGRICULTURAL]: 1.5,
     [NodeType.POWER_PLANT]: 1,
     [NodeType.CAPITAL]: 0,
@@ -162,7 +162,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.REFINERY]: 0.5,
     [NodeType.RESEARCH]: 0.5,
     [NodeType.TRADE_HUB]: 2,
-    [NodeType.FORTRESS]: 2,
+    [NodeType.BARRACKS]: 2,
     [NodeType.AGRICULTURAL]: 1,
     [NodeType.POWER_PLANT]: 0.5,
     [NodeType.CAPITAL]: 0,
@@ -172,7 +172,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.REFINERY]: 2,
     [NodeType.RESEARCH]: 1,
     [NodeType.TRADE_HUB]: 0,
-    [NodeType.FORTRESS]: 0.5,
+    [NodeType.BARRACKS]: 0.5,
     [NodeType.AGRICULTURAL]: 0,
     [NodeType.POWER_PLANT]: 0.5,
     [NodeType.CAPITAL]: 0,
@@ -228,7 +228,8 @@ export function generateMap(seed = 42): MapSeed {
 
   // Fill the entire square with hexes
   while (frontier.length > 0) {
-    const hex = frontier.pop()!;
+    const hex = frontier.pop();
+    if (!hex) continue;
     const key = hexKey(hex);
     if (visited.has(key)) continue;
     visited.add(key);
@@ -288,7 +289,9 @@ export function generateMap(seed = 42): MapSeed {
   const shuffled = [...nonCornerPositions];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+    const temp = shuffled[i];
+    shuffled[i] = shuffled[j] as HexCoord;
+    shuffled[j] = temp as HexCoord;
   }
 
   // Take corners + enough shuffled positions to reach nodeCount
@@ -340,10 +343,10 @@ export function generateMap(seed = 42): MapSeed {
     const isLeft = pixel.x < mapCenterX;
     const isTop = pixel.y < mapCenterY;
 
-    if (isTop && isLeft) quadrants[0]!.hexes.push(hex);
-    else if (isTop && !isLeft) quadrants[1]!.hexes.push(hex);
-    else if (!isTop && isLeft) quadrants[2]!.hexes.push(hex);
-    else quadrants[3]!.hexes.push(hex);
+    if (isTop && isLeft) quadrants[0]?.hexes.push(hex);
+    else if (isTop && !isLeft) quadrants[1]?.hexes.push(hex);
+    else if (!isTop && isLeft) quadrants[2]?.hexes.push(hex);
+    else quadrants[3]?.hexes.push(hex);
   }
 
   // Select 4 Trade Hubs from each quadrant
@@ -355,7 +358,9 @@ export function generateMap(seed = 42): MapSeed {
     const shuffled = [...quadrant.hexes];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+      const temp = shuffled[i];
+      shuffled[i] = shuffled[j] as HexCoord;
+      shuffled[j] = temp as HexCoord;
     }
 
     // Take first 4 as Trade Hubs

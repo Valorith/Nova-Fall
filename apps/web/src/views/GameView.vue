@@ -199,7 +199,8 @@ function generateMockMapData(): { nodes: MapNode[]; connections: ConnectionData[
 
   // Fill the entire square with hexes
   while (frontier.length > 0) {
-    const hex = frontier.pop()!;
+    const hex = frontier.pop();
+    if (!hex) continue;
     const key = hexKey(hex);
     if (visited.has(key)) continue;
     visited.add(key);
@@ -274,7 +275,9 @@ function generateMockMapData(): { nodes: MapNode[]; connections: ConnectionData[
   const shuffled = [...nonCornerPositions];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+    const temp = shuffled[i];
+    shuffled[i] = shuffled[j] as HexCoord;
+    shuffled[j] = temp as HexCoord;
   }
 
   // Take corners + enough shuffled positions to reach nodeCount
@@ -314,7 +317,8 @@ function generateMockMapData(): { nodes: MapNode[]; connections: ConnectionData[
     visited.add(hexKey(capitalHex));
 
     while (queue.length > 0 && claimed.length < NODES_PER_PLAYER) {
-      const hex = queue.shift()!;
+      const hex = queue.shift();
+      if (!hex) break;
       const key = hexKey(hex);
 
       // Only claim if this is a valid node position
@@ -334,7 +338,8 @@ function generateMockMapData(): { nodes: MapNode[]; connections: ConnectionData[
 
     // Mark all claimed nodes for this player
     for (let i = 0; i < claimed.length; i++) {
-      const hex = claimed[i]!;
+      const hex = claimed[i];
+      if (!hex) continue;
       const isHQ = i === 0; // First node (the capital) is the HQ
       claimedByPlayer.set(hexKey(hex), {
         playerId: player.id,
@@ -499,10 +504,12 @@ onMounted(async () => {
         };
         // Some nodes have advanced resources
         if (Math.random() > 0.7) {
-          mockStorage[node.id]!.minerals = Math.floor(Math.random() * 50);
+          const storage = mockStorage[node.id];
+          if (storage) storage.minerals = Math.floor(Math.random() * 50);
         }
         if (Math.random() > 0.8) {
-          mockStorage[node.id]!.composites = Math.floor(Math.random() * 30);
+          const storage = mockStorage[node.id];
+          if (storage) storage.composites = Math.floor(Math.random() * 30);
         }
       }
     }
@@ -531,18 +538,28 @@ onMounted(async () => {
       });
 
       // Register callback to handle transfer completions
-      gameStore.onTransferCompleted(async (event) => {
+      gameStore.onTransferCompleted((event) => {
         console.log('[GameView] Transfer completed:', event.transferId, event.status);
 
-        // Reload pending transfers and node data in parallel
-        await Promise.all([
-          loadPendingTransfers(),
-          gameStore.loadMapData(props.sessionId),
-        ]);
+        // Reload pending transfers list
+        loadPendingTransfers();
 
-        // Update renderer with new data
-        if (engine.value) {
-          engine.value.loadMapData(gameStore.nodeList, gameStore.connections);
+        // Update nodes directly from event data (no API call needed)
+        // Store updates will auto-propagate to selectedNodes/primarySelectedNode via computed
+        if (event.sourceStorage) {
+          gameStore.updateNode(event.sourceNodeId, { storage: event.sourceStorage });
+          engine.value?.updateNode(event.sourceNodeId, { storage: event.sourceStorage });
+        }
+        if (event.destStorage) {
+          gameStore.updateNode(event.destNodeId, { storage: event.destStorage });
+          engine.value?.updateNode(event.destNodeId, { storage: event.destStorage });
+        }
+
+        // Force update hovered node if it's one of the affected nodes (ref, not from store)
+        if (hoveredNode.value?.id === event.sourceNodeId && event.sourceStorage) {
+          hoveredNode.value = { ...hoveredNode.value, storage: event.sourceStorage };
+        } else if (hoveredNode.value?.id === event.destNodeId && event.destStorage) {
+          hoveredNode.value = { ...hoveredNode.value, storage: event.destStorage };
         }
       });
 

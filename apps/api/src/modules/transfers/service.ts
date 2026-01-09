@@ -3,26 +3,47 @@ import type { ResourceStorage } from '@nova-fall/shared';
 import {
   TRANSFER_TIME_PER_NODE_MS,
   TRANSFER_TIME_PER_RESOURCE_MS,
+  getNextTickAfter,
   type CreateTransferRequest,
   type TransferResponse,
 } from './types.js';
 
 /**
  * Calculate the shortest path distance between two nodes using BFS
+ * Only considers paths through nodes owned by the specified player
  * Returns the number of nodes to traverse (1 = adjacent, 2 = one node between, etc.)
- * Returns null if no path exists
+ * Returns null if no path exists through owned territory
  */
 async function calculatePathDistance(
   sourceNodeId: string,
   destNodeId: string,
+  playerId: string,
   sessionId: string
 ): Promise<number | null> {
   if (sourceNodeId === destNodeId) return 0;
 
-  // Get all connections for the session's nodes
+  // First, get all node IDs owned by this player in this session
+  const ownedNodes = await prisma.node.findMany({
+    where: {
+      gameSessionId: sessionId,
+      ownerId: playerId,
+    },
+    select: { id: true },
+  });
+
+  const ownedNodeIds = new Set(ownedNodes.map((n) => n.id));
+
+  // Verify both source and dest are owned
+  if (!ownedNodeIds.has(sourceNodeId) || !ownedNodeIds.has(destNodeId)) {
+    return null;
+  }
+
+  // Only fetch connections where BOTH nodes are owned by the player
+  const ownedNodeIdArray = Array.from(ownedNodeIds);
   const connections = await prisma.nodeConnection.findMany({
     where: {
-      fromNode: { gameSessionId: sessionId },
+      fromNodeId: { in: ownedNodeIdArray },
+      toNodeId: { in: ownedNodeIdArray },
     },
     select: {
       fromNodeId: true,
@@ -30,7 +51,7 @@ async function calculatePathDistance(
     },
   });
 
-  // Build adjacency list
+  // Build adjacency list (only owned nodes)
   const adjacency = new Map<string, Set<string>>();
   for (const conn of connections) {
     if (!adjacency.has(conn.fromNodeId)) {
@@ -39,16 +60,17 @@ async function calculatePathDistance(
     if (!adjacency.has(conn.toNodeId)) {
       adjacency.set(conn.toNodeId, new Set());
     }
-    adjacency.get(conn.fromNodeId)!.add(conn.toNodeId);
-    adjacency.get(conn.toNodeId)!.add(conn.fromNodeId);
+    adjacency.get(conn.fromNodeId)?.add(conn.toNodeId);
+    adjacency.get(conn.toNodeId)?.add(conn.fromNodeId);
   }
 
-  // BFS to find shortest path
+  // BFS to find shortest path through owned territory
   const visited = new Set<string>([sourceNodeId]);
   const queue: { nodeId: string; distance: number }[] = [{ nodeId: sourceNodeId, distance: 0 }];
 
   while (queue.length > 0) {
-    const current = queue.shift()!;
+    const current = queue.shift();
+    if (!current) break;
 
     const neighbors = adjacency.get(current.nodeId);
     if (!neighbors) continue;
@@ -65,7 +87,7 @@ async function calculatePathDistance(
     }
   }
 
-  return null; // No path found
+  return null; // No path found through owned territory
 }
 
 /**
@@ -130,8 +152,8 @@ export async function createTransfer(
     return { error: 'You do not own the destination node' };
   }
 
-  // Calculate path distance (no longer requires adjacency)
-  const distance = await calculatePathDistance(sourceNodeId, destNodeId, sessionId);
+  // Calculate path distance through owned territory only
+  const distance = await calculatePathDistance(sourceNodeId, destNodeId, playerId, sessionId);
   if (distance === null) {
     return { error: 'No path exists between these nodes' };
   }
@@ -154,10 +176,13 @@ export async function createTransfer(
   // Calculate completion time based on distance and quantity
   // - 1 minute per node in path (minimum/distance factor)
   // - 1 second per resource unit (quantity factor)
+  // Aligned to next job tick so transfer completes exactly when processed
   const distanceTimeMs = distance * TRANSFER_TIME_PER_NODE_MS;
   const quantityTimeMs = totalQuantity * TRANSFER_TIME_PER_RESOURCE_MS;
   const transferTimeMs = distanceTimeMs + quantityTimeMs;
-  const completesAt = new Date(Date.now() + transferTimeMs);
+  const rawCompletionTime = Date.now() + transferTimeMs;
+  const alignedCompletionTime = getNextTickAfter(rawCompletionTime);
+  const completesAt = new Date(alignedCompletionTime);
 
   // Build the resources object with only positive amounts
   const transferResources: Partial<ResourceStorage> = {};

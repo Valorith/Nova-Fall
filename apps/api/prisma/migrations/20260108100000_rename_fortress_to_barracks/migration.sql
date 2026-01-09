@@ -1,0 +1,2 @@
+-- Rename FORTRESS to BARRACKS in NodeType enum
+ALTER TYPE "NodeType" RENAME VALUE 'FORTRESS' TO 'BARRACKS';

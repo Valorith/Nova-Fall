@@ -268,11 +268,13 @@ export async function sellResource(
 
   // Update node storage (deduct)
   const newResourceAmount = currentAmount - quantity;
-  const updatedNodeStorage: ResourceStorage = { ...nodeStorage };
+  let updatedNodeStorage: ResourceStorage;
   if (newResourceAmount === 0) {
-    delete updatedNodeStorage[resourceType];
+    // Remove the key by creating a new object without it
+    const { [resourceType]: _, ...rest } = nodeStorage;
+    updatedNodeStorage = rest;
   } else {
-    updatedNodeStorage[resourceType] = newResourceAmount;
+    updatedNodeStorage = { ...nodeStorage, [resourceType]: newResourceAmount };
   }
 
   // Perform both updates in a transaction

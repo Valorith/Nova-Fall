@@ -227,8 +227,9 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.on('connect', () => {
       isSocketConnected.value = true;
       // Join session room when connected
-      if (sessionId || currentSessionId.value) {
-        gameSocket.joinSession(sessionId || currentSessionId.value!);
+      const sessionToJoin = sessionId || currentSessionId.value;
+      if (sessionToJoin) {
+        gameSocket.joinSession(sessionToJoin);
       }
     });
 
@@ -246,8 +247,9 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.connect();
 
     // If already connected, join session immediately
-    if (gameSocket.isConnected && (sessionId || currentSessionId.value)) {
-      gameSocket.joinSession(sessionId || currentSessionId.value!);
+    const sessionToJoin = sessionId || currentSessionId.value;
+    if (gameSocket.isConnected && sessionToJoin) {
+      gameSocket.joinSession(sessionToJoin);
     }
   }
 

@@ -25,7 +25,7 @@ const HOURLY_PRODUCTION: Record<string, Partial<Record<ResourceType, number>>> =
   AGRICULTURAL: { credits: 50 },
   TRADE_HUB: { credits: 200 },
   CAPITAL: { credits: 100, iron: 25, energy: 25 },
-  FORTRESS: {},
+  BARRACKS: {},
 };
 
 interface PlayerEconomyResult {

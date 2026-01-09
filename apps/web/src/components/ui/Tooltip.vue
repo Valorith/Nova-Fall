@@ -104,6 +104,7 @@ const tooltipStyle = computed(() => {
         transform: 'translateX(-100%) translateY(-50%)',
       };
     case 'right':
+    default:
       return {
         ...base,
         left: `${tooltipPosition.value.x}px`,

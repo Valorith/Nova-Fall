@@ -85,6 +85,14 @@ async function setupRepeatingJobs(): Promise<void> {
     await transfersQueue.removeRepeatableByKey(job.key);
   }
 
+  // Run upkeep immediately on startup to initialize timer and process any pending work
+  console.log('Running initial upkeep job...');
+  await upkeepQueue.add('upkeep-init', {});
+
+  // Run transfers immediately to process any pending transfers
+  console.log('Running initial transfers job...');
+  await transfersQueue.add('transfers-init', {});
+
   // Add upkeep repeating job (every hour)
   const ONE_HOUR_MS = 60 * 60 * 1000;
   await upkeepQueue.add(
@@ -98,18 +106,25 @@ async function setupRepeatingJobs(): Promise<void> {
   );
   console.log('Upkeep job scheduled every hour');
 
-  // Add transfers repeating job (every minute)
-  const ONE_MINUTE_MS = 60 * 1000;
+  // Add transfers repeating job aligned to epoch boundaries
+  // Both API and worker use epoch-based tick calculation, so they always agree
+  const THIRTY_SECONDS_MS = 30 * 1000;
+  const now = Date.now();
+  const nextEpochTick = now + (THIRTY_SECONDS_MS - (now % THIRTY_SECONDS_MS));
+  const delayUntilNextTick = nextEpochTick - now;
+
+  // Schedule first job at the next epoch-aligned tick, then repeat every 30 seconds
   await transfersQueue.add(
     'transfers',
     {},
     {
+      delay: delayUntilNextTick,
       repeat: {
-        every: ONE_MINUTE_MS,
+        every: THIRTY_SECONDS_MS,
       },
     }
   );
-  console.log('Transfers job scheduled every minute');
+  console.log(`Transfers job aligned to epoch (first tick in ${delayUntilNextTick}ms, then every 30s)`);
 }
 
 // Graceful shutdown

@@ -265,7 +265,7 @@ export class WorldRenderer {
   private transferFlowPhase = 0;
   private transferAnimationFrame: number | null = null;
   private pendingTransfers: TransferData[] = [];
-  private transferPaths: Map<string, HexCoord[]> = new Map(); // transferId -> path
+  private transferPaths = new Map<string, HexCoord[]>(); // transferId -> path
 
   constructor() {
     this.terrainLayer = new Container();
@@ -420,7 +420,8 @@ export class WorldRenderer {
 
     // Flood-fill to find all hexes in bounds
     while (frontier.length > 0) {
-      const hex = frontier.pop()!;
+      const hex = frontier.pop();
+      if (!hex) continue;
       const key = hexKey(hex);
       if (visited.has(key)) continue;
       visited.add(key);
@@ -1074,8 +1075,9 @@ export class WorldRenderer {
       nameplateContainer.rotation = rotation;
 
       // Get player name and color - use node's ownerName directly, fallback to playerNames map
-      const playerName = hq.ownerName || this.playerNames.get(hq.ownerId!) || 'Unknown';
-      const playerColor = getPlayerColor(hq.ownerId!);
+      const ownerId = hq.ownerId as string;
+      const playerName = hq.ownerName || this.playerNames.get(ownerId) || 'Unknown';
+      const playerColor = getPlayerColor(ownerId);
 
       // Create nameplate background
       const bg = new Graphics();
@@ -1216,10 +1218,13 @@ export class WorldRenderer {
       const pixelPath = path.map((hex) => hexToPixel(hex));
 
       // Draw the base path line (semi-transparent)
+      const firstPoint = pixelPath[0];
+      if (!firstPoint) continue;
       g.setStrokeStyle({ width: 4, color: 0x818cf8, alpha: 0.3 });
-      g.moveTo(pixelPath[0]!.x, pixelPath[0]!.y);
+      g.moveTo(firstPoint.x, firstPoint.y);
       for (let i = 1; i < pixelPath.length; i++) {
-        g.lineTo(pixelPath[i]!.x, pixelPath[i]!.y);
+        const point = pixelPath[i];
+        if (point) g.lineTo(point.x, point.y);
       }
       g.stroke();
 
@@ -1236,8 +1241,11 @@ export class WorldRenderer {
     let totalLength = 0;
     const segmentLengths: number[] = [];
     for (let i = 1; i < pixelPath.length; i++) {
-      const dx = pixelPath[i]!.x - pixelPath[i - 1]!.x;
-      const dy = pixelPath[i]!.y - pixelPath[i - 1]!.y;
+      const curr = pixelPath[i];
+      const prev = pixelPath[i - 1];
+      if (!curr || !prev) continue;
+      const dx = curr.x - prev.x;
+      const dy = curr.y - prev.y;
       const len = Math.sqrt(dx * dx + dy * dy);
       segmentLengths.push(len);
       totalLength += len;
@@ -1256,18 +1264,23 @@ export class WorldRenderer {
       // Convert t to actual position on path
       const targetDist = animatedT * totalLength;
       let accumulatedDist = 0;
-      let dotX = pixelPath[0]!.x;
-      let dotY = pixelPath[0]!.y;
+      const startPoint = pixelPath[0];
+      if (!startPoint) continue;
+      let dotX = startPoint.x;
+      let dotY = startPoint.y;
 
       for (let j = 0; j < segmentLengths.length; j++) {
-        const segLen = segmentLengths[j]!;
+        const segLen = segmentLengths[j];
+        if (segLen === undefined) continue;
         if (accumulatedDist + segLen >= targetDist) {
           // Dot is on this segment
           const segT = (targetDist - accumulatedDist) / segLen;
-          const p1 = pixelPath[j]!;
-          const p2 = pixelPath[j + 1]!;
-          dotX = p1.x + (p2.x - p1.x) * segT;
-          dotY = p1.y + (p2.y - p1.y) * segT;
+          const p1 = pixelPath[j];
+          const p2 = pixelPath[j + 1];
+          if (p1 && p2) {
+            dotX = p1.x + (p2.x - p1.x) * segT;
+            dotY = p1.y + (p2.y - p1.y) * segT;
+          }
           break;
         }
         accumulatedDist += segLen;

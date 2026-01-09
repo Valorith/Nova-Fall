@@ -247,8 +247,8 @@ watch(() => props.isOpen, (isOpen) => {
           <p v-if="tradeHub" class="text-sm text-gray-400">Trading at {{ tradeHub.name }}</p>
         </div>
         <button
-          @click="emit('close')"
           class="text-gray-400 hover:text-gray-200 transition-colors"
+          @click="emit('close')"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -266,7 +266,7 @@ watch(() => props.isOpen, (isOpen) => {
         <!-- Error state -->
         <div v-else-if="error" class="text-center py-8">
           <p class="text-red-400 mb-4">{{ error }}</p>
-          <button @click="loadPrices" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm">
+          <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm" @click="loadPrices">
             Retry
           </button>
         </div>
@@ -333,20 +333,20 @@ watch(() => props.isOpen, (isOpen) => {
               <!-- Buy/Sell toggle -->
               <div class="flex rounded-lg overflow-hidden border border-gray-600">
                 <button
-                  @click="tradeMode = 'BUY'"
                   class="px-4 py-1.5 text-sm font-medium transition-colors"
                   :class="tradeMode === 'BUY'
                     ? 'bg-green-600 text-white'
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'"
+                  @click="tradeMode = 'BUY'"
                 >
                   Buy
                 </button>
                 <button
-                  @click="tradeMode = 'SELL'"
                   class="px-4 py-1.5 text-sm font-medium transition-colors"
                   :class="tradeMode === 'SELL'
                     ? 'bg-red-600 text-white'
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'"
+                  @click="tradeMode = 'SELL'"
                 >
                   Sell
                 </button>
@@ -367,14 +367,14 @@ watch(() => props.isOpen, (isOpen) => {
                   <button
                     v-for="q in quickQuantities"
                     :key="q"
-                    @click="quantity = q"
                     class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-300"
+                    @click="quantity = q"
                   >
                     {{ q }}
                   </button>
                   <button
-                    @click="tradeMode === 'BUY' ? setMaxBuyQuantity() : setMaxSellQuantity()"
                     class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-300 font-medium"
+                    @click="tradeMode === 'BUY' ? setMaxBuyQuantity() : setMaxSellQuantity()"
                   >
                     MAX
                   </button>
@@ -442,12 +442,12 @@ watch(() => props.isOpen, (isOpen) => {
 
             <!-- Execute button -->
             <button
-              @click="executeTransaction"
               :disabled="!canExecute || transactionLoading"
               class="w-full py-2.5 rounded font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               :class="tradeMode === 'BUY'
                 ? 'bg-green-600 hover:bg-green-700 text-white'
                 : 'bg-red-600 hover:bg-red-700 text-white'"
+              @click="executeTransaction"
             >
               <span v-if="transactionLoading">Processing...</span>
               <span v-else>{{ tradeMode === 'BUY' ? 'Buy' : 'Sell' }} {{ selectedPrice.name }}</span>

@@ -96,7 +96,7 @@ export async function authRoutes(app: FastifyInstance) {
         res.writeHead(302, { Location: `${config.urls.frontend}/login?error=discord_failed` });
         res.end();
       }
-    })(rawReq, reply.raw, () => {});
+    })(rawReq, reply.raw, () => { /* passport callback */ });
   });
 
   // ==================== Google OAuth ====================
@@ -159,7 +159,7 @@ export async function authRoutes(app: FastifyInstance) {
         res.writeHead(302, { Location: `${config.urls.frontend}/login?error=google_failed` });
         res.end();
       }
-    })(rawReq, reply.raw, () => {});
+    })(rawReq, reply.raw, () => { /* passport callback */ });
   });
 
   // ==================== Token Management ====================

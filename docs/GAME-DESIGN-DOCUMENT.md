@@ -90,7 +90,7 @@ The game world consists of 100 interconnected nodes representing locations on th
 | Refinery       | Refined Materials  | Mid-chain value add      | 1.2x            |
 | Research Lab   | Research Points    | Tech advancement         | 1.5x            |
 | Trade Hub      | Passive Credits    | Market fee reduction     | 1.3x            |
-| Fortress       | Defense Bonus      | Chokepoint control       | 1.8x            |
+| Barracks       | Unit Training      | Military staging point   | 1.5x            |
 | Colony HQ      | All (reduced)      | Command center           | 2.0x            |
 | Agricultural   | Food, Organics     | Sustains population      | 0.8x            |
 | Power Plant    | Energy Credits     | Powers operations        | 1.1x            |

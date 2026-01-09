@@ -2,8 +2,11 @@ import { prisma } from '../lib/prisma.js';
 import type { ResourceStorage } from '@nova-fall/shared';
 import { publishTransferCompleted } from '../lib/events.js';
 
+// Must match the value in apps/api/src/modules/transfers/types.ts
+export const TRANSFER_JOB_INTERVAL_MS = 30 * 1000;
+
 /**
- * Process completed transfers (called every minute by worker)
+ * Process completed transfers (called every 30 seconds by worker, aligned to epoch)
  * Moves resources from transit to destination nodes
  * Returns number of transfers processed
  *
@@ -124,28 +127,52 @@ export async function processCompletedTransfers(): Promise<number> {
     await Promise.all([...storageUpdatePromises, ...statusUpdatePromises]);
   });
 
+  // Fetch fresh storage values AFTER transaction commits to avoid race conditions
+  // This ensures we send the actual committed values, not stale pre-transaction data
+  const allAffectedNodeIds = new Set<string>();
+  for (const t of [...successfulTransfers, ...cancelledTransfers]) {
+    allAffectedNodeIds.add(t.sourceNodeId);
+    allAffectedNodeIds.add(t.destNodeId);
+  }
+
+  const freshNodes = await prisma.node.findMany({
+    where: { id: { in: Array.from(allAffectedNodeIds) } },
+    select: { id: true, storage: true },
+  });
+  const freshStorageById = new Map(
+    freshNodes.map((n) => [n.id, n.storage as Record<string, number>])
+  );
+
   // Publish WebSocket events for completed transfers (in parallel)
   const publishPromises = [
-    ...successfulTransfers.map((transfer) =>
-      publishTransferCompleted({
+    ...successfulTransfers.map((transfer) => {
+      const sourceStorage = freshStorageById.get(transfer.sourceNodeId);
+      const destStorage = freshStorageById.get(transfer.destNodeId);
+      return publishTransferCompleted({
         transferId: transfer.id,
         playerId: transfer.playerId,
         sourceNodeId: transfer.sourceNodeId,
         destNodeId: transfer.destNodeId,
         status: 'COMPLETED',
         sessionId: transfer.gameSessionId,
-      })
-    ),
-    ...cancelledTransfers.map((transfer) =>
-      publishTransferCompleted({
+        ...(sourceStorage && { sourceStorage }),
+        ...(destStorage && { destStorage }),
+      });
+    }),
+    ...cancelledTransfers.map((transfer) => {
+      const sourceStorage = freshStorageById.get(transfer.sourceNodeId);
+      const destStorage = freshStorageById.get(transfer.destNodeId);
+      return publishTransferCompleted({
         transferId: transfer.id,
         playerId: transfer.playerId,
         sourceNodeId: transfer.sourceNodeId,
         destNodeId: transfer.destNodeId,
         status: 'CANCELLED',
         sessionId: transfer.gameSessionId,
-      })
-    ),
+        ...(sourceStorage && { sourceStorage }),
+        ...(destStorage && { destStorage }),
+      });
+    }),
   ];
   await Promise.all(publishPromises);
 

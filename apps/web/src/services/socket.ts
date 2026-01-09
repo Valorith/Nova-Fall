@@ -70,6 +70,8 @@ export interface TransferCompletedEvent {
   destNodeId: string;
   status: 'COMPLETED' | 'CANCELLED';
   sessionId: string;
+  sourceStorage?: Record<string, number>;
+  destStorage?: Record<string, number>;
 }
 
 // Socket event handlers
@@ -184,6 +186,7 @@ class GameSocket {
   }
 
   off<K extends keyof EventHandlers>(event: K): void {
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete this.handlers[event];
   }
 

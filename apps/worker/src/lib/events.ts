@@ -13,6 +13,9 @@ export interface TransferCompletedEvent {
   destNodeId: string;
   status: 'COMPLETED' | 'CANCELLED';
   sessionId: string;
+  // Updated storage values for immediate UI update (no API call needed)
+  sourceStorage?: Record<string, number>;
+  destStorage?: Record<string, number>;
 }
 
 // Publish functions

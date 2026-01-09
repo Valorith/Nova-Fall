@@ -193,7 +193,8 @@ export function calculateDistanceFromHQ(
   visited.add(hqNodeId);
 
   while (queue.length > 0) {
-    const current = queue.shift()!;
+    const current = queue.shift();
+    if (!current) break;
 
     const neighbors = adjacencyMap.get(current.nodeId) ?? [];
     for (const neighborId of neighbors) {

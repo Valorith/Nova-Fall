@@ -43,7 +43,12 @@ const isImminent = computed(() => {
   const seconds = Math.ceil(remainingMs.value / 1000);
   // For hourly intervals, warn in last minute; for shorter, last 3 seconds
   const threshold = props.tickInterval >= 60000 ? 60 : 3;
-  return seconds <= threshold;
+  return seconds <= threshold && seconds > 0;
+});
+
+// Is the timer expired and waiting for the next tick event?
+const isProcessing = computed(() => {
+  return remainingMs.value <= 0;
 });
 
 // Smooth animation loop
@@ -75,7 +80,10 @@ watch(() => props.nextTickAt, () => {
 <template>
   <div
     class="relative flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800/60 border border-gray-700/50 cursor-help"
-    :class="{ 'border-amber-500/50': isImminent, 'border-green-500/50 bg-green-900/20': justTicked }"
+    :class="{
+      'border-green-500/50 bg-green-900/20': justTicked || isProcessing,
+      'border-amber-500/50': isImminent && !isProcessing
+    }"
     @mouseenter="showTooltip = true"
     @mouseleave="showTooltip = false"
   >
@@ -90,7 +98,9 @@ watch(() => props.nextTickAt, () => {
     <div class="relative z-10 flex-shrink-0">
       <svg
         class="w-4 h-4 transition-colors duration-200"
-        :class="isImminent ? 'text-amber-400' : 'text-gray-400'"
+        :class="[
+          isProcessing ? 'text-green-400 animate-spin' : isImminent ? 'text-amber-400' : 'text-gray-400'
+        ]"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -110,11 +120,13 @@ watch(() => props.nextTickAt, () => {
       <div
         class="h-full rounded-full transition-all duration-100 ease-linear"
         :class="[
-          isImminent
-            ? 'bg-gradient-to-r from-amber-500 to-amber-400'
-            : 'bg-gradient-to-r from-cyan-600 to-cyan-400'
+          isProcessing
+            ? 'bg-gradient-to-r from-green-600 to-green-400 animate-pulse'
+            : isImminent
+              ? 'bg-gradient-to-r from-amber-500 to-amber-400'
+              : 'bg-gradient-to-r from-cyan-600 to-cyan-400'
         ]"
-        :style="{ width: `${progress * 100}%` }"
+        :style="{ width: isProcessing ? '100%' : `${progress * 100}%` }"
       />
 
       <!-- Shimmer effect -->
@@ -132,9 +144,12 @@ watch(() => props.nextTickAt, () => {
     <!-- Time display -->
     <div
       class="relative z-10 flex-shrink-0 text-xs font-mono font-medium min-w-[40px] text-right transition-colors duration-200"
-      :class="isImminent ? 'text-amber-400' : 'text-gray-400'"
+      :class="[
+        isProcessing ? 'text-green-400 animate-pulse' : isImminent ? 'text-amber-400' : 'text-gray-400'
+      ]"
+      :style="{ minWidth: isProcessing ? '80px' : '40px' }"
     >
-      {{ formattedTime }}
+      {{ isProcessing ? 'Processing...' : formattedTime }}
     </div>
 
     <!-- Tooltip -->

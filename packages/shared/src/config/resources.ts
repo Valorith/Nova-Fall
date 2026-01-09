@@ -100,7 +100,7 @@ export const NODE_BASE_STORAGE: Record<string, number> = {
   REFINERY: 25000,
   RESEARCH: 15000,
   TRADE_HUB: 40000,
-  FORTRESS: 20000,
+  BARRACKS: 20000,
   AGRICULTURAL: 25000,
   POWER_PLANT: 20000,
 };
@@ -112,7 +112,7 @@ export const NODE_BASE_UPKEEP: Record<string, number> = {
   REFINERY: 60,
   RESEARCH: 80,
   TRADE_HUB: 70,
-  FORTRESS: 100,
+  BARRACKS: 100,
   AGRICULTURAL: 30,
   POWER_PLANT: 50,
 };
@@ -192,10 +192,12 @@ export function subtractResources(
   }
 
   const newAmount = current - toSubtract;
-  const newStorage = { ...storage };
+  let newStorage = { ...storage };
 
   if (newAmount === 0) {
-    delete newStorage[type];
+    // Remove the key by creating object without it
+    const { [type]: _, ...rest } = newStorage;
+    newStorage = rest;
   } else {
     newStorage[type] = newAmount;
   }
