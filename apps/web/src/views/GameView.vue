@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData, type TransferData } from '../game';
-import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, NODE_CLAIM_COST_BY_TIER, type MapNode, type ResourceStorage } from '@nova-fall/shared';
+import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, NODE_CLAIM_COST_BY_TIER, nodeRequiresCore, getNodeProduction, nodeHasProduction, RESOURCES, type MapNode, type ResourceStorage, type ItemStorage } from '@nova-fall/shared';
 import PlayerResourcesPanel, { type UpkeepBreakdownItem, type IncomeBreakdownItem } from '@/components/game/PlayerResourcesPanel.vue';
 import ResourceDisplay from '@/components/game/ResourceDisplay.vue';
 import NodeTooltip from '@/components/game/NodeTooltip.vue';
@@ -11,10 +11,13 @@ import DevPanel from '@/components/game/DevPanel.vue';
 import MarketPanel from '@/components/game/MarketPanel.vue';
 import TransferPanel from '@/components/game/TransferPanel.vue';
 import VictoryModal from '@/components/game/VictoryModal.vue';
+import CoreShopPanel from '@/components/game/CoreShopPanel.vue';
+import CoreSlotPanel from '@/components/game/CoreSlotPanel.vue';
 import type { VictoryEvent } from '@/services/socket';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
+import { useSessionStore } from '@/stores/session';
 import { nodesApi, sessionsApi, transfersApi, type TransferResponse } from '@/services/api';
 import { hexToPixel, pixelToHex, hexKey, hexNeighbors, type HexCoord } from '../game/utils/hexGrid';
 
@@ -27,6 +30,7 @@ const router = useRouter();
 const gameStore = useGameStore();
 const authStore = useAuthStore();
 const toastStore = useToastStore();
+const sessionStore = useSessionStore();
 
 const gameContainer = ref<HTMLDivElement | null>(null);
 const engine = ref<GameEngine | null>(null);
@@ -37,6 +41,7 @@ const useMockData = ref(false); // Set to false to use real API data
 const isClaiming = ref(false);
 const isMarketOpen = ref(false);
 const isTransferOpen = ref(false);
+const isShopOpen = ref(false);
 
 // Transfer mode state (for click-to-select-destination flow)
 const isTransferMode = ref(false);
@@ -174,6 +179,60 @@ const incomeBreakdown = computed<IncomeBreakdownItem[]>(() => {
 // Calculate total income
 const totalIncome = computed(() => {
   return incomeBreakdown.value.reduce((sum, item) => sum + item.amount, 0);
+});
+
+// Session info for display
+const currentSession = computed(() => sessionStore.currentSession);
+
+const sessionName = computed(() => currentSession.value?.name ?? 'Unknown Session');
+
+const sessionGameTypeShort = computed(() => {
+  const type = currentSession.value?.gameType;
+  if (type === 'KING_OF_THE_HILL') return 'KOTH';
+  if (type === 'DOMINATION') return 'DOM';
+  return '???';
+});
+
+// KOTH-specific: Crown holder info
+const crownHolderName = computed(() => {
+  if (!currentSession.value?.crownHolderId) return null;
+  const holder = currentSession.value.players.find(
+    p => p.playerId === currentSession.value?.crownHolderId
+  );
+  return holder?.displayName ?? 'Unknown';
+});
+
+const crownHoldDuration = computed(() => {
+  if (!currentSession.value?.crownHeldSince) return null;
+  const heldSince = new Date(currentSession.value.crownHeldSince).getTime();
+  const now = Date.now();
+  const durationMs = now - heldSince;
+  const hours = Math.floor(durationMs / (1000 * 60 * 60));
+  const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+  return { hours, minutes, totalMs: durationMs };
+});
+
+const timeUntilKOTHVictory = computed(() => {
+  if (!crownHoldDuration.value) return null;
+  const victoryTimeMs = 48 * 60 * 60 * 1000; // 48 hours
+  const remainingMs = victoryTimeMs - crownHoldDuration.value.totalMs;
+  if (remainingMs <= 0) return { hours: 0, minutes: 0 };
+  const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+  const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+  return { hours, minutes };
+});
+
+// Domination-specific: Active players count
+const activePlayers = computed(() => {
+  if (!currentSession.value?.players) return [];
+  return currentSession.value.players.filter(
+    p => p.role === 'PLAYER' && !p.eliminatedAt
+  );
+});
+
+const totalPlayers = computed(() => {
+  if (!currentSession.value?.players) return 0;
+  return currentSession.value.players.filter(p => p.role === 'PLAYER').length;
 });
 
 // Generate mock map data using hex grid placement
@@ -535,6 +594,9 @@ onMounted(async () => {
     nodeStorage.value = mockStorage;
   } else {
     try {
+      // Fetch session details for display
+      await sessionStore.fetchSessionById(props.sessionId);
+
       // Connect to WebSocket for real-time updates (pass playerId for economy updates)
       gameStore.connectSocket(props.sessionId, currentPlayerId.value);
 
@@ -938,6 +1000,76 @@ const sourceNodeScreenPos = computed(() => {
   return engine.value.worldToScreen(node.positionX, node.positionY);
 });
 
+// Get storage for the transfer source node (used by TransferPanel)
+const transferSourceStorage = computed<ItemStorage>(() => {
+  if (!transferSourceNode.value) return {};
+  const nodeData = transferSourceNode.value.storage as ItemStorage | undefined;
+  if (!nodeData) return {};
+  // Filter out credits - they're a global resource, not node storage
+  const { credits: _, ...nodeResources } = nodeData;
+  return nodeResources;
+});
+
+// Check if selected node is HQ (Capital) owned by current player
+const isSelectedNodeHQ = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node) return false;
+  return node.type === NodeType.CAPITAL && node.ownerId === currentPlayerId.value;
+});
+
+// Check if selected node requires a core (for non-HQ, non-Crown nodes)
+const selectedNodeRequiresCore = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node) return false;
+  return nodeRequiresCore(node.type as NodeType);
+});
+
+// Check if selected node is active (has core installed or doesn't need one)
+const isSelectedNodeActive = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node) return true; // No node = nothing to check
+  if (!selectedNodeRequiresCore.value) return true; // Doesn't need core
+  return node.installedCoreId !== null && node.installedCoreId !== undefined;
+});
+
+// Check if selected node is owned by current player (for core installation UI)
+const isSelectedNodeOwned = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node) return false;
+  return node.ownerId === currentPlayerId.value;
+});
+
+// Check if selected node has any production
+const selectedNodeHasProduction = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node) return false;
+  return nodeHasProduction(node.type);
+});
+
+// Get production rates for selected node (with tier bonus)
+const selectedNodeProduction = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node) return {};
+  return getNodeProduction(node.type, node.tier);
+});
+
+// Format production entries for display in sidebar
+const selectedNodeProductionEntries = computed(() => {
+  const entries: { resourceType: string; amount: number; icon: string; name: string }[] = [];
+  for (const [resourceType, amount] of Object.entries(selectedNodeProduction.value)) {
+    if (amount) {
+      const resource = RESOURCES[resourceType as keyof typeof RESOURCES];
+      entries.push({
+        resourceType,
+        amount,
+        icon: resource?.icon ?? '📦',
+        name: resource?.name ?? resourceType,
+      });
+    }
+  }
+  return entries;
+});
+
 // Check if the selected node can be claimed
 const canClaimNode = computed(() => {
   const node = primarySelectedNode.value;
@@ -1134,6 +1266,44 @@ async function handleTransferCreated() {
   await loadPendingTransfers();
   // Keep panel open for additional transfers, but user can close it manually
 }
+
+// Handle core purchase at HQ
+function handleCorePurchase(_coreId: string, storage: ItemStorage, creditsRemaining: number) {
+  // Update player credits immediately from response
+  playerResources.value = { ...playerResources.value, credits: creditsRemaining };
+
+  // Update HQ node storage immediately from response
+  const node = primarySelectedNode.value;
+  if (node) {
+    const updatedNode = { ...node, storage };
+    gameStore.setNode(updatedNode);
+    engine.value?.updateNode(node.id, updatedNode);
+  }
+
+  toastStore.success('Core purchased!');
+}
+
+// Handle core install on a node
+function handleCoreInstall(coreId: string, storage: ItemStorage) {
+  const node = primarySelectedNode.value;
+  if (node) {
+    const updatedNode = { ...node, storage, installedCoreId: coreId };
+    gameStore.setNode(updatedNode);
+    engine.value?.updateNode(node.id, updatedNode);
+  }
+  toastStore.success('Core installed! Node is now active.');
+}
+
+// Handle core destruction on a node
+function handleCoreDestroy(storage: ItemStorage) {
+  const node = primarySelectedNode.value;
+  if (node) {
+    const updatedNode = { ...node, storage, installedCoreId: null };
+    gameStore.setNode(updatedNode);
+    engine.value?.updateNode(node.id, updatedNode);
+  }
+  toastStore.success('Core destroyed.');
+}
 </script>
 
 <template>
@@ -1217,6 +1387,43 @@ async function handleTransferCreated() {
           <span class="rounded bg-gray-800 px-2 py-1 text-xs text-gray-300">
             {{ getZoomLevelLabel(currentZoomLevel) }}
           </span>
+
+          <!-- Session Info -->
+          <div v-if="currentSession" class="flex items-center gap-2 ml-2 pl-4 border-l border-gray-700">
+            <span class="text-sm text-gray-200 font-medium">{{ sessionName }}</span>
+            <span
+              class="px-1.5 py-0.5 rounded text-xs font-semibold"
+              :class="currentSession.gameType === 'KING_OF_THE_HILL' ? 'bg-amber-800 text-amber-200' : 'bg-red-800 text-red-200'"
+            >
+              {{ sessionGameTypeShort }}
+            </span>
+
+            <!-- KOTH Victory Progress -->
+            <div
+              v-if="currentSession.gameType === 'KING_OF_THE_HILL'"
+              class="flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded bg-gray-800/80"
+            >
+              <span v-if="crownHolderName" class="text-xs">
+                <span class="text-amber-400">&#x1F451;</span>
+                <span class="text-gray-300">{{ crownHolderName }}</span>
+                <span v-if="timeUntilKOTHVictory" class="text-gray-500 ml-1">
+                  ({{ timeUntilKOTHVictory.hours }}h {{ timeUntilKOTHVictory.minutes }}m to win)
+                </span>
+              </span>
+              <span v-else class="text-xs text-gray-500">Crown unclaimed</span>
+            </div>
+
+            <!-- Domination Progress -->
+            <div
+              v-else-if="currentSession.gameType === 'DOMINATION'"
+              class="flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded bg-gray-800/80"
+            >
+              <span class="text-xs">
+                <span class="text-red-400">&#x2694;</span>
+                <span class="text-gray-300">{{ activePlayers.length }}/{{ totalPlayers }} players</span>
+              </span>
+            </div>
+          </div>
         </div>
 
         <!-- Player Resources (credits global + aggregated node resources) -->
@@ -1372,14 +1579,73 @@ async function handleTransferCreated() {
               </p>
             </div>
 
-            <!-- HQ Income -->
-            <div v-if="primarySelectedNode.type === NodeType.CAPITAL" class="bg-green-900/30 border border-green-500/30 rounded px-3 py-2">
-              <p class="text-xs text-gray-500 uppercase tracking-wide">Passive Income</p>
-              <p class="text-sm font-medium text-green-400 flex items-center gap-1">
-                <span>💰</span>
-                <span>+20 Credits/tick</span>
+            <!-- Production Rates -->
+            <div v-if="selectedNodeHasProduction" class="bg-gray-800/50 rounded px-3 py-2">
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Production</p>
+                <span
+                  v-if="selectedNodeRequiresCore"
+                  class="text-xs px-2 py-0.5 rounded"
+                  :class="isSelectedNodeActive
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                    : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'"
+                >
+                  {{ isSelectedNodeActive ? 'Active' : 'Inactive' }}
+                </span>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <div
+                  v-for="entry in selectedNodeProductionEntries"
+                  :key="entry.resourceType"
+                  class="flex items-center gap-1 px-2 py-1 rounded text-sm"
+                  :class="isSelectedNodeActive
+                    ? 'bg-green-900/30 text-green-400'
+                    : 'bg-gray-700/50 text-gray-400'"
+                >
+                  <span>{{ entry.icon }}</span>
+                  <span class="font-medium">+{{ entry.amount }}/hr</span>
+                </div>
+              </div>
+              <p v-if="!isSelectedNodeActive && selectedNodeRequiresCore" class="text-xs text-amber-400/80 mt-2 italic">
+                Install core to start producing
               </p>
             </div>
+
+            <!-- HQ Drop Terminal Button -->
+            <button
+              v-if="isSelectedNodeHQ && !useMockData"
+              class="w-full py-2.5 px-4 bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-white rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-900/30"
+              @click="isShopOpen = true"
+            >
+              <span class="text-lg">🛰️</span>
+              <span>HQ Planetary Drop Terminal</span>
+            </button>
+
+            <!-- Node Inactive Warning -->
+            <div
+              v-if="selectedNodeRequiresCore && !isSelectedNodeActive && isSelectedNodeOwned"
+              class="bg-amber-900/30 border border-amber-500/30 rounded px-3 py-2"
+            >
+              <div class="flex items-center gap-2">
+                <span class="text-amber-400 text-lg">⚠️</span>
+                <div>
+                  <p class="text-sm font-medium text-amber-300">Node Inactive</p>
+                  <p class="text-xs text-amber-400/80">Install a matching core to enable resource production.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Core Slot (non-HQ owned nodes that require cores) -->
+            <CoreSlotPanel
+              v-if="selectedNodeRequiresCore && isSelectedNodeOwned && !useMockData"
+              :node-id="primarySelectedNode.id"
+              :node-type="primarySelectedNode.type"
+              :installed-core-id="primarySelectedNode.installedCoreId ?? null"
+              :storage="selectedNodeStorage"
+              :is-owned="isSelectedNodeOwned"
+              @install="handleCoreInstall"
+              @destroy="handleCoreDestroy"
+            />
 
             <!-- Resource Storage -->
             <div>
@@ -1558,7 +1824,7 @@ async function handleTransferCreated() {
         <TransferPanel
           :source-node="transferSourceNode"
           :dest-node="transferDestNode"
-          :node-storage="selectedNodeStorage"
+          :node-storage="transferSourceStorage"
           @close="isTransferOpen = false; transferSourceNode = null; transferDestNode = null"
           @transfer-created="handleTransferCreated"
         />
@@ -1572,6 +1838,48 @@ async function handleTransferCreated() {
       @close="victoryInfo = null"
       @return-to-lobby="handleReturnToLobby"
     />
+
+    <!-- HQ Planetary Drop Terminal Modal -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div
+          v-if="isShopOpen && primarySelectedNode"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          @click.self="isShopOpen = false"
+        >
+          <div class="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-yellow-900/50 to-amber-900/50 px-5 py-4 border-b border-gray-700 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-2xl">🛰️</span>
+                <div>
+                  <h2 class="text-lg font-bold text-white">HQ Planetary Drop Terminal</h2>
+                  <p class="text-xs text-gray-400">Purchase node cores for orbital delivery</p>
+                </div>
+              </div>
+              <button
+                class="text-gray-400 hover:text-white transition-colors p-1"
+                @click="isShopOpen = false"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="p-5 overflow-y-auto max-h-[calc(80vh-80px)]">
+              <CoreShopPanel
+                :node-id="primarySelectedNode.id"
+                :storage="selectedNodeStorage"
+                :player-credits="playerResources.credits ?? 0"
+                @purchase="handleCorePurchase"
+              />
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -1584,5 +1892,15 @@ async function handleTransferCreated() {
 .slide-enter-from,
 .slide-leave-to {
   transform: translateX(100%);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease-out;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

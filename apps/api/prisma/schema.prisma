@@ -110,8 +110,9 @@ model Node {
   claimedAt   DateTime?
 
   // State
-  storage       Json         @default("{}")  // Resources stored here
-  upkeepPaid    DateTime?    // When upkeep was last successfully paid
+  storage         Json         @default("{}")  // Resources/items stored here
+  installedCoreId String?      // Node core installed (activates production)
+  upkeepPaid      DateTime?    // When upkeep was last successfully paid
   upkeepDue     DateTime?    // When next upkeep payment is due
   upkeepStatus  UpkeepStatus @default(PAID)  // Current upkeep payment status
   status        NodeStatus   @default(NEUTRAL)
@@ -147,6 +148,7 @@ model Node {
   @@index([ownerId, upkeepStatus])
   @@index([attackCooldownUntil])
   @@index([gameSessionId])
+  @@index([installedCoreId])
 }
 
 model NodeConnection {
@@ -629,6 +631,7 @@ enum NodeType {
   BARRACKS
   AGRICULTURAL
   POWER_PLANT
+  MANUFACTURING_PLANT
   CAPITAL
   CROWN
 }

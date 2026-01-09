@@ -4,8 +4,8 @@ import { publishUpkeepTick } from '../lib/events.js';
 
 // Redis key for storing next upkeep time
 export const NEXT_UPKEEP_KEY = 'game:nextUpkeepAt';
-import type { NodeType } from '@nova-fall/shared';
-import { getRegion, type ResourceStorage, type ResourceType } from '@nova-fall/shared';
+import { NodeType } from '@nova-fall/shared';
+import { getRegion, nodeRequiresCore, HOURLY_PRODUCTION, type ResourceStorage, type ResourceType } from '@nova-fall/shared';
 import {
   calculateNodeUpkeep,
   calculateDistanceFromHQ,
@@ -16,18 +16,7 @@ import {
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
-// Hourly production rates (resources generated per hour per node type)
-// Note: Credits only come from HQ (passively) or trading/selling at market
-const HOURLY_PRODUCTION: Record<string, Partial<Record<ResourceType, number>>> = {
-  MINING: { iron: 100 },
-  POWER_PLANT: { energy: 80 },
-  REFINERY: { composites: 20 },
-  RESEARCH: { minerals: 15 },
-  AGRICULTURAL: {}, // Food production (future)
-  TRADE_HUB: {}, // Enables market access, no passive production
-  CAPITAL: { credits: 20, iron: 25, energy: 25 }, // Only source of passive credits
-  BARRACKS: {},
-};
+// Note: HOURLY_PRODUCTION is now imported from @nova-fall/shared
 
 interface PlayerEconomyResult {
   playerId: string;
@@ -110,6 +99,7 @@ export async function processUpkeep(): Promise<void> {
         type: true,
         tier: true,
         regionId: true,
+        installedCoreId: true,
         upkeepPaid: true,
         upkeepDue: true,
         upkeepStatus: true,
@@ -187,21 +177,28 @@ export async function processUpkeep(): Promise<void> {
         }
 
         // Calculate resource production for this node type
-        const production = HOURLY_PRODUCTION[node.type] ?? {};
-        const tierMultiplier = 1 + (node.tier - 1) * 0.25; // 25% bonus per tier
+        // Skip production if node requires a core but doesn't have one installed
+        const nodeType = node.type as NodeType;
+        const requiresCore = nodeRequiresCore(nodeType);
+        const isActive = !requiresCore || node.installedCoreId !== null;
 
-        for (const [resourceType, baseAmount] of Object.entries(production)) {
-          if (!baseAmount) continue;
-          const amount = Math.floor(baseAmount * tierMultiplier);
+        if (isActive) {
+          const production = HOURLY_PRODUCTION[node.type] ?? {};
+          const tierMultiplier = 1 + (node.tier - 1) * 0.25; // 25% bonus per tier
 
-          // Track credits separately as income
-          if (resourceType === 'credits') {
-            totalIncome += amount;
+          for (const [resourceType, baseAmount] of Object.entries(production)) {
+            if (!baseAmount) continue;
+            const amount = Math.floor(baseAmount * tierMultiplier);
+
+            // Track credits separately as income
+            if (resourceType === 'credits') {
+              totalIncome += amount;
+            }
+
+            // Add to total generated
+            resourcesGenerated[resourceType as ResourceType] =
+              (resourcesGenerated[resourceType as ResourceType] ?? 0) + amount;
           }
-
-          // Add to total generated
-          resourcesGenerated[resourceType as ResourceType] =
-            (resourcesGenerated[resourceType as ResourceType] ?? 0) + amount;
         }
       }
 

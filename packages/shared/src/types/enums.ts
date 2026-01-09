@@ -9,6 +9,7 @@ export enum NodeType {
   BARRACKS = 'BARRACKS',
   AGRICULTURAL = 'AGRICULTURAL',
   POWER_PLANT = 'POWER_PLANT',
+  MANUFACTURING_PLANT = 'MANUFACTURING_PLANT',
   CAPITAL = 'CAPITAL',
   CROWN = 'CROWN', // Special node for King of the Hill game mode
 }

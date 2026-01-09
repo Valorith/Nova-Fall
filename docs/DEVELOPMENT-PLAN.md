@@ -1147,11 +1147,11 @@ function getConnectionFace(fromNode, toNode): number {
 
 ### 1.5 Node Claiming
 
-- [~] **Claiming mechanics** (partially implemented via POST /nodes/:id/claim)
+- [x] **Claiming mechanics** (implemented via POST /nodes/:id/claim)
   - [x] Validate player can claim
   - [x] Check node is neutral
   - [x] Check adjacency requirement
-  - [~] Deduct claiming cost (TODO - skipped for MVP testing)
+  - [x] Deduct claiming cost
   - [x] Update ownership
 
 - [x] **HQ placement**
@@ -1238,9 +1238,9 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
   - [x] Update claimNode for session scope
   - [x] Update abandonNode for session scope
 
-- [ ] **Update game tick worker**
-  - [ ] Scope resource generation to active sessions
-  - [ ] Scope upkeep processing to active sessions
+- [x] **Update game tick worker**
+  - [x] Scope resource generation to active sessions
+  - [x] Scope upkeep processing to active sessions
 
 #### 1.6.4 Frontend Lobby
 
@@ -1269,9 +1269,9 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
 #### 1.6.5 GameView Updates
 
 - [x] **Accept sessionId prop from route**
-- [~] **Update game store for session context** (partial - store accepts sessionId but not fully scoped yet)
+- [x] **Update game store for session context**
 - [x] **Add "Back to Lobby" navigation**
-- [ ] **Show session name and victory progress**
+- [x] **Show session name and victory progress**
 
 #### 1.6.6 WebSocket Session Scoping
 
@@ -1303,15 +1303,15 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
   - [x] Display victory modal
   - [x] Transition session to COMPLETED status
 
-- [ ] **Verify Section 1.6:**
-  - [ ] User lands at lobby after login
-  - [ ] Can create new game session
-  - [ ] Can join existing session
-  - [ ] Game starts when creator clicks start with 2+ players
-  - [ ] Game is session-scoped (nodes, resources, HQ)
-  - [ ] KOTH: Crown node holder wins after 48h
-  - [ ] Domination: Last player with HQ wins
-  - [ ] Victory modal displays and session completes
+- [x] **Verify Section 1.6:**
+  - [x] User lands at lobby after login
+  - [x] Can create new game session
+  - [x] Can join existing session
+  - [x] Game starts when creator clicks start with 2+ players
+  - [x] Game is session-scoped (nodes, resources, HQ)
+  - [x] KOTH: Crown node holder wins after 48h
+  - [x] Domination: Last player with HQ wins
+  - [x] Victory modal displays and session completes
 
 ### Phase 1 Deliverable
 
@@ -1372,11 +1372,11 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
   - [x] Use database transactions
   - [x] Minimize queries
 
-- [~] **Verify Section 2.2:**
-  - [ ] Worker starts and runs tick job every 5 seconds
-  - [ ] Owned node generates resources over time
-  - [ ] Resource generation appears in node storage
-  - [ ] WebSocket pushes update to connected clients
+- [x] **Verify Section 2.2:**
+  - [x] Worker starts and runs economy tick hourly (5-second tick removed for efficiency)
+  - [x] Owned node generates resources over time
+  - [x] Resource generation appears in player inventory
+  - [x] WebSocket pushes update to connected clients
 
 ### 2.3 Upkeep System
 
@@ -1463,6 +1463,221 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
 ### Phase 2 Deliverable
 
 ✓ Nodes generate resources, upkeep costs money, basic trading works
+
+---
+
+## Phase 2.5: Node Activation & Production Systems
+
+### 2.5.1 Resource Updates
+
+- [x] **Add new resources**
+  - [x] Add "Coal" resource (icon, description)
+  - [x] Add "Grain" resource (icon, description)
+  - [x] Add "Steel Bar" resource (refined material)
+
+- [x] **Rename and update existing resources**
+  - [x] Rename "Iron" → "Iron Ore" throughout codebase (display name was already correct)
+  - [x] Update Iron Ore production rate: 100/hr → 50/hr
+
+- [x] **Update production rates**
+  - [x] Agricultural Center: +25 Coal/hr, +50 Grain/hr
+  - [x] Mining Outpost: 50 Iron Ore/hr (reduced from 100)
+
+- [ ] **Verify Section 2.5.1:**
+  - [ ] New resources display correctly in UI
+  - [ ] Production rates match specification
+  - [ ] Iron Ore rename applied everywhere
+
+### 2.5.2 New Node Type
+
+- [x] **Add MANUFACTURING_PLANT node type**
+  - [x] Add to NodeType enum in Prisma schema
+  - [x] Add to shared types and configs
+  - [x] Configure base stats (storage: 30000, upkeep: 65)
+  - [x] Add to map generation (seed data)
+  - [x] Create migration (20260109031813_add_manufacturing_plant_node_type)
+
+- [ ] **Verify Section 2.5.2:**
+  - [ ] Manufacturing Plant appears on map
+  - [ ] Node tooltip shows correct type info
+  - [ ] Node can be claimed like other nodes
+
+### 2.5.3 Flexible Node Storage
+
+- [x] **Update node storage system**
+  - [x] Change storage from fixed ResourceStorage to flexible item storage
+  - [x] Support any item type (resources, cores, crafted items)
+  - [x] Update storage capacity logic
+  - [x] Update storage UI to handle dynamic item types
+
+- [ ] **Verify Section 2.5.3:**
+  - [ ] Node can store base resources
+  - [ ] Node can store crafted items (Steel Bar)
+  - [ ] Node can store node cores
+  - [ ] Storage UI displays all item types correctly
+
+### 2.5.4 Node Core System
+
+- [x] **Define node core types**
+  ```typescript
+  // packages/shared/src/config/nodeCores.ts
+  export const NODE_CORES = {
+    solar_farm: { id: 'solar_farm', name: 'Solar Farm', targetNode: 'POWER_PLANT', cost: 100 },
+    laboratory: { id: 'laboratory', name: 'Laboratory', targetNode: 'RESEARCH', cost: 100 },
+    refinery: { id: 'refinery', name: 'Refinery', targetNode: 'REFINERY', cost: 100 },
+    greenhouse_biome: { id: 'greenhouse_biome', name: 'Greenhouse Biome', targetNode: 'AGRICULTURAL', cost: 100 },
+    strip_miner: { id: 'strip_miner', name: 'Strip Miner', targetNode: 'MINING', cost: 100 },
+    trading_complex: { id: 'trading_complex', name: 'Trading Complex', targetNode: 'TRADE_HUB', cost: 100 },
+    factory: { id: 'factory', name: 'Factory', targetNode: 'MANUFACTURING_PLANT', cost: 100 },
+    training_facility: { id: 'training_facility', name: 'Training Facility', targetNode: 'BARRACKS', cost: 100 },
+  };
+  ```
+
+- [x] **Database changes**
+  - [x] Add `installedCoreId` field to Node model
+  - [x] Add `isActive` computed/virtual field based on core installation
+  - [x] Create migration (20260109034817_add_installed_core_id)
+
+- [x] **Node activation logic**
+  - [x] Nodes without cores produce nothing (skip in economy tick)
+  - [x] HQ and Crown nodes are always active (no core needed)
+  - [x] Installing core activates the node
+
+- [x] **HQ Core Shop UI**
+  - [x] Create core purchase interface accessible from HQ (modal: "HQ Planetary Drop Terminal")
+  - [x] List all core types with costs
+  - [x] Purchase button deducts credits, adds core to HQ storage
+  - [x] Show current inventory of cores at HQ
+
+- [x] **Core installation UI**
+  - [x] Add core slot visual in node details panel
+  - [x] Show slot as empty/filled based on installed core
+  - [x] If node has matching core in storage, allow installation
+  - [x] Confirmation dialog before installing (destroy has confirmation)
+  - [x] Core destruction option (with confirmation)
+
+- [x] **API endpoints**
+  - [x] `POST /nodes/:id/cores/purchase` - Buy core (HQ only)
+  - [x] `POST /nodes/:id/cores/install` - Install core from storage
+  - [x] `DELETE /nodes/:id/cores` - Destroy installed core
+
+- [x] **Visual indicators**
+  - [x] Inactive nodes show muted/grayed appearance on map (dimmed with amber dashed border)
+  - [x] Active nodes show normal/vibrant appearance
+  - [x] Tooltip indicates active/inactive status (warning banner in details panel)
+
+- [x] **Verify Section 2.5.4:**
+  - [x] Can purchase cores from HQ UI
+  - [x] Cores appear in HQ storage after purchase
+  - [x] Can transfer cores to other nodes
+  - [x] Can install core in matching node type
+  - [x] Node becomes active after core installation
+  - [x] Active node produces resources
+  - [x] Inactive node produces nothing
+  - [x] Visual distinction between active/inactive nodes
+  - [x] Can destroy installed core (node becomes inactive)
+
+### 2.5.5 Crafting System
+
+- [ ] **Define recipe system**
+  ```typescript
+  // packages/shared/src/config/recipes.ts
+  export interface Recipe {
+    id: string;
+    name: string;
+    category: 'refinement' | 'manufacturing' | 'training';
+    craftingNode: NodeType[];  // Which node types can craft this
+    inputs: { itemId: string; quantity: number }[];
+    outputs: { itemId: string; quantity: number }[];
+    craftTime: number;  // seconds
+  }
+
+  export const RECIPES = {
+    steel_bar: {
+      id: 'steel_bar',
+      name: 'Steel Bar',
+      category: 'refinement',
+      craftingNode: ['REFINERY'],
+      inputs: [
+        { itemId: 'iron_ore', quantity: 1 },
+        { itemId: 'coal', quantity: 1 },
+      ],
+      outputs: [{ itemId: 'steel_bar', quantity: 1 }],
+      craftTime: 60,
+    },
+  };
+  ```
+
+- [ ] **Crafting queue system**
+  - [ ] Add crafting queue to Node model (JSON field)
+  - [ ] Queue items with recipe, quantity, start time, completion time
+  - [ ] Process completed crafts in economy tick (or dedicated job)
+
+- [ ] **API endpoints**
+  - [ ] `GET /nodes/:id/recipes` - Available recipes for node type
+  - [ ] `POST /nodes/:id/craft` - Start crafting (add to queue)
+  - [ ] `DELETE /nodes/:id/craft/:queueId` - Cancel queued craft
+  - [ ] `GET /nodes/:id/craft/queue` - Get current crafting queue
+
+- [ ] **Verify Section 2.5.5:**
+  - [ ] Recipes load correctly for each node type
+  - [ ] Can start crafting with sufficient materials
+  - [ ] Materials deducted when crafting starts
+  - [ ] Crafting completes after craft time
+  - [ ] Output items added to node storage
+  - [ ] Can cancel queued crafts (materials refunded)
+
+### 2.5.6 Crafting UI
+
+- [ ] **Create reusable CraftingPanel component**
+  - [ ] Left section: Recipe list (filterable by category)
+  - [ ] Middle section: Selected recipe material requirements
+    - [ ] Show required items with current inventory counts
+    - [ ] Visual indicator for sufficient/insufficient materials
+  - [ ] Right section: Crafting controls
+    - [ ] Quantity selector
+    - [ ] Craft button (disabled if insufficient materials)
+    - [ ] Output preview (what you'll receive)
+    - [ ] Estimated completion time
+
+- [ ] **Crafting queue display**
+  - [ ] Show active crafting with progress bar
+  - [ ] Show queued items with position and ETA
+  - [ ] Cancel button for queued items
+
+- [ ] **Integrate with node types**
+  - [ ] Refinery Complex: Show refinement recipes
+  - [ ] Manufacturing Plant: Show manufacturing recipes
+  - [ ] Barracks: Show unit training recipes
+  - [ ] (Future) Research Station: Recipe discovery
+
+- [ ] **Verify Section 2.5.6:**
+  - [ ] Crafting UI opens for applicable node types
+  - [ ] Recipe list displays correctly
+  - [ ] Material requirements update based on selection
+  - [ ] Can craft items through UI
+  - [ ] Queue displays with progress
+  - [ ] Can cancel queued items
+
+### 2.5.7 Unit Training Framework
+
+- [ ] **Define initial unit types**
+  - [ ] Basic infantry unit (trained at Barracks)
+  - [ ] Unit stats structure (health, damage, speed, etc.)
+  - [ ] Training cost and time
+
+- [ ] **Barracks training integration**
+  - [ ] Use crafting system for unit training
+  - [ ] Units added to node garrison on completion
+
+- [ ] **Verify Section 2.5.7:**
+  - [ ] Can train basic unit at Barracks
+  - [ ] Unit appears in garrison after training
+  - [ ] Training uses crafting UI
+
+### Phase 2.5 Deliverable
+
+✓ Nodes require cores to activate, crafting system works, basic unit training available
 
 ---
 

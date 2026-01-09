@@ -27,6 +27,7 @@ export interface MapNode {
   upkeepStatus?: UpkeepStatus; // Current upkeep payment status
   claimedAt?: string | null; // When the node was claimed (used for crown countdown)
   storage?: NodeResources; // Resources stored in the node
+  installedCoreId?: string | null; // Installed node core (activates production)
 }
 
 // Upkeep breakdown for display

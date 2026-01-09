@@ -35,7 +35,8 @@
       "Bash(npx esbuild:*)",
       "Bash(node -e:*)",
       "Bash(npx tsx:*)",
-      "Bash(npx tsup)"
+      "Bash(npx tsup)",
+      "Skill(update)"
     ]
   }
 }

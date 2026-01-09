@@ -10,10 +10,10 @@
 | Metric                 | Value                      |
 | ---------------------- | -------------------------- |
 | **Project Start Date** | 2026-01-04                 |
-| **Current Phase**      | Phase 2 - Economy & Resources |
-| **Overall Progress**   | Phase 1 complete, Phase 2 in progress |
+| **Current Phase**      | Phase 2.5 - Node Activation & Production |
+| **Overall Progress**   | Phases 0-2 complete, Phase 2.5 in progress |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 32                         |
+| **Total Sessions**     | 35                         |
 
 ---
 
@@ -23,11 +23,12 @@
 | --------------------------------- | -------------- | ---------- | ---------- | -------- |
 | Phase 0: Foundation               | 🟢 Complete    | 2026-01-04 | 2026-01-05 | 2 days   |
 | Phase 1: World & Nodes            | 🟢 Complete    | 2026-01-05 | 2026-01-06 | 2 days   |
-| Phase 2: Economy & Resources      | 🔵 In Progress | 2026-01-06 | -          | -        |
-| Phase 3: Buildings & Construction | ⚪ Pending     | -          | -        | -        |
-| Phase 4: Combat System            | ⚪ Pending     | -          | -        | -        |
-| Phase 5: Trading & Caravans       | ⚪ Pending     | -          | -        | -        |
-| Phase 6: Polish & MVP Launch      | ⚪ Pending     | -          | -        | -        |
+| Phase 2: Economy & Resources      | 🟢 Complete    | 2026-01-06 | 2026-01-08 | 3 days   |
+| Phase 2.5: Node Activation & Prod | 🔵 In Progress | 2026-01-08 | -          | -        |
+| Phase 3: Buildings & Construction | ⚪ Pending     | -          | -          | -        |
+| Phase 4: Combat System            | ⚪ Pending     | -          | -          | -        |
+| Phase 5: Trading & Caravans       | ⚪ Pending     | -          | -          | -        |
+| Phase 6: Polish & MVP Launch      | ⚪ Pending     | -          | -          | -        |
 
 **Legend:** ⚪ Pending | 🔵 In Progress | 🟢 Complete | 🔴 Blocked
 
@@ -2297,6 +2298,221 @@ CAPITAL: { credits: 20, iron: 25, energy: 25 },
 
 ---
 
+## Session 33 - 2026-01-08
+
+**Duration:** ~1 hour
+**Phase:** Phase 2.5 - Node Activation & Production
+**Focus:** Phase 2.5 implementation (Sections 2.5.1-2.5.3)
+
+### Completed Tasks
+
+**Section 2.5.1 - New Resources:**
+- [x] Added 3 new resources to ResourceType: coal, grain, steelBar
+- [x] Added market prices for new resources
+- [x] Updated production rates (Agricultural: +25 coal/hr, +50 grain/hr; Mining: 50 iron/hr)
+- [x] Updated TRADEABLE_RESOURCES array
+
+**Section 2.5.2 - New Node Type:**
+- [x] Added MANUFACTURING_PLANT to NodeType enum in Prisma schema
+- [x] Added to shared types and configs (NODE_TYPE_CONFIGS)
+- [x] Configured base stats (storage: 30000, upkeep: 65)
+- [x] Added to map generation with weighted distribution per region
+- [x] Created migration: `20260109031813_add_manufacturing_plant_node_type`
+
+**Section 2.5.3 - Flexible Node Storage:**
+- [x] Created `packages/shared/src/config/items.ts` - Unified item system
+- [x] Changed storage from ResourceStorage to flexible ItemStorage type
+- [x] Added helper functions: getStorageItems, getTotalItemCount, addItems, removeItems
+- [x] Item system supports resources, cores (future), and any future item types
+- [x] Updated NodeTooltip.vue to use getStorageItems()
+- [x] Updated ResourceDisplay.vue to use ItemStorage with dynamic item support
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Unified item system | Single storage type for resources, cores, equipment - extensible |
+| ItemStorage = Partial<Record<string, number>> | Generic enough for any item type |
+| getStorageItems() returns sorted array with definitions | Consistent display across all UI components |
+
+### Technical Details
+
+**New Item System:**
+```typescript
+// packages/shared/src/config/items.ts
+export type ItemStorage = Partial<Record<string, number>>;
+
+export function getStorageItems(storage: ItemStorage): Array<{
+  itemId: string;
+  amount: number;
+  definition: ItemDefinition | undefined;
+}>
+```
+
+**Manufacturing Plant Config:**
+```typescript
+[NodeType.MANUFACTURING_PLANT]: {
+  displayName: 'Manufacturing Plant',
+  baseUpkeep: 65,
+  resourceBonuses: { composites: 1.25 },
+  buildingSlots: 10,
+  defaultResources: { iron: 100, energy: 75 },
+  claimCost: { credits: 800, iron: 150, energy: 100 },
+}
+```
+
+### Files Created/Modified
+
+- `packages/shared/src/config/items.ts` - Created (new item system)
+- `packages/shared/src/config/index.ts` - Added items export
+- `packages/shared/src/config/resources.ts` - Added coal, grain, steelBar resources
+- `packages/shared/src/types/enums.ts` - Added MANUFACTURING_PLANT
+- `packages/shared/src/config/nodes.ts` - Added Manufacturing Plant config
+- `apps/api/prisma/schema.prisma` - Added MANUFACTURING_PLANT enum value
+- `apps/api/prisma/map-data.ts` - Added Manufacturing Plant to map generation
+- `apps/worker/src/jobs/upkeep.ts` - Updated production rates
+- `apps/web/src/components/game/NodeTooltip.vue` - Use getStorageItems()
+- `apps/web/src/components/game/ResourceDisplay.vue` - Use ItemStorage type
+
+### Issues Encountered
+
+- **Coal icon emoji encoding:** UTF-8 emoji got corrupted during write. Fixed with sed command using proper UTF-8 bytes.
+- **TypeScript errors:** `getTotalItemCount` reduce accumulator needed explicit `<number>` generic.
+
+### Next Session Plan
+
+1. Run migration and reseed database in PowerShell
+2. Verify Section 2.5.1-2.5.3 (new resources, Manufacturing Plant, storage UI)
+3. Begin Section 2.5.4: Node Core System
+4. Implement core purchase from HQ and installation flow
+
+---
+
+## Session 34 - 2026-01-08
+
+**Duration:** ~1.5 hours
+**Phase:** Phase 2.5 - Node Activation & Production
+**Focus:** Complete Section 2.5.4 - Node Core System
+
+### Completed Tasks
+
+**Section 2.5.4 - Node Core System:**
+- [x] Created `packages/shared/src/config/nodeCores.ts` - 8 core types defined
+- [x] Added `installedCoreId` field to Node model in Prisma schema
+- [x] Created migration: `20260109034817_add_installed_core_id`
+- [x] Updated economy tick in `upkeep.ts` to skip inactive nodes
+- [x] Created API endpoints: purchase, install, destroy cores
+- [x] Created `CoreShopPanel.vue` - HQ core purchase interface
+- [x] Created `CoreSlotPanel.vue` - Install/destroy cores on nodes
+- [x] Integrated core UI into GameView.vue
+- [x] Created "HQ Planetary Drop Terminal" modal for core shop
+- [x] Added visual indicators for inactive nodes on map (dimmed + amber border)
+- [x] Added `installedCoreId` to all node API responses
+- [x] Core names include "(Core)" suffix for clarity
+
+### Bug Fixes
+
+- **Error message parsing:** Fixed API error responses to access `data.error?.message`
+- **Vite proxy:** Added `rewrite` rule to strip `/api` prefix when forwarding to backend
+- **HQ storage update:** CoreShopPanel now emits storage/credits directly for instant UI update
+- **Transfer panel:** Fixed to show source node storage (not destination), uses `ItemStorage` type
+- **Core install state update:** Install/destroy now return updated storage for immediate UI update
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| HQ Planetary Drop Terminal modal | Separates shop from node details, thematic naming |
+| Core names with "(Core)" suffix | Clear distinction from node types in UI |
+| Immediate state updates from API response | No second API call needed, instant feedback |
+
+### Files Created
+
+- `packages/shared/src/config/nodeCores.ts` - Core type definitions
+- `apps/web/src/components/game/CoreShopPanel.vue` - HQ purchase interface
+- `apps/web/src/components/game/CoreSlotPanel.vue` - Node installation interface
+- `apps/api/prisma/migrations/20260109034817_add_installed_core_id/` - Migration
+
+### Files Modified
+
+- `packages/shared/src/config/items.ts` - Added core support to item system
+- `packages/shared/src/types/node.ts` - Added `installedCoreId` to MapNode
+- `apps/api/src/modules/nodes/service.ts` - Core purchase/install/destroy functions
+- `apps/api/src/modules/nodes/routes.ts` - 3 new API endpoints
+- `apps/api/src/modules/nodes/types.ts` - Added `installedCoreId` to response types
+- `apps/worker/src/jobs/upkeep.ts` - Skip inactive nodes in production
+- `apps/web/src/game/rendering/WorldRenderer.ts` - Inactive node visual indicator
+- `apps/web/src/views/GameView.vue` - Core UI integration, handlers, modal
+- `apps/web/src/components/game/TransferPanel.vue` - ItemStorage support, source storage fix
+- `apps/web/vite.config.ts` - Added proxy rewrite rule
+
+### Notes
+
+- Section 2.5.4 code complete, ready for manual testing
+- All typechecks pass
+- User successfully tested purchase and install flow
+
+### Next Session Plan
+
+1. Complete Section 2.5.4 verification tasks (manual testing)
+2. Begin Section 2.5.5: Crafting System
+3. Design recipe system for refinement/manufacturing
+
+---
+
+## Session 35 - 2026-01-09
+
+**Duration:** ~30 minutes
+**Phase:** Phase 2.5 - Node Activation & Production
+**Focus:** Section 2.5.4 verification and production UI
+
+### Completed Tasks
+
+**Section 2.5.4 - Verification Complete:**
+- [x] Verified active/inactive node production logic in backend code
+- [x] Traced through economy tick logic confirming inactive nodes produce nothing
+- [x] Added `HOURLY_PRODUCTION` constant to shared package (moved from worker)
+- [x] Added `getNodeProduction()` and `nodeHasProduction()` helper functions
+- [x] Added production display section to NodeTooltip component
+- [x] Added production display section to node details sidebar
+- [x] Fixed Refinery to have no passive production (crafting only)
+- [x] Marked all Section 2.5.4 verification tasks complete
+
+### Production UI Features
+
+- Shows production rates for each node type (e.g., "⛏️ +50/hr")
+- Active/Inactive badge for nodes requiring cores
+- Visual distinction: green for active, gray/dimmed for inactive
+- "Install core to activate" warning for inactive nodes
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Refinery has no passive production | Only serves as crafting facility, no passive output |
+| HOURLY_PRODUCTION in shared package | Single source of truth for frontend display and backend logic |
+
+### Files Modified
+
+- `packages/shared/src/config/resources.ts` - Added HOURLY_PRODUCTION, getNodeProduction(), nodeHasProduction()
+- `apps/worker/src/jobs/upkeep.ts` - Imports HOURLY_PRODUCTION from shared
+- `apps/web/src/components/game/NodeTooltip.vue` - Production section with active/inactive status
+- `apps/web/src/views/GameView.vue` - Production display in node details sidebar
+
+### Notes
+
+- Section 2.5.4 (Node Core System) is fully complete
+- All verification tasks passed through manual testing and code review
+- Ready to begin Section 2.5.5: Crafting System
+
+### Next Session Plan
+
+1. Begin Section 2.5.5: Crafting System
+2. Define recipe system for refinement/manufacturing
+3. Implement crafting queue and processing
+
+---
+
 ## Blockers Log
 
 <!-- Track all blockers here for visibility -->
@@ -2464,4 +2680,4 @@ CAPITAL: { credits: 20, iron: 25, energy: 25 },
 
 ---
 
-_Last Updated: 2026-01-08 (Session 32 - Bug fixes during manual testing, UI improvements)_
+_Last Updated: 2026-01-08 (Session 34 - Section 2.5.4 Node Core System complete)_

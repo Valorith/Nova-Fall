@@ -1,34 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { RESOURCES, type ResourceType, type ResourceStorage } from '@nova-fall/shared';
+import { getStorageItems, getTotalItemCount, type ItemStorage } from '@nova-fall/shared';
 import Tooltip from '@/components/ui/Tooltip.vue';
 
 const props = defineProps<{
-  resources: ResourceStorage;
+  resources: ItemStorage;
   showZero?: boolean;
   compact?: boolean;
   maxCapacity?: number;
 }>();
 
-// Get resources to display (filter out zeros unless showZero is true)
-const displayResources = computed(() => {
-  const entries: { type: ResourceType; amount: number; def: typeof RESOURCES.credits }[] = [];
+// Get items to display using the flexible item system
+const displayItems = computed(() => {
+  const items = getStorageItems(props.resources);
 
-  for (const [type, amount] of Object.entries(props.resources)) {
-    if (amount === undefined || amount === null) continue;
-    if (!props.showZero && amount === 0) continue;
-
-    const def = RESOURCES[type as ResourceType];
-    if (def) {
-      entries.push({ type: type as ResourceType, amount, def });
-    }
+  // Filter out zeros unless showZero is true
+  if (!props.showZero) {
+    return items.filter(item => item.amount > 0);
   }
 
-  // Sort by tier, then by name
-  return entries.sort((a, b) => {
-    if (a.def.tier !== b.def.tier) return a.def.tier - b.def.tier;
-    return a.def.name.localeCompare(b.def.name);
-  });
+  return items;
 });
 
 // Format large numbers
@@ -44,7 +35,7 @@ function formatAmount(amount: number): string {
 
 // Calculate total storage used
 const totalUsed = computed(() => {
-  return Object.values(props.resources).reduce((sum, val) => sum + (val ?? 0), 0);
+  return getTotalItemCount(props.resources);
 });
 
 const storagePercent = computed(() => {
@@ -70,23 +61,23 @@ const storagePercent = computed(() => {
       </div>
     </div>
 
-    <!-- No resources message -->
+    <!-- No items message -->
     <div
-      v-if="displayResources.length === 0"
+      v-if="displayItems.length === 0"
       class="text-center text-gray-500 text-sm py-2"
     >
-      No resources stored
+      No items stored
     </div>
 
-    <!-- Resource list -->
+    <!-- Item list (supports resources, cores, and any future items) -->
     <div
       v-else
       :class="compact ? 'flex flex-wrap gap-2' : 'grid grid-cols-2 gap-2'"
     >
       <Tooltip
-        v-for="{ type, amount, def } in displayResources"
-        :key="type"
-        :text="def.description"
+        v-for="item in displayItems"
+        :key="item.itemId"
+        :text="item.definition?.description ?? 'Unknown item'"
         position="left"
       >
         <div
@@ -95,12 +86,12 @@ const storagePercent = computed(() => {
             compact ? 'bg-gray-800/50' : 'bg-gray-800/30'
           ]"
         >
-          <span class="text-base">{{ def.icon }}</span>
+          <span class="text-base">{{ item.definition?.icon ?? '📦' }}</span>
           <span :class="compact ? 'text-xs' : 'text-sm'" class="text-gray-300">
-            {{ formatAmount(amount) }}
+            {{ formatAmount(item.amount) }}
           </span>
           <span v-if="!compact" class="text-xs text-gray-500 truncate">
-            {{ def.name }}
+            {{ item.definition?.name ?? item.itemId }}
           </span>
         </div>
       </Tooltip>

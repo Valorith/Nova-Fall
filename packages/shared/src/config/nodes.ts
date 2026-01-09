@@ -89,6 +89,18 @@ export const NODE_TYPE_CONFIGS: Record<NodeType, NodeTypeConfig> = {
     color: '#00CED1',
     icon: 'power',
   },
+  [NodeType.MANUFACTURING_PLANT]: {
+    type: NodeType.MANUFACTURING_PLANT,
+    displayName: 'Manufacturing Plant',
+    description: 'Industrial facility for producing advanced equipment and non-biological units.',
+    baseUpkeep: 65,
+    resourceBonuses: { composites: 1.25 },
+    buildingSlots: 10,
+    defaultResources: { iron: 100, energy: 75 },
+    claimCost: { credits: 800, iron: 150, energy: 100 },
+    color: '#4A5568',
+    icon: 'manufacturing',
+  },
   [NodeType.CAPITAL]: {
     type: NodeType.CAPITAL,
     displayName: 'Capital',

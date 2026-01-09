@@ -186,4 +186,102 @@ export async function nodeRoutes(app: FastifyInstance) {
 
     return { success: true };
   });
+
+  // ==================== NODE CORE MANAGEMENT ====================
+
+  // POST /nodes/:id/cores/purchase - Purchase a core at HQ
+  // Requires active game session, must be at HQ
+  app.post('/nodes/:id/cores/purchase', {
+    preHandler: [requireAuth, requireActiveSession],
+  }, async (request) => {
+    const { id: nodeId } = request.params as { id: string };
+    const { coreId } = request.body as { coreId: string };
+    const req = request as AuthenticatedRequest;
+
+    if (!req.playerId || !req.gameSessionId || !req.sessionPlayerId) {
+      throw AppError.badRequest('Session context required');
+    }
+
+    if (!coreId) {
+      throw AppError.badRequest('coreId is required');
+    }
+
+    const result = await nodeService.purchaseCore(
+      nodeId,
+      coreId,
+      req.playerId,
+      req.gameSessionId,
+      req.sessionPlayerId
+    );
+
+    if (!result.success) {
+      throw AppError.badRequest(result.error ?? 'Failed to purchase core');
+    }
+
+    return {
+      success: true,
+      storage: result.storage,
+      creditsRemaining: result.creditsRemaining,
+    };
+  });
+
+  // POST /nodes/:id/cores/install - Install a core from storage
+  // Requires active game session
+  app.post('/nodes/:id/cores/install', {
+    preHandler: [requireAuth, requireActiveSession],
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const { coreId } = request.body as { coreId: string };
+    const req = request as AuthenticatedRequest;
+
+    if (!req.playerId || !req.gameSessionId) {
+      throw AppError.badRequest('Session context required');
+    }
+
+    if (!coreId) {
+      throw AppError.badRequest('coreId is required');
+    }
+
+    const result = await nodeService.installCore(
+      id,
+      coreId,
+      req.playerId,
+      req.gameSessionId
+    );
+
+    if (!result.success) {
+      throw AppError.badRequest(result.error ?? 'Failed to install core');
+    }
+
+    return {
+      success: true,
+      installedCoreId: result.installedCoreId,
+      storage: result.storage,
+    };
+  });
+
+  // DELETE /nodes/:id/cores - Destroy installed core
+  // Requires active game session
+  app.delete('/nodes/:id/cores', {
+    preHandler: [requireAuth, requireActiveSession],
+  }, async (request) => {
+    const { id } = request.params as { id: string };
+    const req = request as AuthenticatedRequest;
+
+    if (!req.playerId || !req.gameSessionId) {
+      throw AppError.badRequest('Session context required');
+    }
+
+    const result = await nodeService.destroyCore(
+      id,
+      req.playerId,
+      req.gameSessionId
+    );
+
+    if (!result.success) {
+      throw AppError.badRequest(result.error ?? 'Failed to destroy core');
+    }
+
+    return { success: true, storage: result.storage };
+  });
 }

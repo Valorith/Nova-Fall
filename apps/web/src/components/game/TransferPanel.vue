@@ -2,13 +2,13 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { transfersApi, type TransferResponse, type CreateTransferRequest } from '@/services/api';
 import { useGameStore } from '@/stores/game';
-import type { MapNode, ResourceStorage, ResourceType } from '@nova-fall/shared';
-import { RESOURCES } from '@nova-fall/shared';
+import type { MapNode, ItemStorage } from '@nova-fall/shared';
+import { getItemDefinition } from '@nova-fall/shared';
 
 const props = defineProps<{
   sourceNode: MapNode;
   destNode: MapNode; // Pre-selected destination node
-  nodeStorage: ResourceStorage;
+  nodeStorage: ItemStorage;
 }>();
 
 const emit = defineEmits<{
@@ -26,15 +26,15 @@ const error = ref<string | null>(null);
 const success = ref<string | null>(null);
 
 const transferableResources = computed(() => {
-  const resources: { type: ResourceType; name: string; available: number; icon: string }[] = [];
-  const storage = props.nodeStorage;
+  const items: { type: string; name: string; available: number; icon: string }[] = [];
+  const storage = props.nodeStorage as ItemStorage;
 
   for (const [type, amount] of Object.entries(storage)) {
     if (type === 'credits' || !amount || amount <= 0) continue;
-    const def = RESOURCES[type as ResourceType];
+    const def = getItemDefinition(type);
     if (def) {
-      resources.push({
-        type: type as ResourceType,
+      items.push({
+        type,
         name: def.name,
         available: amount,
         icon: def.icon,
@@ -42,7 +42,7 @@ const transferableResources = computed(() => {
     }
   }
 
-  return resources;
+  return items;
 });
 
 const hasAnyTransfer = computed(() => {
@@ -53,7 +53,7 @@ const transferPreview = computed(() => {
   const items: { type: string; name: string; amount: number }[] = [];
   for (const [type, amount] of Object.entries(transferAmounts.value)) {
     if (amount > 0) {
-      const def = RESOURCES[type as ResourceType];
+      const def = getItemDefinition(type);
       items.push({
         type,
         name: def?.name ?? type,

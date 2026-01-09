@@ -1,7 +1,15 @@
 import { prisma } from '../../lib/prisma.js';
 import { redis } from '../../lib/redis.js';
 import { publishNodeClaimed, publishCrownChanged } from '../../lib/events.js';
-import { NODE_CLAIM_COST_BY_TIER, type ResourceStorage } from '@nova-fall/shared';
+import {
+  NODE_CLAIM_COST_BY_TIER,
+  NODE_CORES,
+  type NodeCoreId,
+  type ResourceStorage,
+  type ItemStorage,
+  canInstallCore,
+  nodeRequiresCore,
+} from '@nova-fall/shared';
 import type { NodeStatus, NodeType } from '@prisma/client';
 import type {
   MapNodeResponse,
@@ -72,6 +80,7 @@ export async function getNodes(query: NodeListQuery): Promise<PaginatedResponse<
       ownerId: node.ownerId,
       status: node.status,
       storage: node.storage as Record<string, number>,
+      installedCoreId: node.installedCoreId,
     };
     if (node.owner?.displayName) {
       result.ownerName = node.owner.displayName;
@@ -146,6 +155,7 @@ export async function getAllNodes(sessionId?: string): Promise<MapNodeResponse[]
       ownerId: node.ownerId,
       status: node.status,
       storage: node.storage as Record<string, number>,
+      installedCoreId: node.installedCoreId,
     };
     if (node.owner?.displayName) {
       result.ownerName = node.owner.displayName;
@@ -242,6 +252,7 @@ export async function getNodeById(nodeId: string): Promise<NodeDetailResponse | 
     ownerId: node.ownerId,
     status: node.status,
     storage: node.storage as Record<string, number>,
+    installedCoreId: node.installedCoreId,
     claimedAt: node.claimedAt?.toISOString() ?? null,
     upkeepDue: node.upkeepDue?.toISOString() ?? null,
     upkeepPaid: node.upkeepPaid?.toISOString() ?? null,
@@ -585,4 +596,219 @@ export async function abandonNode(
   // TODO: Publish node abandoned event for real-time updates
 
   return { success: true };
+}
+
+// ==================== NODE CORE MANAGEMENT ====================
+
+export interface CorePurchaseResult {
+  success: boolean;
+  error?: string;
+  storage?: ItemStorage;
+  creditsRemaining?: number;
+}
+
+export interface CoreInstallResult {
+  success: boolean;
+  error?: string;
+  installedCoreId?: string;
+  storage?: ItemStorage;
+}
+
+// Purchase a core at HQ - adds to HQ storage
+export async function purchaseCore(
+  nodeId: string,
+  coreId: string,
+  playerId: string,
+  gameSessionId: string,
+  sessionPlayerId: string
+): Promise<CorePurchaseResult> {
+  // Validate core type
+  const coreDef = NODE_CORES[coreId as NodeCoreId];
+  if (!coreDef) {
+    return { success: false, error: 'Invalid core type' };
+  }
+
+  // Get session player to check HQ and credits
+  const sessionPlayer = await prisma.gameSessionPlayer.findUnique({
+    where: { id: sessionPlayerId },
+    select: {
+      hqNodeId: true,
+      resources: true,
+    },
+  });
+
+  if (!sessionPlayer?.hqNodeId) {
+    return { success: false, error: 'No headquarters found' };
+  }
+
+  // Verify the nodeId is the HQ
+  if (nodeId !== sessionPlayer.hqNodeId) {
+    return { success: false, error: 'Cores can only be purchased at your headquarters' };
+  }
+
+  // Check if player has enough credits
+  const playerResources = sessionPlayer.resources as ResourceStorage;
+  const credits = playerResources.credits ?? 0;
+
+  if (credits < coreDef.cost) {
+    return { success: false, error: `Not enough credits. Need ${coreDef.cost}, have ${credits}` };
+  }
+
+  // Get HQ node to add core to storage
+  const hqNode = await prisma.node.findUnique({
+    where: { id: sessionPlayer.hqNodeId },
+    select: { id: true, storage: true, ownerId: true, gameSessionId: true },
+  });
+
+  if (!hqNode || hqNode.ownerId !== playerId || hqNode.gameSessionId !== gameSessionId) {
+    return { success: false, error: 'HQ not found or not owned by you' };
+  }
+
+  // Deduct credits and add core to HQ storage
+  const updatedCredits = credits - coreDef.cost;
+  const hqStorage = hqNode.storage as ItemStorage;
+  const currentCoreCount = hqStorage[coreId] ?? 0;
+  const updatedStorage: ItemStorage = {
+    ...hqStorage,
+    [coreId]: currentCoreCount + 1,
+  };
+
+  // Update both in a transaction
+  await prisma.$transaction([
+    prisma.gameSessionPlayer.update({
+      where: { id: sessionPlayerId },
+      data: {
+        resources: { ...playerResources, credits: updatedCredits },
+      },
+    }),
+    prisma.node.update({
+      where: { id: hqNode.id },
+      data: { storage: updatedStorage },
+    }),
+  ]);
+
+  return {
+    success: true,
+    storage: updatedStorage,
+    creditsRemaining: updatedCredits,
+  };
+}
+
+// Install a core from node storage into the node
+export async function installCore(
+  nodeId: string,
+  coreId: string,
+  playerId: string,
+  gameSessionId: string
+): Promise<CoreInstallResult> {
+  // Validate core type
+  const coreDef = NODE_CORES[coreId as NodeCoreId];
+  if (!coreDef) {
+    return { success: false, error: 'Invalid core type' };
+  }
+
+  // Get node to check ownership and type
+  const node = await prisma.node.findUnique({
+    where: { id: nodeId },
+    select: {
+      id: true,
+      type: true,
+      ownerId: true,
+      gameSessionId: true,
+      storage: true,
+      installedCoreId: true,
+    },
+  });
+
+  if (!node) {
+    return { success: false, error: 'Node not found' };
+  }
+
+  if (node.ownerId !== playerId || node.gameSessionId !== gameSessionId) {
+    return { success: false, error: 'You do not own this node' };
+  }
+
+  // Check if node already has a core installed
+  if (node.installedCoreId) {
+    return { success: false, error: 'Node already has a core installed. Destroy it first.' };
+  }
+
+  // Check if this core type can be installed in this node type
+  if (!canInstallCore(coreId as NodeCoreId, node.type as unknown as import('@nova-fall/shared').NodeType)) {
+    return {
+      success: false,
+      error: `${coreDef.name} can only be installed in ${coreDef.targetNode} nodes`,
+    };
+  }
+
+  // Check if node has the core in storage
+  const nodeStorage = node.storage as ItemStorage;
+  const coreCount = nodeStorage[coreId] ?? 0;
+
+  if (coreCount < 1) {
+    return { success: false, error: 'No core of this type in node storage' };
+  }
+
+  // Remove core from storage and install it
+  const updatedStorage: ItemStorage = { ...nodeStorage };
+  if (coreCount === 1) {
+    delete updatedStorage[coreId];
+  } else {
+    updatedStorage[coreId] = coreCount - 1;
+  }
+
+  await prisma.node.update({
+    where: { id: nodeId },
+    data: {
+      storage: updatedStorage,
+      installedCoreId: coreId,
+    },
+  });
+
+  return { success: true, installedCoreId: coreId, storage: updatedStorage };
+}
+
+// Destroy an installed core (cannot be recovered)
+export async function destroyCore(
+  nodeId: string,
+  playerId: string,
+  gameSessionId: string
+): Promise<CoreInstallResult> {
+  // Get node to check ownership
+  const node = await prisma.node.findUnique({
+    where: { id: nodeId },
+    select: {
+      id: true,
+      type: true,
+      ownerId: true,
+      gameSessionId: true,
+      installedCoreId: true,
+      storage: true,
+    },
+  });
+
+  if (!node) {
+    return { success: false, error: 'Node not found' };
+  }
+
+  if (node.ownerId !== playerId || node.gameSessionId !== gameSessionId) {
+    return { success: false, error: 'You do not own this node' };
+  }
+
+  if (!node.installedCoreId) {
+    return { success: false, error: 'No core installed in this node' };
+  }
+
+  // Check if this is an HQ or Crown node (always active, can't have cores)
+  if (!nodeRequiresCore(node.type as unknown as import('@nova-fall/shared').NodeType)) {
+    return { success: false, error: 'This node type does not use cores' };
+  }
+
+  // Remove the installed core
+  await prisma.node.update({
+    where: { id: nodeId },
+    data: { installedCoreId: null },
+  });
+
+  return { success: true, storage: node.storage as ItemStorage };
 }

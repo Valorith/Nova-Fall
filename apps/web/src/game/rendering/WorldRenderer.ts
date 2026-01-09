@@ -1,6 +1,6 @@
 import { Container, Graphics, RenderTexture, Sprite, Text, TextStyle, type Application } from 'pixi.js';
 import type { MapNode } from '@nova-fall/shared';
-import { TerrainType, TERRAIN_CONFIGS, NodeType } from '@nova-fall/shared';
+import { TerrainType, TERRAIN_CONFIGS, NodeType, nodeRequiresCore } from '@nova-fall/shared';
 import type { Camera } from '../engine/Camera';
 import type { ZoomLevel } from '../engine/GameEngine';
 import {
@@ -766,6 +766,38 @@ export class WorldRenderer {
         drawDollarSign(g, pixel.x, pixel.y + 2, 16);
         g.stroke();
       }
+
+      // Inactive node indicator (owned nodes that require but don't have a core)
+      const requiresCore = nodeRequiresCore(node.type);
+      const isInactive = requiresCore && node.ownerId && !node.installedCoreId;
+
+      if (isInactive) {
+        // Dim overlay to show node is not producing
+        drawHexPath(g, pixel.x, pixel.y, HEX_SIZE - 2);
+        g.fill({ color: 0x000000, alpha: 0.4 });
+
+        // Dashed amber border to indicate needs attention
+        g.setStrokeStyle({ width: 2, color: 0xffa500, alpha: 0.8 });
+        // Draw dashed effect using small segments
+        for (let i = 0; i < 6; i++) {
+          const startAngle = (Math.PI / 3) * i;
+          const endAngle = (Math.PI / 3) * (i + 0.6); // Only draw 60% of each edge
+          const startX = pixel.x + (HEX_SIZE - 2) * Math.cos(startAngle);
+          const startY = pixel.y + (HEX_SIZE - 2) * Math.sin(startAngle);
+          const endX = pixel.x + (HEX_SIZE - 2) * Math.cos(endAngle);
+          const endY = pixel.y + (HEX_SIZE - 2) * Math.sin(endAngle);
+          g.moveTo(startX, startY);
+          g.lineTo(endX, endY);
+        }
+        g.stroke();
+
+        // Small "?" indicator in the center
+        g.circle(pixel.x, pixel.y, 8);
+        g.fill({ color: 0xffa500, alpha: 0.9 });
+        g.setStrokeStyle({ width: 1, color: 0x000000, alpha: 0.8 });
+        g.circle(pixel.x, pixel.y, 8);
+        g.stroke();
+      }
     }
 
     // Clean up old texture and sprite
@@ -822,7 +854,8 @@ export class WorldRenderer {
       data.ownerId !== undefined && data.ownerId !== existingNode.ownerId ||
       data.isHQ !== undefined && data.isHQ !== existingNode.isHQ ||
       data.isCrown !== undefined && data.isCrown !== existingNode.isCrown ||
-      data.status !== undefined && data.status !== existingNode.status;
+      data.status !== undefined && data.status !== existingNode.status ||
+      data.installedCoreId !== undefined && data.installedCoreId !== existingNode.installedCoreId;
 
     // Update the node data
     const updatedNode: MapNode = { ...existingNode, ...data };

@@ -237,12 +237,12 @@ Examples:
 
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
-| **Current Phase**  | Phase 2 - Economy & Resources             |
-| **Phase Progress** | Section 2.5 complete, Section 1.6 verification pending |
-| **Current Task**   | Complete Section 1.6 verification tasks   |
+| **Current Phase**  | Phase 2.5 - Node Activation & Production  |
+| **Phase Progress** | Sections 2.5.1-2.5.4 complete             |
+| **Current Task**   | Section 2.5.5 - Crafting System           |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 32 - 2026-01-08                   |
-| **Last Updated**   | 2026-01-08                                |
+| **Last Session**   | Session 35 - 2026-01-09                   |
+| **Last Updated**   | 2026-01-09                                |
 
 ---
 
@@ -301,6 +301,18 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-07 | Transfer animations private to owner      | Strategic - opponents can't see your resource movements | User     |
 | 2026-01-08 | Event-based victory conditions            | No polling; crown/HQ events trigger victory checks     | User        |
 | 2026-01-08 | HQ only passive credit income (20/hr)     | All other credits come from trading/selling resources  | User        |
+| 2026-01-08 | Node core activation system               | Non-HQ/Crown nodes inactive until core installed       | User        |
+| 2026-01-08 | 8 node core types (one per node type)     | Solar Farm, Laboratory, Refinery, etc. - 100 credits each | User     |
+| 2026-01-08 | Cores purchased at HQ, transferred/installed | Cannot withdraw once installed, can destroy            | User        |
+| 2026-01-08 | New resources: Coal, Grain, Steel Bar     | Coal/Grain from Agricultural; Steel Bar crafted        | User        |
+| 2026-01-08 | Rename Iron → Iron Ore, reduce to 50/hr   | Clarity for crafting system                            | User        |
+| 2026-01-08 | MANUFACTURING_PLANT new node type         | Creates non-biological units/items with Factory core   | User        |
+| 2026-01-08 | Flexible node storage for any item type   | Supports resources, cores, crafted items               | User        |
+| 2026-01-08 | Reusable crafting UI component            | Left: recipes, Middle: materials, Right: controls      | User        |
+| 2026-01-08 | Refinery Complex for refinement recipes   | First recipe: 1 Iron Ore + 1 Coal = 1 Steel Bar        | User        |
+| 2026-01-08 | Unified ItemStorage type (items.ts)       | Generic Record<string, number> for any item category   | Claude      |
+| 2026-01-09 | Refinery has no passive production        | Only serves as crafting facility, no passive output    | User        |
+| 2026-01-09 | HOURLY_PRODUCTION in shared package       | Single source of truth for frontend and backend        | Claude      |
 
 ---
 

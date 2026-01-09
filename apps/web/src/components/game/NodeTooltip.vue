@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import type { MapNode, ResourceType } from '@nova-fall/shared';
-import { NODE_TYPE_CONFIGS, NODE_CLAIM_COST_BY_TIER, NodeStatus, NodeType, UpkeepStatus, RESOURCES } from '@nova-fall/shared';
+import type { MapNode } from '@nova-fall/shared';
+import { NODE_TYPE_CONFIGS, NODE_CLAIM_COST_BY_TIER, NodeStatus, NodeType, UpkeepStatus, getStorageItems, getNodeProduction, nodeHasProduction, nodeRequiresCore, RESOURCES } from '@nova-fall/shared';
 
 const props = defineProps<{
   node: MapNode | null;
@@ -77,31 +77,58 @@ const canBeClaimed = computed(() => {
   return props.node?.status === NodeStatus.NEUTRAL && !props.node?.ownerId;
 });
 
-// Get node resources that have non-zero values
-const nodeResources = computed(() => {
+// Get node storage items (resources, cores, crafted items)
+const nodeStorageItems = computed(() => {
   if (!props.node?.storage) return [];
-
-  const resources: Array<{ type: ResourceType; amount: number; icon: string; name: string }> = [];
-
-  for (const [type, amount] of Object.entries(props.node.storage)) {
-    if (amount && amount > 0) {
-      const resourceDef = RESOURCES[type as ResourceType];
-      if (resourceDef) {
-        resources.push({
-          type: type as ResourceType,
-          amount,
-          icon: resourceDef.icon,
-          name: resourceDef.name,
-        });
-      }
-    }
-  }
-
-  return resources;
+  return getStorageItems(props.node.storage);
 });
 
-// Check if node has any resources
-const hasResources = computed(() => nodeResources.value.length > 0);
+// Check if node has any items in storage
+const hasStorageItems = computed(() => nodeStorageItems.value.length > 0);
+
+// Check if node requires a core to be active
+const requiresCore = computed(() => {
+  if (!props.node) return false;
+  return nodeRequiresCore(props.node.type as NodeType);
+});
+
+// Check if node is active (producing resources)
+const isNodeActive = computed(() => {
+  if (!props.node) return false;
+  // Nodes that don't require cores are always active
+  if (!requiresCore.value) return true;
+  // Otherwise, needs an installed core
+  return !!props.node.installedCoreId;
+});
+
+// Get production rates for this node (with tier bonus)
+const productionRates = computed(() => {
+  if (!props.node) return {};
+  return getNodeProduction(props.node.type, props.node.tier);
+});
+
+// Check if node has any production
+const hasProduction = computed(() => {
+  if (!props.node) return false;
+  return nodeHasProduction(props.node.type);
+});
+
+// Format production entries for display
+const productionEntries = computed(() => {
+  const entries: { resourceType: string; amount: number; icon: string; name: string }[] = [];
+  for (const [resourceType, amount] of Object.entries(productionRates.value)) {
+    if (amount) {
+      const resource = RESOURCES[resourceType as keyof typeof RESOURCES];
+      entries.push({
+        resourceType,
+        amount,
+        icon: resource?.icon ?? '📦',
+        name: resource?.name ?? resourceType,
+      });
+    }
+  }
+  return entries;
+});
 
 // Get upkeep status display info
 const upkeepInfo = computed(() => {
@@ -330,20 +357,51 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Node Resources -->
-          <div v-if="hasResources" class="node-tooltip__resources">
+          <!-- Production (for nodes that produce resources) -->
+          <div v-if="hasProduction" class="node-tooltip__production">
+            <div class="node-tooltip__production-header">
+              <span class="node-tooltip__production-icon">&#x2699;&#xFE0F;</span>
+              <span class="node-tooltip__production-label">Production</span>
+              <span
+                v-if="requiresCore"
+                class="node-tooltip__production-status"
+                :class="isNodeActive ? 'node-tooltip__production-status--active' : 'node-tooltip__production-status--inactive'"
+              >
+                {{ isNodeActive ? 'Active' : 'Inactive' }}
+              </span>
+            </div>
+            <div class="node-tooltip__production-list">
+              <div
+                v-for="entry in productionEntries"
+                :key="entry.resourceType"
+                class="node-tooltip__production-item"
+                :class="{ 'node-tooltip__production-item--inactive': !isNodeActive }"
+                :title="`${entry.name}: +${entry.amount}/hr`"
+              >
+                <span class="node-tooltip__production-item-icon">{{ entry.icon }}</span>
+                <span class="node-tooltip__production-item-amount">+{{ entry.amount }}/hr</span>
+              </div>
+            </div>
+            <div v-if="!isNodeActive && requiresCore" class="node-tooltip__production-warning">
+              Install core to activate
+            </div>
+          </div>
+
+          <!-- Node Storage (resources, cores, items) -->
+          <div v-if="hasStorageItems" class="node-tooltip__resources">
             <div class="node-tooltip__resources-header">
               <span class="node-tooltip__resources-icon">&#x1F4E6;</span>
               <span class="node-tooltip__resources-label">Storage</span>
             </div>
             <div class="node-tooltip__resources-list">
               <div
-                v-for="resource in nodeResources"
-                :key="resource.type"
+                v-for="item in nodeStorageItems"
+                :key="item.itemId"
                 class="node-tooltip__resource"
+                :title="item.definition?.name ?? item.itemId"
               >
-                <span class="node-tooltip__resource-icon">{{ resource.icon }}</span>
-                <span class="node-tooltip__resource-amount">{{ resource.amount.toLocaleString() }}</span>
+                <span class="node-tooltip__resource-icon">{{ item.definition?.icon ?? '📦' }}</span>
+                <span class="node-tooltip__resource-amount">{{ item.amount.toLocaleString() }}</span>
               </div>
             </div>
           </div>
@@ -381,12 +439,6 @@ onUnmounted(() => {
           <div v-if="node.type === NodeType.TRADE_HUB" class="node-tooltip__feature">
             <span class="node-tooltip__feature-icon">&#x1F6D2;</span>
             <span class="node-tooltip__feature-text">Unlocks Market</span>
-          </div>
-
-          <!-- HQ Income -->
-          <div v-if="node.type === NodeType.CAPITAL" class="node-tooltip__feature node-tooltip__feature--income">
-            <span class="node-tooltip__feature-icon">&#x1F4B0;</span>
-            <span class="node-tooltip__feature-text">+20 Credits/tick</span>
           </div>
         </template>
       </template>
@@ -679,6 +731,97 @@ onUnmounted(() => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* Production Section */
+.node-tooltip__production {
+  padding: 0.5rem 0.75rem;
+  background: rgba(15, 23, 42, 0.95);
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.node-tooltip__production-header {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.375rem;
+}
+
+.node-tooltip__production-icon {
+  font-size: 0.75rem;
+}
+
+.node-tooltip__production-label {
+  font-size: 0.625rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.node-tooltip__production-status {
+  margin-left: auto;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.node-tooltip__production-status--active {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.node-tooltip__production-status--inactive {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.node-tooltip__production-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.node-tooltip__production-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 0.25rem;
+}
+
+.node-tooltip__production-item--inactive {
+  background: rgba(100, 116, 139, 0.15);
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  opacity: 0.6;
+}
+
+.node-tooltip__production-item-icon {
+  font-size: 0.75rem;
+}
+
+.node-tooltip__production-item-amount {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #86efac;
+  font-variant-numeric: tabular-nums;
+}
+
+.node-tooltip__production-item--inactive .node-tooltip__production-item-amount {
+  color: #94a3b8;
+}
+
+.node-tooltip__production-warning {
+  margin-top: 0.375rem;
+  font-size: 0.625rem;
+  color: #fbbf24;
+  font-style: italic;
 }
 
 /* Shadow and border for the whole tooltip */

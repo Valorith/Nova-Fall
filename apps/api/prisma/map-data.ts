@@ -102,6 +102,7 @@ function generateNodeName(type: NodeType, index: number): string {
     [NodeType.BARRACKS]: ['Barracks', 'Training Camp', 'Military Post', 'War Academy', 'Garrison'],
     [NodeType.AGRICULTURAL]: ['Farm', 'Greenhouse', 'Bio-Dome', 'Harvest Station', 'Agri-Hub'],
     [NodeType.POWER_PLANT]: ['Generator', 'Power Grid', 'Energy Core', 'Reactor', 'Solar Array'],
+    [NodeType.MANUFACTURING_PLANT]: ['Factory', 'Assembly Line', 'Industrial Complex', 'Production Hub', 'Fabricator'],
     [NodeType.CAPITAL]: ['Capital', 'Headquarters', 'Command Center', 'Home Base', 'Core'],
   };
 
@@ -125,6 +126,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.BARRACKS]: 0.5,
     [NodeType.AGRICULTURAL]: 2,
     [NodeType.POWER_PLANT]: 1,
+    [NodeType.MANUFACTURING_PLANT]: 1,
     [NodeType.CAPITAL]: 0,
   },
   'northern-wastes': {
@@ -135,6 +137,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.BARRACKS]: 1,
     [NodeType.AGRICULTURAL]: 0.25,
     [NodeType.POWER_PLANT]: 0.5,
+    [NodeType.MANUFACTURING_PLANT]: 1.5,
     [NodeType.CAPITAL]: 0,
   },
   'eastern-highlands': {
@@ -145,6 +148,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.BARRACKS]: 1,
     [NodeType.AGRICULTURAL]: 0.5,
     [NodeType.POWER_PLANT]: 3,
+    [NodeType.MANUFACTURING_PLANT]: 1,
     [NodeType.CAPITAL]: 0,
   },
   'southern-marshes': {
@@ -155,6 +159,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.BARRACKS]: 0.5,
     [NodeType.AGRICULTURAL]: 1.5,
     [NodeType.POWER_PLANT]: 1,
+    [NodeType.MANUFACTURING_PLANT]: 0.5,
     [NodeType.CAPITAL]: 0,
   },
   'western-frontier': {
@@ -165,6 +170,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.BARRACKS]: 2,
     [NodeType.AGRICULTURAL]: 1,
     [NodeType.POWER_PLANT]: 0.5,
+    [NodeType.MANUFACTURING_PLANT]: 1.5,
     [NodeType.CAPITAL]: 0,
   },
   deadzone: {
@@ -175,6 +181,7 @@ const REGION_TYPE_WEIGHTS: Record<string, Record<NodeType, number>> = {
     [NodeType.BARRACKS]: 0.5,
     [NodeType.AGRICULTURAL]: 0,
     [NodeType.POWER_PLANT]: 0.5,
+    [NodeType.MANUFACTURING_PLANT]: 2,
     [NodeType.CAPITAL]: 0,
   },
 };

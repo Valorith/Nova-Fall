@@ -2,9 +2,12 @@
 export type ResourceType =
   | 'credits'
   | 'iron'
+  | 'coal'
+  | 'grain'
   | 'minerals'
   | 'energy'
   | 'composites'
+  | 'steelBar'
   | 'techComponents';
 
 export interface ResourceDefinition {
@@ -37,6 +40,24 @@ export const RESOURCES: Record<ResourceType, ResourceDefinition> = {
     tier: 1,
     stackSize: 10000,
   },
+  coal: {
+    id: 'coal',
+    name: 'Coal',
+    description: 'Combustible organic material used in refining processes',
+    icon: '🔥',
+    color: '#2F2F2F',
+    tier: 1,
+    stackSize: 10000,
+  },
+  grain: {
+    id: 'grain',
+    name: 'Grain',
+    description: 'Agricultural produce used for food production and biofuels',
+    icon: '🌾',
+    color: '#DAA520',
+    tier: 1,
+    stackSize: 10000,
+  },
   minerals: {
     id: 'minerals',
     name: 'Rare Minerals',
@@ -61,6 +82,15 @@ export const RESOURCES: Record<ResourceType, ResourceDefinition> = {
     description: 'Processed materials for construction and manufacturing',
     icon: '🔩',
     color: '#708090',
+    tier: 2,
+    stackSize: 5000,
+  },
+  steelBar: {
+    id: 'steelBar',
+    name: 'Steel Bar',
+    description: 'Refined metal alloy used in construction and manufacturing',
+    icon: '🔗',
+    color: '#71797E',
     tier: 2,
     stackSize: 5000,
   },
@@ -103,6 +133,7 @@ export const NODE_BASE_STORAGE: Record<string, number> = {
   BARRACKS: 20000,
   AGRICULTURAL: 25000,
   POWER_PLANT: 20000,
+  MANUFACTURING_PLANT: 30000,
 };
 
 // Base upkeep costs per node type (credits per hour, matches NodeType enum)
@@ -115,6 +146,7 @@ export const NODE_BASE_UPKEEP: Record<string, number> = {
   BARRACKS: 100,
   AGRICULTURAL: 30,
   POWER_PLANT: 50,
+  MANUFACTURING_PLANT: 65,
 };
 
 // Distance upkeep penalty (15% per node from HQ)
@@ -127,18 +159,43 @@ export const NODE_CLAIM_COST_BY_TIER: Record<number, number> = {
   3: 300,  // Tier 3 nodes
 };
 
-// Base production rates per tick (30 seconds, 120 ticks/hour)
-// Node type bonuses multiply these values
-export const BASE_PRODUCTION_PER_TICK: Partial<Record<ResourceType, number>> = {
-  iron: 12,     // 12 iron per tick = 24 per minute = 1440 per hour
-  energy: 6,    // 6 energy per tick = 12 per minute = 720 per hour
-  minerals: 0,  // Only from special buildings
-  composites: 0, // Only from refineries with recipes
-  techComponents: 0, // Only from research stations
+// Hourly production rates by node type (resources generated per hour per active node)
+// Note: Nodes require installed cores to produce (except CAPITAL and CROWN which are always active)
+export const HOURLY_PRODUCTION: Record<string, Partial<Record<ResourceType, number>>> = {
+  MINING: { iron: 50 },
+  POWER_PLANT: { energy: 80 },
+  REFINERY: {},  // Crafting/refining only, no passive production
+  RESEARCH: { minerals: 15 },
+  AGRICULTURAL: { coal: 25, grain: 50 },
+  TRADE_HUB: {},  // Enables market access, no passive production
+  CAPITAL: { credits: 20, iron: 25, energy: 25 },
+  BARRACKS: {},  // Unit production only, no passive resources
+  MANUFACTURING_PLANT: {},  // Crafting only, no passive production
+  CROWN: {},  // Victory objective, no production
 };
 
-// Credit generation is special - based on trade hub presence
-export const BASE_CREDIT_GENERATION = 30; // per tick at trade hubs (3600/hr)
+// Get production rates for a node type (with optional tier multiplier)
+export function getNodeProduction(
+  nodeType: string,
+  tier: number = 1
+): Partial<Record<ResourceType, number>> {
+  const base = HOURLY_PRODUCTION[nodeType] ?? {};
+  const tierMultiplier = 1 + (tier - 1) * 0.25; // 25% bonus per tier
+
+  const result: Partial<Record<ResourceType, number>> = {};
+  for (const [resource, amount] of Object.entries(base)) {
+    if (amount) {
+      result[resource as ResourceType] = Math.floor(amount * tierMultiplier);
+    }
+  }
+  return result;
+}
+
+// Check if a node type has any passive production
+export function nodeHasProduction(nodeType: string): boolean {
+  const production = HOURLY_PRODUCTION[nodeType];
+  return !!production && Object.keys(production).length > 0;
+}
 
 // Helper type for resource storage
 export type ResourceStorage = Partial<Record<ResourceType, number>>;
@@ -264,8 +321,16 @@ export interface MarketPrice {
 
 export const NPC_MARKET_PRICES: Record<Exclude<ResourceType, 'credits'>, MarketPrice> = {
   iron: {
-    buyPrice: 10,   // Player pays 10 credits to buy 1 iron
-    sellPrice: 7,   // Player gets 7 credits for selling 1 iron (30% spread)
+    buyPrice: 10,   // Player pays 10 credits to buy 1 iron ore
+    sellPrice: 7,   // Player gets 7 credits for selling 1 iron ore (30% spread)
+  },
+  coal: {
+    buyPrice: 8,    // Coal is cheap
+    sellPrice: 5,
+  },
+  grain: {
+    buyPrice: 6,    // Grain is basic agricultural produce
+    sellPrice: 4,
   },
   minerals: {
     buyPrice: 50,   // Rare minerals are expensive
@@ -279,6 +344,10 @@ export const NPC_MARKET_PRICES: Record<Exclude<ResourceType, 'credits'>, MarketP
     buyPrice: 80,   // Processed materials
     sellPrice: 56,
   },
+  steelBar: {
+    buyPrice: 30,   // Refined material - valuable
+    sellPrice: 21,
+  },
   techComponents: {
     buyPrice: 200,  // High-tech components are very expensive
     sellPrice: 140,
@@ -288,9 +357,12 @@ export const NPC_MARKET_PRICES: Record<Exclude<ResourceType, 'credits'>, MarketP
 // Get tradeable resource types (everything except credits)
 export const TRADEABLE_RESOURCES: Exclude<ResourceType, 'credits'>[] = [
   'iron',
+  'coal',
+  'grain',
   'minerals',
   'energy',
   'composites',
+  'steelBar',
   'techComponents',
 ];
 
