@@ -187,3 +187,141 @@ export const transfersApi = {
   create: (data: CreateTransferRequest) => api.post<{ transfer: TransferResponse; message: string }>('/transfers', data),
   cancel: (id: string) => api.delete<{ transfer: TransferResponse; message: string }>(`/transfers/${id}`),
 };
+
+// Blueprints API
+import type {
+  Blueprint,
+  BlueprintInput,
+  BlueprintMaterial,
+  BlueprintCategory,
+  BlueprintQuality,
+  NodeType,
+} from '@nova-fall/shared';
+
+export interface BlueprintListQuery {
+  category?: BlueprintCategory;
+  quality?: BlueprintQuality;
+  learned?: 'true' | 'false';
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface BlueprintListResponse {
+  blueprints: Blueprint[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface BlueprintStats {
+  total: number;
+  byCategory: Record<string, number>;
+  byQuality: Record<string, number>;
+  learned: number;
+  default: number;
+}
+
+export interface DuplicateBlueprintRequest {
+  name?: string;
+  quality?: BlueprintQuality;
+}
+
+export const blueprintsApi = {
+  getAll: (query?: BlueprintListQuery) =>
+    api.get<BlueprintListResponse>('/blueprints', { params: query }),
+  getById: (id: string) => api.get<Blueprint>(`/blueprints/${id}`),
+  getStats: () => api.get<BlueprintStats>('/blueprints/stats'),
+  getCategories: () => api.get<{ categories: BlueprintCategory[] }>('/blueprints/categories'),
+  getQualities: () => api.get<{ qualities: BlueprintQuality[] }>('/blueprints/qualities'),
+  getNodeTypes: () => api.get<{ nodeTypes: NodeType[] }>('/blueprints/node-types'),
+  create: (data: BlueprintInput) => api.post<Blueprint>('/blueprints', data),
+  update: (id: string, data: Partial<BlueprintInput>) => api.put<Blueprint>(`/blueprints/${id}`, data),
+  delete: (id: string) => api.delete(`/blueprints/${id}`),
+  duplicate: (id: string, data?: DuplicateBlueprintRequest) =>
+    api.post<Blueprint>(`/blueprints/${id}/duplicate`, data),
+};
+
+// Items API
+import type {
+  DbItemDefinition,
+  DbItemDefinitionInput,
+} from '@nova-fall/shared';
+import { DbItemCategory } from '@nova-fall/shared';
+
+export interface ItemDefinitionListQuery {
+  category?: DbItemCategory;
+  isTradeable?: boolean;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ItemDefinitionListResponse {
+  items: DbItemDefinition[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+// Export aliased type for convenience
+export type ItemDefinition = DbItemDefinition;
+export type ItemDefinitionInput = DbItemDefinitionInput;
+
+export interface ItemDefinitionStats {
+  total: number;
+  byCategory: Record<string, number>;
+  tradeable: number;
+}
+
+export interface SeedResult {
+  message: string;
+  created: string[];
+  skipped: string[];
+}
+
+export const itemsApi = {
+  getAll: (query?: ItemDefinitionListQuery) =>
+    api.get<ItemDefinitionListResponse>('/items', { params: query }),
+  getById: (id: string) => api.get<DbItemDefinition>(`/items/${id}`),
+  getStats: () => api.get<ItemDefinitionStats>('/items/stats'),
+  getCategories: () => api.get<{ categories: DbItemCategory[] }>('/items/categories'),
+  create: (data: DbItemDefinitionInput) => api.post<DbItemDefinition>('/items', data),
+  update: (id: string, data: Partial<DbItemDefinitionInput>) =>
+    api.put<DbItemDefinition>(`/items/${id}`, data),
+  delete: (id: string) => api.delete(`/items/${id}`),
+  duplicate: (id: string, newItemId?: string) =>
+    api.post<DbItemDefinition>(`/items/${id}/duplicate`, { itemId: newItemId }),
+  seed: () => api.post<SeedResult>('/items/seed'),
+};
+
+// Uploads API
+export interface UploadIconRequest {
+  data: string; // Base64-encoded image data
+  filename: string; // Original filename for extension detection
+}
+
+export interface UploadIconResponse {
+  success: boolean;
+  filename: string;
+  url: string;
+  originalName: string;
+  size: number;
+}
+
+export interface IconInfo {
+  filename: string;
+  url: string;
+  size: number;
+  createdAt: string;
+}
+
+export const uploadsApi = {
+  uploadIcon: (data: UploadIconRequest) => api.post<UploadIconResponse>('/uploads/icons', data),
+  getIcon: (filename: string) => api.get(`/uploads/icons/${filename}`, { responseType: 'blob' }),
+  deleteIcon: (filename: string) => api.delete(`/uploads/icons/${filename}`),
+  listIcons: () => api.get<{ icons: IconInfo[] }>('/uploads/icons'),
+};
+
+// Re-export shared types for convenience
+export type { Blueprint, BlueprintInput, BlueprintMaterial, BlueprintCategory, BlueprintQuality };

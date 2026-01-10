@@ -79,9 +79,6 @@ export async function buyResource(
     return { success: false, error: 'Quantity must be a whole number' };
   }
 
-  // Calculate cost
-  const { cost, fee, total } = calculateBuyCost(resourceType, quantity);
-
   // Get session player and their resources
   const sessionPlayer = await prisma.gameSessionPlayer.findUnique({
     where: { id: sessionPlayerId },
@@ -103,7 +100,7 @@ export async function buyResource(
     return { success: false, error: 'Game session is not active' };
   }
 
-  // Get the node and verify ownership
+  // Get the node and verify ownership, including installed core for efficiency
   const node = await prisma.node.findUnique({
     where: { id: nodeId },
     select: {
@@ -111,6 +108,7 @@ export async function buyResource(
       ownerId: true,
       storage: true,
       type: true,
+      installedCoreId: true,
     },
   });
 
@@ -125,6 +123,21 @@ export async function buyResource(
   if (node.type !== 'TRADE_HUB') {
     return { success: false, error: 'Market transactions require a Trade Hub' };
   }
+
+  // Get core efficiency for fee reduction
+  let coreEfficiency = 1;
+  if (node.installedCoreId) {
+    const coreItem = await prisma.itemDefinition.findUnique({
+      where: { id: node.installedCoreId },
+      select: { efficiency: true },
+    });
+    if (coreItem) {
+      coreEfficiency = coreItem.efficiency;
+    }
+  }
+
+  // Calculate cost with efficiency-adjusted fee
+  const { cost, fee, total } = calculateBuyCost(resourceType, quantity, coreEfficiency);
 
   const currentResources = sessionPlayer.resources as ResourceStorage;
   const currentCredits = currentResources.credits ?? 0;
@@ -201,9 +214,6 @@ export async function sellResource(
     return { success: false, error: 'Quantity must be a whole number' };
   }
 
-  // Calculate revenue
-  const { revenue, fee, net } = calculateSellRevenue(resourceType, quantity);
-
   // Get session player and their resources
   const sessionPlayer = await prisma.gameSessionPlayer.findUnique({
     where: { id: sessionPlayerId },
@@ -225,7 +235,7 @@ export async function sellResource(
     return { success: false, error: 'Game session is not active' };
   }
 
-  // Get the node and verify ownership
+  // Get the node and verify ownership, including installed core for efficiency
   const node = await prisma.node.findUnique({
     where: { id: nodeId },
     select: {
@@ -233,6 +243,7 @@ export async function sellResource(
       ownerId: true,
       storage: true,
       type: true,
+      installedCoreId: true,
     },
   });
 
@@ -247,6 +258,21 @@ export async function sellResource(
   if (node.type !== 'TRADE_HUB') {
     return { success: false, error: 'Market transactions require a Trade Hub' };
   }
+
+  // Get core efficiency for fee reduction
+  let coreEfficiency = 1;
+  if (node.installedCoreId) {
+    const coreItem = await prisma.itemDefinition.findUnique({
+      where: { id: node.installedCoreId },
+      select: { efficiency: true },
+    });
+    if (coreItem) {
+      coreEfficiency = coreItem.efficiency;
+    }
+  }
+
+  // Calculate revenue with efficiency-adjusted fee
+  const { revenue, fee, net } = calculateSellRevenue(resourceType, quantity, coreEfficiency);
 
   const nodeStorage = node.storage as ResourceStorage;
   const currentAmount = nodeStorage[resourceType] ?? 0;

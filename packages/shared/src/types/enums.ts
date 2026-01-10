@@ -94,3 +94,35 @@ export enum TerrainType {
   TUNDRA = 'TUNDRA', // Cold, increases upkeep
   WASTELAND = 'WASTELAND', // Irradiated, hazardous
 }
+
+// Blueprint quality levels with corresponding colors
+export enum BlueprintQuality {
+  COMMON = 'COMMON', // White
+  UNCOMMON = 'UNCOMMON', // Blue
+  RARE = 'RARE', // Yellow
+  EPIC = 'EPIC', // Purple
+  LEGENDARY = 'LEGENDARY', // Orange
+}
+
+// Blueprint categories for filtering and organization
+export enum BlueprintCategory {
+  MECHANICAL = 'MECHANICAL',
+  BIOLOGICAL = 'BIOLOGICAL',
+  REFINEMENT = 'REFINEMENT',
+  FOOD = 'FOOD',
+  ENHANCEMENTS = 'ENHANCEMENTS',
+  BUILDINGS = 'BUILDINGS',
+  EQUIPMENT = 'EQUIPMENT',
+  NODE_CORE = 'NODE_CORE',
+}
+
+// Item categories for the database item definition system
+// Named DbItemCategory to avoid conflict with the legacy ItemCategory type in config/items.ts
+export enum DbItemCategory {
+  RESOURCE = 'RESOURCE', // Basic materials (iron, energy, etc.)
+  NODE_CORE = 'NODE_CORE', // Cores that activate node production
+  CONSUMABLE = 'CONSUMABLE', // Single-use items
+  EQUIPMENT = 'EQUIPMENT', // Items that can be equipped
+  CRAFTED = 'CRAFTED', // Items produced via blueprints
+  BLUEPRINT = 'BLUEPRINT', // Blueprint items linked to craftable recipes
+}

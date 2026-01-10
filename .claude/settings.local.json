@@ -36,7 +36,8 @@
       "Bash(node -e:*)",
       "Bash(npx tsx:*)",
       "Bash(npx tsup)",
-      "Skill(update)"
+      "Skill(update)",
+      "Bash(cd:*)"
     ]
   }
 }

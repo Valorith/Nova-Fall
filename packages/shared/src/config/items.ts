@@ -205,3 +205,67 @@ export function deductItems(storage: ItemStorage, cost: ItemStorage): ItemStorag
   }
   return result;
 }
+
+// ==================== CORE EFFICIENCY ====================
+
+// Valid efficiency values (1-5)
+export const MIN_EFFICIENCY = 1;
+export const MAX_EFFICIENCY = 5;
+
+// Bonus per efficiency point above 1 (10%)
+export const EFFICIENCY_BONUS_PER_POINT = 0.1;
+
+/**
+ * Calculate the efficiency multiplier for production and crafting speed.
+ * Each point above 1 adds 10% bonus.
+ * @param efficiency - Core efficiency (1-5)
+ * @returns Multiplier (1.0 at efficiency 1, up to 1.4 at efficiency 5)
+ */
+export function getEfficiencyMultiplier(efficiency: number): number {
+  const clamped = Math.max(MIN_EFFICIENCY, Math.min(MAX_EFFICIENCY, efficiency));
+  const bonusPoints = clamped - 1;
+  return 1 + bonusPoints * EFFICIENCY_BONUS_PER_POINT;
+}
+
+/**
+ * Calculate the fee reduction for Trade Hub cores.
+ * Each point above 1 reduces fees by 10%.
+ * @param efficiency - Core efficiency (1-5)
+ * @returns Fee multiplier (1.0 at efficiency 1, down to 0.6 at efficiency 5)
+ */
+export function getTradeFeeMultiplier(efficiency: number): number {
+  const clamped = Math.max(MIN_EFFICIENCY, Math.min(MAX_EFFICIENCY, efficiency));
+  const bonusPoints = clamped - 1;
+  return Math.max(0, 1 - bonusPoints * EFFICIENCY_BONUS_PER_POINT);
+}
+
+/**
+ * Apply efficiency bonus to a base production amount.
+ * @param baseAmount - Base hourly production
+ * @param efficiency - Core efficiency (1-5)
+ * @returns Boosted production amount (floored to integer)
+ */
+export function applyEfficiencyToProduction(baseAmount: number, efficiency: number): number {
+  return Math.floor(baseAmount * getEfficiencyMultiplier(efficiency));
+}
+
+/**
+ * Apply efficiency bonus to reduce crafting time.
+ * @param baseTimeMs - Base crafting time in milliseconds
+ * @param efficiency - Core efficiency (1-5)
+ * @returns Reduced crafting time (floored to integer)
+ */
+export function applyEfficiencyToCraftingTime(baseTimeMs: number, efficiency: number): number {
+  // Higher efficiency = faster crafting = divide by multiplier
+  return Math.floor(baseTimeMs / getEfficiencyMultiplier(efficiency));
+}
+
+/**
+ * Apply efficiency to reduce trading fee.
+ * @param baseFeePercent - Base transaction fee (e.g., 0.15 for 15%)
+ * @param efficiency - Core efficiency (1-5)
+ * @returns Reduced fee percentage
+ */
+export function applyEfficiencyToTradeFee(baseFeePercent: number, efficiency: number): number {
+  return baseFeePercent * getTradeFeeMultiplier(efficiency);
+}

@@ -223,6 +223,12 @@ async function handleLogout() {
           Next economy tick in <span class="text-amber-400 font-medium">{{ nextTickDisplay }}</span>
         </span>
         <div class="flex items-center gap-4">
+          <router-link
+            to="/dev"
+            class="rounded bg-orange-600/20 border border-orange-500/50 px-3 py-1.5 text-sm text-orange-400 hover:bg-orange-600/30"
+          >
+            Dev Panel
+          </router-link>
           <span class="text-gray-400">{{ authStore.user?.username }}</span>
           <button
             class="rounded bg-gray-700 px-3 py-1.5 text-sm hover:bg-gray-600"

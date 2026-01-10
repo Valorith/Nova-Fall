@@ -367,31 +367,43 @@ export const TRADEABLE_RESOURCES: Exclude<ResourceType, 'credits'>[] = [
 ];
 
 // Calculate cost to buy resources from NPC
+// Optional coreEfficiency parameter reduces the fee (1-5, where each point above 1 reduces fee by 10%)
 export function calculateBuyCost(
   resourceType: Exclude<ResourceType, 'credits'>,
-  quantity: number
-): { cost: number; fee: number; total: number } {
+  quantity: number,
+  coreEfficiency = 1
+): { cost: number; fee: number; total: number; feePercent: number } {
   const price = NPC_MARKET_PRICES[resourceType];
   const baseCost = price.buyPrice * quantity;
-  const fee = Math.ceil(baseCost * MARKET_TRANSACTION_FEE);
+  // Calculate fee with efficiency reduction (each point above 1 reduces fee by 10%)
+  const efficiencyBonus = Math.max(0, coreEfficiency - 1);
+  const feePercent = Math.max(0, MARKET_TRANSACTION_FEE * (1 - efficiencyBonus * 0.1));
+  const fee = Math.ceil(baseCost * feePercent);
   return {
     cost: baseCost,
     fee,
     total: baseCost + fee,
+    feePercent,
   };
 }
 
 // Calculate credits received from selling to NPC
+// Optional coreEfficiency parameter reduces the fee (1-5, where each point above 1 reduces fee by 10%)
 export function calculateSellRevenue(
   resourceType: Exclude<ResourceType, 'credits'>,
-  quantity: number
-): { revenue: number; fee: number; net: number } {
+  quantity: number,
+  coreEfficiency = 1
+): { revenue: number; fee: number; net: number; feePercent: number } {
   const price = NPC_MARKET_PRICES[resourceType];
   const baseRevenue = price.sellPrice * quantity;
-  const fee = Math.ceil(baseRevenue * MARKET_TRANSACTION_FEE);
+  // Calculate fee with efficiency reduction (each point above 1 reduces fee by 10%)
+  const efficiencyBonus = Math.max(0, coreEfficiency - 1);
+  const feePercent = Math.max(0, MARKET_TRANSACTION_FEE * (1 - efficiencyBonus * 0.1));
+  const fee = Math.ceil(baseRevenue * feePercent);
   return {
     revenue: baseRevenue,
     fee,
     net: baseRevenue - fee,
+    feePercent,
   };
 }

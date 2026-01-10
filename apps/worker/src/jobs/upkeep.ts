@@ -5,7 +5,7 @@ import { publishUpkeepTick } from '../lib/events.js';
 // Redis key for storing next upkeep time
 export const NEXT_UPKEEP_KEY = 'game:nextUpkeepAt';
 import { NodeType } from '@nova-fall/shared';
-import { getRegion, nodeRequiresCore, HOURLY_PRODUCTION, type ResourceStorage, type ResourceType } from '@nova-fall/shared';
+import { getRegion, nodeRequiresCore, HOURLY_PRODUCTION, getEfficiencyMultiplier, type ResourceStorage, type ResourceType } from '@nova-fall/shared';
 import {
   calculateNodeUpkeep,
   calculateDistanceFromHQ,
@@ -135,6 +135,22 @@ export async function processUpkeep(): Promise<void> {
       },
     });
 
+    // Fetch efficiency data for installed cores
+    const installedCoreIds = ownedNodes
+      .map((n) => n.installedCoreId)
+      .filter((id): id is string => id !== null);
+
+    const coreEfficiencyMap = new Map<string, number>();
+    if (installedCoreIds.length > 0) {
+      const coreItems = await prisma.itemDefinition.findMany({
+        where: { id: { in: installedCoreIds } },
+        select: { id: true, efficiency: true },
+      });
+      for (const core of coreItems) {
+        coreEfficiencyMap.set(core.id, core.efficiency);
+      }
+    }
+
     const results: PlayerEconomyResult[] = [];
     const now = new Date();
 
@@ -186,9 +202,16 @@ export async function processUpkeep(): Promise<void> {
           const production = HOURLY_PRODUCTION[node.type] ?? {};
           const tierMultiplier = 1 + (node.tier - 1) * 0.25; // 25% bonus per tier
 
+          // Get core efficiency multiplier (default to 1 if no core or not found)
+          const coreEfficiency = node.installedCoreId
+            ? coreEfficiencyMap.get(node.installedCoreId) ?? 1
+            : 1;
+          const efficiencyMultiplier = getEfficiencyMultiplier(coreEfficiency);
+
           for (const [resourceType, baseAmount] of Object.entries(production)) {
             if (!baseAmount) continue;
-            const amount = Math.floor(baseAmount * tierMultiplier);
+            // Apply both tier and efficiency multipliers
+            const amount = Math.floor(baseAmount * tierMultiplier * efficiencyMultiplier);
 
             // Track credits separately as income
             if (resourceType === 'credits') {

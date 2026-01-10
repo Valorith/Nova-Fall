@@ -37,6 +37,12 @@ const routes: RouteRecordRaw[] = [
     path: '/game',
     redirect: '/lobby',
   },
+  {
+    path: '/dev',
+    name: 'dev',
+    component: () => import('@/views/DevView.vue'),
+    meta: { requiresAuth: true },
+  },
 ];
 
 const router = createRouter({

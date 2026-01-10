@@ -526,6 +526,89 @@ model NPCThreat {
   @@index([status])
 }
 
+// ==================== ITEM DEFINITIONS ====================
+
+model ItemDefinition {
+  id              String           @id @default(cuid())
+  itemId          String           @unique  // Unique item identifier (e.g., "iron", "solar_farm")
+  name            String
+  description     String?
+
+  // Classification
+  category        ItemCategory
+  quality         BlueprintQuality @default(COMMON)  // Shared with blueprints
+
+  // Visual
+  icon            String?      // Emoji or uploaded icon URL
+  color           String       @default("#888888")  // Hex color
+
+  // Stacking
+  stackSize       Int          @default(1000)  // Max per storage slot (0 = unlimited)
+
+  // For node cores only
+  targetNodeType  NodeType?    // Which node type this core activates
+  coreCost        Int?         // Credits to purchase from HQ
+  efficiency      Int          @default(1) // 1-5: bonus per point above 1 (+10% production/speed, -10% trade fee)
+
+  // Market settings (for tradeable items)
+  isTradeable     Boolean      @default(false)
+  buyPrice        Int?         // NPC buy price (player pays)
+  sellPrice       Int?         // NPC sell price (player receives)
+
+  // Production (for resources produced by nodes)
+  // JSON: { "MINING": 50, "CAPITAL": 25 } - hourly rate per node type
+  productionRates Json?
+
+  // Flag to indicate this item represents a craftable blueprint
+  isBlueprint       Boolean      @default(false)
+  linkedBlueprintId String?      // Reference to the Blueprint this item represents
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([category])
+  @@index([quality])
+  @@index([itemId])
+  @@index([isTradeable])
+}
+
+// ==================== BLUEPRINTS ====================
+
+model Blueprint {
+  id                String            @id @default(cuid())
+  name              String
+  description       String?
+
+  // Classification
+  category          BlueprintCategory
+  quality           BlueprintQuality  @default(COMMON)
+
+  // Learning requirement
+  // false = known by default (all players can craft)
+  // true = must be learned via blueprint item consumption
+  learned           Boolean           @default(false)
+
+  // Crafting requirements
+  craftTime         Int               @default(60)  // Seconds
+  nodeTypes         Json              // Array of NodeType strings (where can be crafted)
+  nodeTierRequired  Int               @default(1)
+
+  // Inputs and outputs
+  inputs            Json              // Array of { itemId: string, quantity: number }
+  outputs           Json              // Array of { itemId: string, quantity: number }
+
+  // Visual
+  icon              String?           // Icon identifier
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([category])
+  @@index([quality])
+  @@index([learned])
+  @@index([category, quality])
+}
+
 // ==================== ENVIRONMENT ====================
 
 model EnvironmentZone {
@@ -607,6 +690,10 @@ model GameSessionPlayer {
   resources       Json         @default("{\"credits\": 1000}")
   hqNodeId        String?      // Player's HQ in this session
   totalNodes      Int          @default(0)
+
+  // Learned blueprints for this session (array of blueprint IDs)
+  // Blueprints with learned=true must be in this array to be craftable
+  learnedBlueprints Json       @default("[]")
 
   // Elimination tracking (for Domination mode)
   eliminatedAt    DateTime?    // When player was eliminated (lost HQ)
@@ -776,4 +863,36 @@ enum BotDifficulty {
   EASY       // Slower, makes mistakes
   NORMAL     // Balanced AI
   HARD       // Aggressive, efficient
+}
+
+// ==================== ITEM DEFINITIONS ====================
+
+enum ItemCategory {
+  RESOURCE       // Basic materials (iron, energy, etc.)
+  NODE_CORE      // Cores that activate node production
+  CONSUMABLE     // Single-use items
+  EQUIPMENT      // Items that can be equipped
+  CRAFTED        // Items produced via blueprints
+  BLUEPRINT      // Blueprint items linked to craftable recipes
+}
+
+// ==================== BLUEPRINTS ====================
+
+enum BlueprintQuality {
+  COMMON     // White
+  UNCOMMON   // Blue
+  RARE       // Yellow
+  EPIC       // Purple
+  LEGENDARY  // Orange
+}
+
+enum BlueprintCategory {
+  MECHANICAL
+  BIOLOGICAL
+  REFINEMENT
+  FOOD
+  ENHANCEMENTS
+  BUILDINGS
+  EQUIPMENT
+  NODE_CORE
 }

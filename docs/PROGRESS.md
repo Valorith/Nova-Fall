@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 2.5 - Node Activation & Production |
 | **Overall Progress**   | Phases 0-2 complete, Phase 2.5 in progress |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 35                         |
+| **Total Sessions**     | 36                         |
 
 ---
 
@@ -2510,6 +2510,82 @@ export function getStorageItems(storage: ItemStorage): Array<{
 1. Begin Section 2.5.5: Crafting System
 2. Define recipe system for refinement/manufacturing
 3. Implement crafting queue and processing
+
+---
+
+## Session 36 - 2026-01-10
+
+**Duration:** ~1 hour
+**Phase:** Phase 2.5 - Node Activation & Production
+**Focus:** Blueprint/Items Editor dev tool improvements
+
+### Completed Tasks
+
+**Blueprint Editor Enhancements:**
+- [x] Added NODE_CORE to BlueprintCategory enum for node core blueprints
+- [x] Added BLUEPRINT to DbItemCategory enum (replaces isBlueprint toggle)
+- [x] Created "Create Items" button that generates all 5 quality variants
+- [x] Implemented quality-based efficiency for node cores (Common=1 through Legendary=5)
+- [x] Implemented quality-based required node tier (Common/Uncommon/Rare=1, Epic=2, Legendary=3)
+- [x] Added automatic output item name inference from blueprint name
+- [x] Added targetNodeType to created items based on blueprint's crafting station
+- [x] Added isNodeCore detection by blueprint category OR name containing "Core"
+- [x] Added duplicate prevention (skip items with same name AND quality)
+- [x] Fixed blueprint outputs update to link all quality variants
+- [x] Added fetchBlueprints() refresh after item creation
+- [x] Added color styling to item names in dropdowns based on quality
+
+**Backend Fixes:**
+- [x] Fixed validation to allow empty outputs array (blueprints disabled until defined)
+- [x] Updated both create and update routes for empty outputs
+
+**Items Editor Cleanup:**
+- [x] Removed "Seed Defaults" button and auto-seeding logic
+- [x] Removed unused `seeding` ref and `seedDefaults()` function
+
+### Technical Details
+
+**Create Items Flow:**
+1. Creates 5 Blueprint Items (category: BLUEPRINT, linkedBlueprintId set)
+2. Creates 5 Output Items (category: NODE_CORE or CRAFTED, linkedBlueprintId set)
+3. Finds all Blueprint entities with same name
+4. Updates each Blueprint's outputs to link to matching quality output item
+5. Refreshes items and blueprints lists
+
+**Quality Mappings:**
+```typescript
+// Efficiency for node cores
+const qualityEfficiencyMap = {
+  COMMON: 1, UNCOMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5
+};
+
+// Required node tier
+const qualityTierMap = {
+  COMMON: 1, UNCOMMON: 1, RARE: 1, EPIC: 2, LEGENDARY: 3
+};
+```
+
+### Files Modified
+
+- `packages/shared/src/types/enums.ts` - Added NODE_CORE to BlueprintCategory, BLUEPRINT to DbItemCategory
+- `packages/shared/src/config/blueprints.ts` - Added NODE_CORE category config
+- `packages/shared/src/config/itemDefinitions.ts` - Added BLUEPRINT category config
+- `apps/api/prisma/schema.prisma` - Added enum values
+- `apps/api/src/modules/blueprints/routes.ts` - Allow empty outputs array
+- `apps/web/src/components/dev/BlueprintEditor.vue` - Create Items functionality, color styling
+- `apps/web/src/components/dev/ItemsEditor.vue` - Removed Seed Defaults button
+
+### Notes
+
+- This session focused on dev tools for blueprint/item management
+- No changes to actual crafting gameplay (Section 2.5.5 still pending)
+- Blueprint editor now streamlines creation of node core blueprints and items
+
+### Next Session Plan
+
+1. Begin Section 2.5.5: Crafting System (gameplay)
+2. Implement recipe system and crafting queue
+3. Create crafting UI for players
 
 ---
 
