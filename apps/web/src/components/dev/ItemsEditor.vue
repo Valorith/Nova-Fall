@@ -19,6 +19,7 @@ import {
   MIN_EFFICIENCY,
   MAX_EFFICIENCY,
   type DbItemDefinition,
+  type UnitStats,
 } from '@nova-fall/shared';
 
 // State
@@ -49,14 +50,27 @@ const form = ref({
   color: '#888888',
   stackSize: 1000,
   targetNodeType: null as NodeType | null,
-  coreCost: null as number | null,
+  hqCost: null as number | null,
   efficiency: 1,
   isTradeable: false,
   buyPrice: null as number | null,
   sellPrice: null as number | null,
   productionRates: {} as Record<string, number>,
   linkedBlueprintId: null as string | null,
+  unitStats: null as UnitStats | null,
 });
+
+// Default unit stats for new units/buildings
+const defaultUnitStats: UnitStats = {
+  health: 100,
+  shield: 0,
+  shieldRange: 0,
+  damage: 10,
+  armor: 5,
+  speed: 2,
+  range: 1,
+  attackSpeed: 1.0,
+};
 
 // Blueprint selection state
 const blueprints = ref<Blueprint[]>([]);
@@ -168,17 +182,22 @@ function startEdit() {
     color: selectedItem.value.color,
     stackSize: selectedItem.value.stackSize,
     targetNodeType: selectedItem.value.targetNodeType,
-    coreCost: selectedItem.value.coreCost,
+    hqCost: selectedItem.value.hqCost,
     efficiency: selectedItem.value.efficiency,
     isTradeable: selectedItem.value.isTradeable,
     buyPrice: selectedItem.value.buyPrice,
     sellPrice: selectedItem.value.sellPrice,
     productionRates: selectedItem.value.productionRates || {},
     linkedBlueprintId: selectedItem.value.linkedBlueprintId,
+    unitStats: selectedItem.value.unitStats || null,
   };
   // Fetch blueprints if this is a blueprint category item
   if (selectedItem.value.category === DbItemCategory.BLUEPRINT) {
     fetchBlueprints();
+  }
+  // Initialize unit stats if this is a unit or building
+  if ((selectedItem.value.category === DbItemCategory.UNIT || selectedItem.value.category === DbItemCategory.BUILDING) && !form.value.unitStats) {
+    form.value.unitStats = { ...defaultUnitStats };
   }
   isEditing.value = true;
   isCreating.value = false;
@@ -197,13 +216,14 @@ function startCreate() {
     color: '#888888',
     stackSize: 1000,
     targetNodeType: null,
-    coreCost: null,
+    hqCost: null,
     efficiency: 1,
     isTradeable: false,
     buyPrice: null,
     sellPrice: null,
     productionRates: {},
     linkedBlueprintId: null,
+    unitStats: null,
   };
   isEditing.value = false;
   isCreating.value = true;
@@ -232,13 +252,14 @@ async function save() {
       color: form.value.color,
       stackSize: form.value.stackSize,
       targetNodeType: form.value.category === DbItemCategory.NODE_CORE ? form.value.targetNodeType : null,
-      coreCost: form.value.category === DbItemCategory.NODE_CORE ? form.value.coreCost : null,
+      hqCost: form.value.hqCost, // Available for all item types
       efficiency: form.value.category === DbItemCategory.NODE_CORE ? form.value.efficiency : 1,
       isTradeable: form.value.isTradeable,
       buyPrice: form.value.isTradeable ? form.value.buyPrice : null,
       sellPrice: form.value.isTradeable ? form.value.sellPrice : null,
       productionRates: Object.keys(cleanedProductionRates).length > 0 ? cleanedProductionRates : null,
       linkedBlueprintId: form.value.category === DbItemCategory.BLUEPRINT ? form.value.linkedBlueprintId : null,
+      unitStats: (form.value.category === DbItemCategory.UNIT || form.value.category === DbItemCategory.BUILDING) ? form.value.unitStats : null,
     };
 
     if (isCreating.value) {
@@ -391,6 +412,9 @@ function getQualityName(quality: string): string {
 const showNodeCoreFields = computed(() => form.value.category === DbItemCategory.NODE_CORE);
 const showTradeFields = computed(() => form.value.isTradeable);
 const showBlueprintFields = computed(() => form.value.category === DbItemCategory.BLUEPRINT);
+const showUnitFields = computed(() =>
+  form.value.category === DbItemCategory.UNIT || form.value.category === DbItemCategory.BUILDING
+);
 
 // Filtered blueprints for dropdown
 const filteredBlueprints = computed(() => {
@@ -434,9 +458,13 @@ function clearLinkedBlueprint() {
 }
 
 // Watch category to fetch blueprints when BLUEPRINT category selected
+// and initialize unit stats when UNIT category selected
 watch(() => form.value.category, (category) => {
   if (category === DbItemCategory.BLUEPRINT) {
     fetchBlueprints();
+  }
+  if ((category === DbItemCategory.UNIT || category === DbItemCategory.BUILDING) && !form.value.unitStats) {
+    form.value.unitStats = { ...defaultUnitStats };
   }
 });
 
@@ -569,6 +597,7 @@ onMounted(() => {
               <span class="item-name" :style="{ color: getQualityColor(item.quality) }">{{ item.name }}</span>
               <span v-if="item.category === 'BLUEPRINT'" class="blueprint-badge">BP</span>
               <span v-if="item.isTradeable" class="tradeable-badge">Trade</span>
+              <span v-if="item.hqCost && item.hqCost > 0" class="hq-badge">HQ</span>
             </div>
             <div class="item-meta">
               <span
@@ -603,7 +632,7 @@ onMounted(() => {
         <div v-else-if="selectedItem && !isEditing && !isCreating" class="detail-view">
           <div class="detail-header">
             <div class="detail-header-left">
-              <div v-if="selectedItem.icon" class="detail-icon" :style="{ borderColor: selectedItem.color }">
+              <div v-if="selectedItem.icon" class="detail-icon" :style="{ borderColor: getQualityColor(selectedItem.quality) }">
                 <template v-if="selectedItem.icon.startsWith('/')">
                   <img :src="getIconUrl(selectedItem.icon) || ''" alt="" class="detail-icon-img" />
                 </template>
@@ -641,15 +670,17 @@ onMounted(() => {
               <p class="description">{{ selectedItem.description }}</p>
             </div>
 
+            <!-- HQ Cost (shown for any item with hqCost set) -->
+            <div v-if="selectedItem.hqCost" class="detail-row">
+              <label>HQ Cost</label>
+              <span>{{ selectedItem.hqCost }} Credits</span>
+            </div>
+
             <!-- Node Core specific -->
             <template v-if="selectedItem.category === 'NODE_CORE'">
               <div class="detail-row">
                 <label>Target Node</label>
                 <span>{{ selectedItem.targetNodeType?.replace(/_/g, ' ') || 'None' }}</span>
-              </div>
-              <div class="detail-row">
-                <label>Core Cost</label>
-                <span>{{ selectedItem.coreCost }} Credits</span>
               </div>
               <div class="detail-row">
                 <label>Efficiency</label>
@@ -695,6 +726,50 @@ onMounted(() => {
                     <span class="output-qty">x{{ output.quantity }}</span>
                   </div>
                 </div>
+              </div>
+            </template>
+
+            <!-- Unit/Building Stats display -->
+            <template v-if="selectedItem.category === 'UNIT' || selectedItem.category === 'BUILDING'">
+              <div class="detail-section-header">{{ selectedItem.category === 'UNIT' ? 'Unit' : 'Building' }} Combat Stats</div>
+              <div v-if="selectedItem.unitStats" class="unit-stats-display">
+                <div class="stat-item">
+                  <span class="stat-label">Health</span>
+                  <span class="stat-value health">{{ selectedItem.unitStats.health }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Shield</span>
+                  <span class="stat-value shield">{{ selectedItem.unitStats.shield }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Shield Range</span>
+                  <span class="stat-value" :class="{ 'aoe-shield': selectedItem.unitStats.shieldRange > 0 }">
+                    {{ selectedItem.unitStats.shieldRange > 0 ? selectedItem.unitStats.shieldRange + ' tiles (AOE)' : 'Personal' }}
+                  </span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Damage</span>
+                  <span class="stat-value damage">{{ selectedItem.unitStats.damage }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Armor</span>
+                  <span class="stat-value armor">{{ selectedItem.unitStats.armor }}</span>
+                </div>
+                <div v-if="selectedItem.category === 'UNIT'" class="stat-item">
+                  <span class="stat-label">Speed</span>
+                  <span class="stat-value">{{ selectedItem.unitStats.speed }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Range</span>
+                  <span class="stat-value">{{ selectedItem.unitStats.range }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-label">Attack Speed</span>
+                  <span class="stat-value">{{ selectedItem.unitStats.attackSpeed }}/s</span>
+                </div>
+              </div>
+              <div v-else class="stats-not-set">
+                <span class="not-set-message">Stats not configured. Click Edit to set combat stats.</span>
               </div>
             </template>
 
@@ -864,6 +939,14 @@ onMounted(() => {
               </div>
             </div>
 
+            <!-- HQ Shop Settings (available for all items) -->
+            <div class="section-header">HQ Shop Settings</div>
+            <div class="form-group">
+              <label>HQ Cost (Credits)</label>
+              <input v-model.number="form.hqCost" type="number" min="0" class="form-input" placeholder="Leave empty if not purchasable at HQ" />
+              <span class="hint">If set, this item can be purchased at the player's HQ for this many credits</span>
+            </div>
+
             <!-- Node Core specific fields -->
             <template v-if="showNodeCoreFields">
               <div class="section-header">Node Core Settings</div>
@@ -878,12 +961,6 @@ onMounted(() => {
                   </select>
                 </div>
                 <div class="form-group">
-                  <label>Core Cost (Credits)</label>
-                  <input v-model.number="form.coreCost" type="number" min="0" class="form-input" />
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
                   <label>Efficiency</label>
                   <select v-model.number="form.efficiency" class="form-input efficiency-select">
                     <option v-for="e in efficiencyOptions" :key="e" :value="e">
@@ -891,6 +968,54 @@ onMounted(() => {
                     </option>
                   </select>
                   <span class="hint">Bonus per point above 1: +10% production/speed, -10% trade fee</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Unit/Building Stats fields -->
+            <template v-if="showUnitFields && form.unitStats">
+              <div class="section-header">{{ form.category === DbItemCategory.UNIT ? 'Unit' : 'Building' }} Combat Stats</div>
+              <p class="section-hint">Configure stats for this {{ form.category === DbItemCategory.UNIT ? 'unit' : 'building' }} when it enters combat</p>
+              <div class="unit-stats-grid">
+                <div class="form-group">
+                  <label>Health</label>
+                  <input v-model.number="form.unitStats.health" type="number" min="1" class="form-input" />
+                  <span class="hint">Hit points before death</span>
+                </div>
+                <div class="form-group">
+                  <label>Shield</label>
+                  <input v-model.number="form.unitStats.shield" type="number" min="0" class="form-input" />
+                  <span class="hint">Shield HP (absorbs damage first)</span>
+                </div>
+                <div class="form-group">
+                  <label>Shield Range</label>
+                  <input v-model.number="form.unitStats.shieldRange" type="number" min="0" step="0.1" class="form-input" />
+                  <span class="hint">0 = personal shield, &gt;0 = AOE radius protecting allies</span>
+                </div>
+                <div class="form-group">
+                  <label>Damage</label>
+                  <input v-model.number="form.unitStats.damage" type="number" min="0" class="form-input" />
+                  <span class="hint">Damage per attack</span>
+                </div>
+                <div class="form-group">
+                  <label>Armor</label>
+                  <input v-model.number="form.unitStats.armor" type="number" min="0" class="form-input" />
+                  <span class="hint">Damage reduction</span>
+                </div>
+                <div v-if="form.category === DbItemCategory.UNIT" class="form-group">
+                  <label>Speed</label>
+                  <input v-model.number="form.unitStats.speed" type="number" min="0" step="0.1" class="form-input" />
+                  <span class="hint">Movement speed (tiles/min)</span>
+                </div>
+                <div class="form-group">
+                  <label>Range</label>
+                  <input v-model.number="form.unitStats.range" type="number" min="0" step="0.1" class="form-input" />
+                  <span class="hint">Attack range in tiles</span>
+                </div>
+                <div class="form-group">
+                  <label>Attack Speed</label>
+                  <input v-model.number="form.unitStats.attackSpeed" type="number" min="0.1" step="0.1" class="form-input" />
+                  <span class="hint">Attacks per second</span>
                 </div>
               </div>
             </template>
@@ -1189,6 +1314,16 @@ onMounted(() => {
   color: #22c55e;
   border-radius: 4px;
   text-transform: uppercase;
+}
+
+.hq-badge {
+  font-size: 9px;
+  padding: 2px 6px;
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: 600;
 }
 
 .item-meta {
@@ -1806,5 +1941,93 @@ onMounted(() => {
   font-size: 13px;
   color: #9ca3af;
   font-weight: 600;
+}
+
+/* Unit Stats styles */
+.unit-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.unit-stats-grid .form-group {
+  margin-bottom: 8px;
+}
+
+.unit-stats-grid .form-input {
+  padding: 8px 10px;
+}
+
+.detail-section-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  margin: 20px 0 12px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #2a3040;
+}
+
+.unit-stats-display {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: #1a1f2e;
+  border-radius: 8px;
+  border: 1px solid #2a3040;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e5e5e5;
+}
+
+.stat-value.health {
+  color: #22c55e;
+}
+
+.stat-value.shield {
+  color: #3b82f6;
+}
+
+.stat-value.aoe-shield {
+  color: #a855f7;
+}
+
+.stats-not-set {
+  padding: 12px;
+  background: rgba(107, 114, 128, 0.1);
+  border: 1px dashed #4b5563;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.not-set-message {
+  color: #9ca3af;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.stat-value.damage {
+  color: #ef4444;
+}
+
+.stat-value.armor {
+  color: #f59e0b;
 }
 </style>

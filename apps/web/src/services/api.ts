@@ -43,13 +43,18 @@ api.interceptors.response.use(
         const { accessToken, refreshToken } = response.data;
         authStore.setTokens(accessToken, refreshToken);
 
-        // Retry original request with new token
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        // Retry original request with new token - use set() for axios 1.x compatibility
+        if (originalRequest.headers.set) {
+          originalRequest.headers.set('Authorization', `Bearer ${accessToken}`);
+        } else {
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        }
         return api(originalRequest);
       } catch {
-        // Refresh failed, logout
-        authStore.logout();
+        // Refresh failed, logout and redirect
+        await authStore.logout();
         window.location.href = '/login';
+        return Promise.reject(error);
       }
     }
 
@@ -65,15 +70,16 @@ export const authApi = {
 };
 
 // Nodes API
-// Core item from database
-export interface CoreDefinition {
+// Shop item from database (any item with hqCost set)
+export interface ShopItemDefinition {
   itemId: string;
   name: string;
   description: string | null;
+  category: string;
   icon: string | null;
   color: string;
   targetNodeType: string | null;
-  cost: number;
+  hqCost: number;
   efficiency: number;
   quality: string;
 }
@@ -83,7 +89,12 @@ export const nodesApi = {
   getById: (id: string) => api.get(`/nodes/${id}`),
   claim: (id: string) => api.post(`/nodes/${id}/claim`),
   abandon: (id: string) => api.post(`/nodes/${id}/abandon`),
-  getCores: () => api.get<{ cores: CoreDefinition[] }>('/nodes/cores'),
+  getShopItems: () => api.get<{ items: ShopItemDefinition[] }>('/nodes/shop-items'),
+  purchaseItem: (nodeId: string, itemId: string, quantity: number = 1) =>
+    api.post<{ success: boolean; storage: Record<string, number>; creditsRemaining: number }>(
+      `/nodes/${nodeId}/shop/purchase`,
+      { itemId, quantity }
+    ),
   // Dev endpoints
   devAddItem: (nodeId: string, itemId: string, quantity: number) =>
     api.post<{ storage: Record<string, number> }>(`/nodes/${nodeId}/dev/add-item`, { itemId, quantity }),

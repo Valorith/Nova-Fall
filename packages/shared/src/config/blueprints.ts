@@ -46,6 +46,7 @@ export const BLUEPRINT_CATEGORY_NAMES: Record<BlueprintCategory, string> = {
   [BlueprintCategory.BUILDINGS]: 'Buildings',
   [BlueprintCategory.EQUIPMENT]: 'Equipment',
   [BlueprintCategory.NODE_CORE]: 'Node Core',
+  [BlueprintCategory.UNIT]: 'Unit Training',
 };
 
 // Category icons (using common icon identifiers)
@@ -58,6 +59,7 @@ export const BLUEPRINT_CATEGORY_ICONS: Record<BlueprintCategory, string> = {
   [BlueprintCategory.BUILDINGS]: 'building',
   [BlueprintCategory.EQUIPMENT]: 'shield',
   [BlueprintCategory.NODE_CORE]: 'cube',
+  [BlueprintCategory.UNIT]: 'military',
 };
 
 // Quality sort order (for sorting in UI)
@@ -71,6 +73,7 @@ export const BLUEPRINT_QUALITY_ORDER: BlueprintQuality[] = [
 
 // Category sort order (for sorting in UI)
 export const BLUEPRINT_CATEGORY_ORDER: BlueprintCategory[] = [
+  BlueprintCategory.UNIT,
   BlueprintCategory.REFINEMENT,
   BlueprintCategory.MECHANICAL,
   BlueprintCategory.BIOLOGICAL,

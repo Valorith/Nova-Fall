@@ -66,7 +66,7 @@ export const itemDefinitionService = {
     if (data.color !== undefined) createData.color = data.color;
     if (data.stackSize !== undefined) createData.stackSize = data.stackSize;
     if (data.targetNodeType !== undefined) createData.targetNodeType = data.targetNodeType;
-    if (data.coreCost !== undefined) createData.coreCost = data.coreCost;
+    if (data.hqCost !== undefined) createData.hqCost = data.hqCost;
     if (data.efficiency !== undefined) createData.efficiency = data.efficiency;
     if (data.isTradeable !== undefined) createData.isTradeable = data.isTradeable;
     if (data.buyPrice !== undefined) createData.buyPrice = data.buyPrice;
@@ -76,6 +76,9 @@ export const itemDefinitionService = {
     }
     if (data.isBlueprint !== undefined) createData.isBlueprint = data.isBlueprint;
     if (data.linkedBlueprintId !== undefined) createData.linkedBlueprintId = data.linkedBlueprintId;
+    if (data.unitStats !== undefined) {
+      createData.unitStats = data.unitStats as unknown as Prisma.InputJsonValue;
+    }
 
     return prisma.itemDefinition.create({ data: createData });
   },
@@ -93,7 +96,7 @@ export const itemDefinitionService = {
     if (data.color !== undefined) updateData.color = data.color;
     if (data.stackSize !== undefined) updateData.stackSize = data.stackSize;
     if (data.targetNodeType !== undefined) updateData.targetNodeType = data.targetNodeType;
-    if (data.coreCost !== undefined) updateData.coreCost = data.coreCost;
+    if (data.hqCost !== undefined) updateData.hqCost = data.hqCost;
     if (data.efficiency !== undefined) updateData.efficiency = data.efficiency;
     if (data.isTradeable !== undefined) updateData.isTradeable = data.isTradeable;
     if (data.buyPrice !== undefined) updateData.buyPrice = data.buyPrice;
@@ -103,6 +106,9 @@ export const itemDefinitionService = {
     }
     if (data.isBlueprint !== undefined) updateData.isBlueprint = data.isBlueprint;
     if (data.linkedBlueprintId !== undefined) updateData.linkedBlueprintId = data.linkedBlueprintId;
+    if (data.unitStats !== undefined) {
+      updateData.unitStats = data.unitStats as unknown as Prisma.InputJsonValue;
+    }
 
     return prisma.itemDefinition.update({
       where: { id },
@@ -133,7 +139,7 @@ export const itemDefinitionService = {
       color: original.color,
       stackSize: original.stackSize,
       targetNodeType: original.targetNodeType,
-      coreCost: original.coreCost,
+      hqCost: original.hqCost,
       efficiency: original.efficiency,
       isTradeable: original.isTradeable,
       buyPrice: original.buyPrice,
@@ -144,6 +150,9 @@ export const itemDefinitionService = {
 
     if (original.productionRates) {
       createData.productionRates = original.productionRates;
+    }
+    if (original.unitStats) {
+      createData.unitStats = original.unitStats;
     }
 
     return prisma.itemDefinition.create({ data: createData });
@@ -225,7 +234,7 @@ export const itemDefinitionService = {
           color: core.color,
           stackSize: 100,
           targetNodeType: core.targetNode,
-          coreCost: core.cost,
+          hqCost: core.cost,
           isTradeable: false,
         },
       });

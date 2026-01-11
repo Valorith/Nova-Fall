@@ -10,10 +10,10 @@
 | Metric                 | Value                      |
 | ---------------------- | -------------------------- |
 | **Project Start Date** | 2026-01-04                 |
-| **Current Phase**      | Phase 2.5 - Node Activation & Production |
-| **Overall Progress**   | Phases 0-2 complete, Phase 2.5 in progress |
+| **Current Phase**      | Phase 4 - Combat System    |
+| **Overall Progress**   | Phases 0-3 complete        |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 37                         |
+| **Total Sessions**     | 43                         |
 
 ---
 
@@ -24,9 +24,9 @@
 | Phase 0: Foundation               | 🟢 Complete    | 2026-01-04 | 2026-01-05 | 2 days   |
 | Phase 1: World & Nodes            | 🟢 Complete    | 2026-01-05 | 2026-01-06 | 2 days   |
 | Phase 2: Economy & Resources      | 🟢 Complete    | 2026-01-06 | 2026-01-08 | 3 days   |
-| Phase 2.5: Node Activation & Prod | 🔵 In Progress | 2026-01-08 | -          | -        |
-| Phase 3: Buildings & Construction | ⚪ Pending     | -          | -          | -        |
-| Phase 4: Combat System            | ⚪ Pending     | -          | -          | -        |
+| Phase 2.5: Node Activation & Prod | 🟢 Complete    | 2026-01-08 | 2026-01-11 | 3 days   |
+| Phase 3: Building Items           | 🟢 Complete    | 2026-01-11 | 2026-01-11 | 1 day    |
+| Phase 4: Combat System            | 🔵 In Progress | 2026-01-11 | -          | -        |
 | Phase 5: Trading & Caravans       | ⚪ Pending     | -          | -          | -        |
 | Phase 6: Polish & MVP Launch      | ⚪ Pending     | -          | -          | -        |
 
@@ -2589,6 +2589,486 @@ const qualityTierMap = {
 
 ---
 
+## Session 38 - 2026-01-10
+
+**Duration:** ~1.5 hours
+**Phase:** Phase 2.5 - Node Activation & Production
+**Focus:** Blueprint learning feature, core efficiency verification, bug fixes
+
+### Completed Tasks
+
+**Blueprint Learning Feature:**
+- [x] Made blueprint items clickable in ResourceDisplay component
+- [x] Created BlueprintLearnModal.vue for learning confirmation
+- [x] Updated items store `getStorageItems` to include `isBlueprint` and `linkedBlueprintId`
+- [x] Fixed backend `learnBlueprint` to check both `isBlueprint` flag AND category="BLUEPRINT"
+- [x] Fixed `getBlueprintsForNode` to read from `GameSessionPlayer.learnedBlueprints` (not `Player`)
+- [x] Fixed `startCrafting` to read learned blueprints from `GameSessionPlayer` (session-scoped)
+- [x] Fixed `isBlueprintLearned` to return output item name instead of blueprint name
+
+**Node Core UI Improvements:**
+- [x] Added quality-based color to installed core name in CoreSlotPanel
+- [x] Added efficiency display (e.g., "Efficiency: 2 (+10%)")
+- [x] Created `getQualityColorClass()` function for quality-based colors
+
+**Node Core Efficiency Verification:**
+- [x] Verified crafting efficiency already correct (divides craft time by multiplier)
+- [x] Fixed harvesting efficiency to use chance-based bonus instead of direct multiplier
+- [x] 10% chance per efficiency point above 1 for +1 extra resource per type
+
+**Bug Fixes:**
+- [x] Fixed 401 errors during transfer completion (silently ignore in catch block)
+- [x] Created script to update NODE_CORE blueprints to only allow MANUFACTURING_PLANT
+- [x] Fixed blueprint items not triggering modal (improved isBlueprint detection)
+- [x] Fixed crafting failing with "You have not learned this blueprint" error
+
+### Technical Details
+
+**Harvesting Efficiency (New Mechanics):**
+```typescript
+const efficiencyBonusChance = (coreEfficiency - 1) * 0.1;
+// Efficiency 2 = 10% chance for +1 extra
+// Efficiency 3 = 20% chance for +1 extra
+// etc.
+```
+
+**Quality Color Classes:**
+```typescript
+LEGENDARY → 'text-orange-400'
+EPIC → 'text-purple-400'
+RARE → 'text-yellow-400'
+UNCOMMON → 'text-blue-400'
+COMMON → 'text-gray-300'
+```
+
+### Files Modified
+
+**Frontend:**
+- `apps/web/src/stores/items.ts` - Added isBlueprint/linkedBlueprintId to getStorageItems
+- `apps/web/src/components/game/ResourceDisplay.vue` - Blueprint click handler, visual indicator
+- `apps/web/src/components/game/CoreSlotPanel.vue` - Quality colors, efficiency display
+- `apps/web/src/views/GameView.vue` - BlueprintLearnModal integration, 401 error handling
+
+**Backend:**
+- `apps/api/src/modules/crafting/service.ts` - Session-scoped blueprint lookups, output name
+- `apps/api/src/modules/crafting/routes.ts` - Pass sessionId to service functions
+- `apps/worker/src/jobs/upkeep.ts` - Chance-based efficiency bonus for harvesting
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Chance-based harvesting efficiency | 10% per efficiency point matches user spec, prevents guaranteed doubling |
+| Session-scoped learned blueprints | Players learn blueprints per game session, not globally |
+| Quality colors follow MMORPG conventions | LEGENDARY=orange, EPIC=purple, etc. - familiar to players |
+
+### Notes
+
+- Blueprint learning system now fully functional
+- Core efficiency impacts both crafting (speed) and harvesting (bonus chance)
+- All verification tasks for Section 2.5.5/2.5.6 still complete
+- Ready for Section 2.5.7: Unit Training Framework
+
+### Next Session Plan
+
+1. Begin Section 2.5.7: Unit Training Framework
+2. Define basic infantry unit type
+3. Implement Barracks training using crafting system
+
+---
+
+## Session 39 - 2026-01-10
+
+**Duration:** ~1 hour
+**Phase:** Phase 2.5 - Node Activation & Production
+**Focus:** Bug fixes and quality-of-life improvements
+
+### Completed Tasks
+
+**Resource Transfer Fixes:**
+- [x] Fixed credits not appearing in Resource Transfer modal
+- [x] Removed credits filter from `transferSourceStorage` computed property in GameView
+- [x] Fixed transfer time estimate - was hardcoded "~30 seconds", now calculates dynamically
+
+**Transfer Time Calculation:**
+- [x] Created `packages/shared/src/config/transfers.ts` with transfer constants
+- [x] Added `TRANSFER_TIME_PER_NODE_MS` (60,000ms = 1 min per node)
+- [x] Added `TRANSFER_TIME_PER_RESOURCE_MS` (1,000ms = 1 sec per resource)
+- [x] Added `calculateTransferDuration()` and `formatTransferDuration()` helper functions
+- [x] Updated TransferPanel to calculate estimate based on quantity (assumes distance=1)
+
+**Dev Page Improvements:**
+- [x] Updated "Back to Game" button styling - now blue gradient with glow effect
+
+**Auth Token Refresh Fix:**
+- [x] Improved axios interceptor for token refresh - added axios 1.x compatible `headers.set()` method
+- [x] Added `await` before `authStore.logout()` to ensure completion before redirect
+- [x] Added explicit `return Promise.reject(error)` in catch block
+
+**Icon Picker Updates:**
+- [x] Copied new icon folders from assets to web public (PACK, WEAPONS2, WEAPONS3, WARRIOR)
+- [x] Regenerated items manifest (34 categories, 1099 icons)
+- [x] Regenerated skills manifest (5 categories, 186 icons)
+
+**Item Cache Refresh:**
+- [x] Added `reloadItems(force=true)` function to items store
+- [x] GameView now calls `itemsStore.reloadItems()` on mount
+- [x] Fixes stale icons after editing items in dev panel
+
+**Unit Stats System (Section 2.5.7):**
+- [x] Added `shield` field to UnitStats interface in shared package
+- [x] Added `unitStats` to DbItemDefinition and DbItemDefinitionInput types
+- [x] Updated API types and service to handle unitStats in create/update/duplicate
+- [x] Added "Unit Combat Stats" section to ItemsEditor UI
+- [x] Editable fields: health, shield, damage, armor, speed, range, attackSpeed
+- [x] View mode shows stats in colored grid (green=health, blue=shield, red=damage, orange=armor)
+- [x] Auto-initializes default stats when changing category to UNIT
+
+### Technical Details
+
+**Transfer Time Formula (from shared package):**
+```typescript
+duration = (distance * 60000) + (totalQuantity * 1000)
+// Example: 100 items to adjacent node = 1m + 1m40s = 2m40s
+```
+
+**Files Created:**
+- `packages/shared/src/config/transfers.ts` - Transfer time constants and helpers
+
+**Files Modified:**
+- `apps/web/src/views/GameView.vue` - Credits filter removed, items reload
+- `apps/web/src/components/game/TransferPanel.vue` - Dynamic time estimate
+- `apps/web/src/stores/items.ts` - Added reloadItems() function
+- `apps/web/src/services/api.ts` - Improved token refresh interceptor
+- `apps/web/src/views/DevView.vue` - Back to Game button styling
+- `apps/api/src/modules/transfers/types.ts` - Re-export from shared
+- `apps/web/public/icons/items/manifest.json` - Regenerated
+- `apps/web/public/icons/skills/manifest.json` - Regenerated
+
+### Notes
+
+- All fixes were quality-of-life improvements, no new phase tasks completed
+- Transfer time estimate assumes adjacent nodes (distance=1) as minimum
+- Items store now force-reloads when entering game, ensuring dev changes appear
+
+### Next Session Plan
+
+1. Begin Section 2.5.7: Unit Training Framework
+2. Define basic infantry unit type
+3. Implement Barracks training using crafting system
+
+---
+
+## Session 43 - 2026-01-11
+
+**Duration:** ~1 hour
+**Phase:** Phase 4 - Combat System
+**Focus:** Combat view integration and DPI fix
+
+### Completed Tasks
+
+**Combat View Integration:**
+- [x] Installed Babylon.js packages (`pnpm install` from PowerShell)
+- [x] Built shared package with new combat types
+- [x] Replaced "Focus on Node" button with "Combat View" button in node details panel
+- [x] Integrated CombatView component into GameView with v-show toggle
+- [x] Created mock combat setup for testing (uses selected node's type)
+
+**High-DPI Display Fix:**
+- [x] Fixed extremely blurry 3D rendering on high-DPI displays
+- [x] Root cause: Canvas was hidden (v-show) during initialization, resulting in zero dimensions
+- [x] Solution: Use `requestAnimationFrame` to wait for layout before sizing canvas
+- [x] Set `canvas.width/height = displaySize * devicePixelRatio` for crisp rendering
+- [x] Added public `resize()` method to CombatEngine for manual resizing
+
+**Arena Size Increase:**
+- [x] Increased arena from 40x40 tiles (80m) to 60x60 tiles (120m) - 50% larger
+- [x] Adjusted camera radius from 60 to 90 for proper framing
+- [x] Adjusted zoom limits (30-200) for larger arena
+
+### Technical Details
+
+**DPI Fix Implementation:**
+1. Engine initializes on mount (canvas hidden, zero size)
+2. When `enterCombat()` is called, `isActive` becomes true (v-show shows canvas)
+3. `requestAnimationFrame` waits for browser layout
+4. `resize()` sets canvas dimensions to `displaySize * devicePixelRatio`
+5. `engine.resize()` updates Babylon's internal state
+
+**Files Modified:**
+- `apps/web/src/views/GameView.vue` - Added CombatView integration, Combat View button
+- `apps/web/src/game/combat/CombatEngine.ts` - DPI fix, arena size increase
+- `apps/web/src/composables/useCombatEngine.ts` - requestAnimationFrame for resize timing
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Use requestAnimationFrame for resize timing | Ensures canvas has valid dimensions after v-show makes it visible |
+| Arena size 60x60 (120m x 120m) | User requested 50% larger than original 40x40 (80m x 80m) |
+| Camera radius 90 (was 60) | Proportional increase for larger arena framing |
+
+### Notes
+
+- Combat view now renders crisply on high-DPI displays (tested on 2560x1440 monitor)
+- Mock combat setup uses selected node's type for arena theming
+- Section 4.1 nearly complete - only WebSocket handlers and camera bounds remaining
+
+### Next Session Plan
+
+1. Implement WebSocket combat event handlers
+2. Add camera bounds limiting to arena
+3. Begin Section 4.2: Core Combat Mechanics (units, movement)
+
+---
+
+## Session 42 - 2026-01-11
+
+**Duration:** ~30 minutes
+**Phase:** Phase 4 - Combat System
+**Focus:** Combat foundation setup (Babylon.js infrastructure)
+
+### Completed Tasks
+
+**Phase 4.1 - Combat Foundation (Partial):**
+- [x] Created combat type definitions (`packages/shared/src/types/combat.ts`)
+  - TileType enum for arena terrain
+  - UnitState enum for unit behavior
+  - CombatPhase enum for battle phases
+  - ArenaPosition and WorldPosition types
+  - CombatInput type for client → server commands
+  - CombatState type for server → client updates
+  - CombatUnitState, ProjectileState, EffectState types
+  - CombatSetup and CombatResult types
+  - COMBAT_EVENTS constants for WebSocket event names
+- [x] Created CombatEngine class (`apps/web/src/game/combat/CombatEngine.ts`)
+  - Babylon.js Engine and Scene initialization
+  - ArcRotateCamera with isometric default (45° angle)
+  - Lighting setup (ambient + directional with shadows)
+  - GlowLayer for visual effects
+  - Arena building (40x40 tile grid, 80m x 80m)
+  - Ground with grid overlay
+  - Spawn zone visualization (arena perimeter)
+  - HQ placeholder at center (2x2 tiles)
+  - Camera controls (pan, zoom, rotate)
+  - State update handling
+  - Grid ↔ world coordinate conversion
+- [x] Created useCombatEngine composable (`apps/web/src/composables/useCombatEngine.ts`)
+  - Engine lifecycle management (init, start, stop, dispose)
+  - Combat state management (isActive, isLoading, error)
+  - enterCombat/exitCombat methods
+  - Camera control methods
+- [x] Created CombatView.vue component (`apps/web/src/components/game/CombatView.vue`)
+  - Canvas element for Babylon.js
+  - Loading and error overlays
+  - Combat HUD (timer, HQ health bar)
+  - Camera controls UI
+  - Exit button
+- [x] Added Babylon.js dependencies to package.json
+  - @babylonjs/core ^7.0.0
+  - @babylonjs/loaders ^7.0.0
+  - @babylonjs/gui ^7.0.0
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `packages/shared/src/types/combat.ts` | Combat type definitions |
+| `apps/web/src/game/combat/CombatEngine.ts` | Babylon.js 3D combat engine |
+| `apps/web/src/game/combat/index.ts` | Module exports |
+| `apps/web/src/composables/useCombatEngine.ts` | Vue composable for engine |
+| `apps/web/src/components/game/CombatView.vue` | Combat view component |
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `packages/shared/src/types/index.ts` | Export combat types |
+| `apps/web/package.json` | Add Babylon.js dependencies |
+| `docs/DEVELOPMENT-PLAN.md` | Mark Phase 4.1 partial progress |
+
+### Notes
+
+- Babylon.js packages added to package.json but NOT installed
+- **User must run `pnpm install` from PowerShell** to install packages
+- Combat foundation is ready for testing once packages are installed
+- WebSocket event handlers still need implementation (server-side)
+
+### Next Session Plan
+
+1. Run `pnpm install` from PowerShell to install Babylon.js
+2. Test combat view rendering
+3. Continue Phase 4.1: WebSocket event handling
+4. Section 4.2: Core Combat Mechanics (units, movement)
+
+---
+
+## Session 41 - 2026-01-11
+
+**Duration:** ~1 hour
+**Phase:** Phase 3 - Building Items
+**Focus:** Shield range stat, UI improvements, building stats display
+
+### Completed Tasks
+
+**Combat Stats System Enhancements:**
+- [x] Added `shieldRange` field to both UnitStats and BuildingStats interfaces
+- [x] Updated all unit type definitions with `shieldRange: 0` (personal shields)
+- [x] Updated all building type definitions with `shieldRange` (Shield Generator uses 4 for AOE)
+- [x] Updated `calculateUnitStats()` to include shieldRange (doesn't scale with veterancy)
+- [x] Updated `seed-units.ts` and `seed-buildings.ts` to include shieldRange
+
+**Section 3.3 - Building Stats in UI:**
+- [x] Extended ItemsEditor combat stats section to work for both UNIT and BUILDING categories
+- [x] Added shieldRange field to display and edit forms
+- [x] Display shows "Personal" or "X tiles (AOE)" based on shieldRange value
+- [x] Added purple color styling for AOE shields
+- [x] Speed field only shown for UNIT category (buildings don't move)
+- [x] Dynamic section header ("Unit Combat Stats" / "Building Combat Stats")
+- [x] Added "Stats not configured" message for items without unitStats set
+
+**UI Improvements:**
+- [x] Made QuantityModal larger (max-width 400px → 480px, larger padding/fonts/buttons)
+- [x] HQ Shop now uses tabbed UI for categories instead of scrolling list
+
+### Technical Details
+
+**shieldRange Mechanic:**
+- `shieldRange: 0` = Personal shield (absorbs damage before health, like extra HP)
+- `shieldRange: >0` = AOE shield radius protecting nearby allies within range
+
+**Files Modified:**
+- `packages/shared/src/config/units.ts` - Added shieldRange to UnitStats, all unit types
+- `packages/shared/src/config/buildings.ts` - Added shieldRange to BuildingStats, all building types
+- `apps/api/prisma/seed-units.ts` - Include shieldRange in unitStats
+- `apps/api/prisma/seed-buildings.ts` - Include shieldRange in unitStats
+- `apps/web/src/components/dev/ItemsEditor.vue` - Extended for BUILDING, added shieldRange, "not set" message
+- `apps/web/src/components/game/QuantityModal.vue` - Larger modal styling
+- `apps/web/src/components/game/CoreShopPanel.vue` - Tabbed category UI
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| shieldRange: 0 = personal, >0 = AOE | Clear distinction between self-protection and area protection |
+| Shield Generator has shieldRange: 4 | Projects shields to nearby allies, not just itself |
+| Show "Stats not configured" for items without stats | Better UX than hiding the section entirely |
+
+### Notes
+
+- Section 3.3 complete - buildings show combat stats in ItemsEditor
+- Phase 3 marked COMPLETE
+- Ready to begin Phase 4: Combat System
+
+### Next Session Plan
+
+1. Begin Phase 4: Combat System
+2. Section 4.1: Unit Configuration
+3. Section 4.2: Unit Recruitment
+
+---
+
+## Session 40 - 2026-01-11
+
+**Duration:** ~2 hours
+**Phase:** Phase 2.5 Complete → Phase 3 Started
+**Focus:** Complete Phase 2.5, streamline Phase 3, implement building system
+
+### Completed Tasks
+
+**Phase 2.5 Completion:**
+- [x] Phase 2.5 marked complete - all unit training framework tasks done
+- [x] Verification tasks confirmed by user
+
+**Phase 3 Restructuring:**
+- [x] Rewrote Phase 3 based on new design: buildings are items manufactured at Manufacturing Plant
+- [x] Deferred 3D grid placement, construction in Combat Mode to Phase 4
+- [x] Removed building upgrades section (quality from blueprint tiers instead)
+
+**Section 3.1 - Building Item Configuration:**
+- [x] Added BUILDING to ItemCategory enum in Prisma schema
+- [x] Created migration: `20260111051145_add_building_category`
+- [x] Regenerated Prisma client
+- [x] Created `packages/shared/src/config/buildings.ts` with BuildingStats interface
+- [x] Defined 7 building types: Pulse Turret, Heavy Turret, Wall Segment, Reinforced Wall, Shield Generator, Repair Station, Supply Depot
+- [x] Added BUILDING to DbItemCategory enum in shared package
+- [x] Added BUILDING to ITEM_CATEGORY_NAMES, ICONS, and COLORS
+
+**Section 3.2 - Building Items & Blueprints:**
+- [x] Created `apps/api/prisma/seed-buildings.ts` - seeds items and manufacturing blueprints
+- [x] Added `db:seed-buildings` script to package.json (api and root)
+- [x] Buildings reuse `unitStats` JSON field for combat stats
+
+**Blueprint Editor Improvements:**
+- [x] "Create Items" now maps blueprint category to correct item category:
+  - BUILDINGS → BUILDING
+  - UNIT → UNIT
+  - NODE_CORE → NODE_CORE
+  - Others → CRAFTED
+- [x] New blueprints default to "Requires Learning" (learned: true)
+- [x] "Create Variants" context menu also defaults to requiring learning
+
+**Icon Picker Improvements:**
+- [x] Wider scrollbar (21px) for easier grabbing
+- [x] Auto-scroll to selected icon when picker opens
+- [x] Custom scrollbar styling with rounded corners
+
+**Item Editor Improvements:**
+- [x] Added "HQ" badge on items with hqCost > 0 in item list
+
+### Technical Details
+
+**Building Types Defined:**
+| Building | Tier | Category | HP | Shield | Damage | Craft Time |
+|----------|------|----------|-----|--------|--------|------------|
+| Pulse Turret | 1 | Defense | 100 | 0 | 15 | 2m |
+| Heavy Turret | 2 | Defense | 200 | 25 | 30 | 4m |
+| Wall Segment | 1 | Defense | 300 | 0 | 0 | 1m |
+| Reinforced Wall | 2 | Defense | 500 | 100 | 0 | 2m |
+| Shield Generator | 1 | Defense | 80 | 50 | 0 | 3m |
+| Repair Station | 1 | Support | 60 | 0 | 0 | 2.5m |
+| Supply Depot | 1 | Support | 100 | 0 | 0 | 2m |
+
+**Files Created:**
+- `packages/shared/src/config/buildings.ts` - Building types and stats
+- `apps/api/prisma/seed-buildings.ts` - Building items/blueprints seeder
+- `apps/api/prisma/migrations/20260111051145_add_building_category/` - Migration
+
+**Files Modified:**
+- `apps/api/prisma/schema.prisma` - Added BUILDING to ItemCategory
+- `packages/shared/src/types/enums.ts` - Added BUILDING to DbItemCategory
+- `packages/shared/src/config/itemDefinitions.ts` - Added BUILDING display info
+- `packages/shared/src/config/index.ts` - Export buildings
+- `apps/web/src/components/dev/BlueprintEditor.vue` - Category mapping, default learning
+- `apps/web/src/components/dev/IconPicker.vue` - Scrollbar, auto-scroll
+- `apps/web/src/components/dev/ItemsEditor.vue` - HQ badge
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Buildings are items (like units) | Consistent with manufacturing system, 3D placement deferred to Phase 4 |
+| No building upgrades | Quality from blueprint tiers, simpler design |
+| Buildings have shield stat | Same combat stats as units for consistency |
+| Reuse unitStats field for buildings | Same structure, no schema change needed |
+| New blueprints require learning by default | More game progression control |
+
+### Notes
+
+- Phase 2.5 is now COMPLETE
+- Phase 3 streamlined significantly - just building items/blueprints
+- Section 3.1 complete, Section 3.2 implementation complete (pending verification)
+- Section 3.3 (Building Stats in UI) still pending - needs "Building Stats" section in ItemsEditor
+
+### Next Session Plan
+
+1. Run `pnpm db:seed-buildings` to populate building items and blueprints
+2. Complete Section 3.3 - Add Building Stats section to ItemsEditor UI
+3. Verify buildings can be manufactured at Manufacturing Plant
+4. Complete Phase 3
+
+---
+
 ## Session 37 - 2026-01-10
 
 **Duration:** ~2 hours
@@ -2839,4 +3319,4 @@ const qualityTierMap = {
 
 ---
 
-_Last Updated: 2026-01-10 (Session 37 - Section 2.5.5/2.5.6 Crafting System complete)_
+_Last Updated: 2026-01-11 (Session 40 - Phase 2.5 complete, Phase 3 started)_

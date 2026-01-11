@@ -114,6 +114,7 @@ export enum BlueprintCategory {
   BUILDINGS = 'BUILDINGS',
   EQUIPMENT = 'EQUIPMENT',
   NODE_CORE = 'NODE_CORE',
+  UNIT = 'UNIT', // Military unit training
 }
 
 // Item categories for the database item definition system
@@ -125,4 +126,6 @@ export enum DbItemCategory {
   EQUIPMENT = 'EQUIPMENT', // Items that can be equipped
   CRAFTED = 'CRAFTED', // Items produced via blueprints
   BLUEPRINT = 'BLUEPRINT', // Blueprint items linked to craftable recipes
+  UNIT = 'UNIT', // Military units (trained at Barracks)
+  BUILDING = 'BUILDING', // Structures (manufactured at Manufacturing Plant)
 }

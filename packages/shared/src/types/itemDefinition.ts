@@ -1,4 +1,5 @@
 import type { NodeType, BlueprintQuality } from './enums.js';
+import type { UnitStats } from '../config/units.js';
 
 // Item definition as stored in the database (database model)
 // Named DbItemDefinition to avoid conflict with the hardcoded ItemDefinition in config/items.ts
@@ -13,7 +14,7 @@ export interface DbItemDefinition {
   color: string;
   stackSize: number;
   targetNodeType: NodeType | null; // For node cores
-  coreCost: number | null; // For node cores
+  hqCost: number | null; // Credits to purchase from HQ (any item type)
   efficiency: number; // 1-5: bonus per point above 1 (+10% production/speed, -10% trade fee)
   isTradeable: boolean;
   buyPrice: number | null;
@@ -21,6 +22,7 @@ export interface DbItemDefinition {
   productionRates: Record<string, number> | null; // Node type -> hourly rate
   isBlueprint: boolean; // Flag indicating this item is a craftable blueprint
   linkedBlueprintId: string | null; // Reference to the Blueprint this item represents
+  unitStats: UnitStats | null; // Combat stats for UNIT category items
   createdAt: string;
   updatedAt: string;
 }
@@ -36,7 +38,7 @@ export interface DbItemDefinitionInput {
   color?: string;
   stackSize?: number;
   targetNodeType?: NodeType | null;
-  coreCost?: number | null;
+  hqCost?: number | null;
   efficiency?: number; // 1-5
   isTradeable?: boolean;
   buyPrice?: number | null;
@@ -44,5 +46,6 @@ export interface DbItemDefinitionInput {
   productionRates?: Record<string, number> | null;
   isBlueprint?: boolean;
   linkedBlueprintId?: string | null;
+  unitStats?: UnitStats | null;
 }
 

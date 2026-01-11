@@ -135,7 +135,7 @@ const form = ref({
   description: '',
   category: BlueprintCategory.REFINEMENT,
   quality: BlueprintQuality.COMMON,
-  learned: false,
+  learned: true, // Default: requires learning
   craftTime: 60,
   nodeTypes: [] as NodeType[],
   nodeTierRequired: 1,
@@ -277,7 +277,7 @@ function startCreate() {
     description: '',
     category: BlueprintCategory.REFINEMENT,
     quality: BlueprintQuality.COMMON,
-    learned: false,
+    learned: true, // Default: requires learning
     craftTime: 60,
     nodeTypes: [],
     nodeTierRequired: 1,
@@ -514,8 +514,21 @@ async function createItems() {
 
     // For node cores, set efficiency based on quality
     const efficiency = isNodeCore ? qualityEfficiencyMap[quality] : undefined;
-    // Output category: NODE_CORE for node core blueprints, CRAFTED for others
-    const outputCategory = isNodeCore ? DbItemCategory.NODE_CORE : DbItemCategory.CRAFTED;
+    // Map blueprint category to output item category
+    let outputCategory: DbItemCategory;
+    switch (blueprintCategory) {
+      case BlueprintCategory.NODE_CORE:
+        outputCategory = DbItemCategory.NODE_CORE;
+        break;
+      case BlueprintCategory.UNIT:
+        outputCategory = DbItemCategory.UNIT;
+        break;
+      case BlueprintCategory.BUILDINGS:
+        outputCategory = DbItemCategory.BUILDING;
+        break;
+      default:
+        outputCategory = DbItemCategory.CRAFTED;
+    }
 
     // Check if output item with same name and quality already exists
     const existingOutput = itemExists(outputItemName, quality);
@@ -844,7 +857,7 @@ async function createVariants() {
           description: baseBp.description || null,
           category: baseBp.category,
           quality: quality,
-          learned: baseBp.learned,
+          learned: true, // New variants require learning by default
           craftTime: baseBp.craftTime,
           nodeTypes: baseBp.nodeTypes,
           nodeTierRequired: qualityTierMap[quality], // Use quality-based tier

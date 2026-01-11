@@ -39,7 +39,15 @@
       "Skill(update)",
       "Bash(cd:*)",
       "Bash(pnpm build:shared:*)",
-      "Bash(PGPASSWORD=fMNmlTLNyHJncZzAAXAXwqEsqHzPnGKN psql:*)"
+      "Bash(PGPASSWORD=fMNmlTLNyHJncZzAAXAXwqEsqHzPnGKN psql:*)",
+      "WebSearch",
+      "Bash(claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest)",
+      "Bash(claude mcp list:*)",
+      "Bash(claude mcp remove:*)",
+      "Bash(claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest)",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__take_snapshot",
+      "mcp__chrome-devtools__new_page"
     ]
   }
 }

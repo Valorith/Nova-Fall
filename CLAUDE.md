@@ -274,12 +274,12 @@ Examples:
 
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
-| **Current Phase**  | Phase 2.5 - Node Activation & Production  |
-| **Phase Progress** | Sections 2.5.1-2.5.6 complete             |
-| **Current Task**   | Ready for Section 2.5.7 (Unit Training)   |
+| **Current Phase**  | Phase 4 - Combat System                   |
+| **Phase Progress** | Section 4.1 nearly complete               |
+| **Current Task**   | WebSocket handlers, camera bounds         |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 37 - 2026-01-10                   |
-| **Last Updated**   | 2026-01-10                                |
+| **Last Session**   | Session 43 - 2026-01-11                   |
+| **Last Updated**   | 2026-01-11                                |
 
 ---
 
@@ -337,6 +337,7 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-07 | WebSocket transfer:completed event        | Real-time UI updates without page refresh            | Claude      |
 | 2026-01-07 | Transfer animations private to owner      | Strategic - opponents can't see your resource movements | User     |
 | 2026-01-08 | Event-based victory conditions            | No polling; crown/HQ events trigger victory checks     | User        |
+| 2026-01-11 | shieldRange: 0=personal, >0=AOE           | Personal shield = extra HP, AOE protects nearby allies | User        |
 | 2026-01-08 | HQ only passive credit income (20/hr)     | All other credits come from trading/selling resources  | User        |
 | 2026-01-08 | Node core activation system               | Non-HQ/Crown nodes inactive until core installed       | User        |
 | 2026-01-08 | 8 node core types (one per node type)     | Solar Farm, Laboratory, Refinery, etc. - 100 credits each | User     |
@@ -354,6 +355,15 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-10 | Use db:reseed-map for map regeneration    | Preserves items/blueprints, only resets game nodes     | User        |
 | 2026-01-10 | CoreShopPanel fetches from ItemDefinition | Cores configured in Item Editor, not hardcoded         | User        |
 | 2026-01-10 | Blueprints filtered by learned status     | Only show unlearned or player-learned blueprints       | User        |
+| 2026-01-11 | Combat arena size 60x60 tiles (120m)      | 50% larger than initial 40x40 for better gameplay      | User        |
+| 2026-01-10 | Session-scoped learned blueprints         | Players learn blueprints per game session, not globally| Claude      |
+| 2026-01-10 | Harvesting efficiency: chance-based bonus | 10% per efficiency point for +1 extra resource         | User        |
+| 2026-01-10 | Quality colors follow MMORPG conventions  | Legendary=orange, Epic=purple, Rare=yellow, etc.       | Claude      |
+| 2026-01-10 | Buildings are items (like units)          | Manufactured at Manufacturing Plant, 3D placement in Phase 4 | User   |
+| 2026-01-10 | No building upgrades                      | Quality comes from blueprint tiers, not upgrade system | User        |
+| 2026-01-10 | Buildings have shield stat                | Same combat stats as units: health, shield, damage, etc. | User      |
+| 2026-01-11 | New blueprints require learning by default | More control over game progression                     | User        |
+| 2026-01-11 | Reuse unitStats field for buildings       | Same structure, avoids schema change                   | Claude      |
 
 ---
 
@@ -491,5 +501,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-_Last Updated: 2026-01-08 (Session 32)_
+_Last Updated: 2026-01-10 (Session 38)_
 _Version: 1.0.1_

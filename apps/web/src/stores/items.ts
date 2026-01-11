@@ -24,8 +24,9 @@ export const useItemsStore = defineStore('items', () => {
   const itemCount = computed(() => items.value.size);
 
   // Load all item definitions from API
-  async function loadItems() {
+  async function loadItems(force = false) {
     if (isLoading.value) return;
+    if (isLoaded.value && !force) return;
 
     isLoading.value = true;
     error.value = null;
@@ -46,6 +47,11 @@ export const useItemsStore = defineStore('items', () => {
     } finally {
       isLoading.value = false;
     }
+  }
+
+  // Force reload items from API (useful after editing items)
+  async function reloadItems() {
+    return loadItems(true);
   }
 
   // Get item definition by ID
@@ -165,6 +171,7 @@ export const useItemsStore = defineStore('items', () => {
 
     // Actions
     loadItems,
+    reloadItems,
     getItem,
     getItemDisplay,
     getItemName,

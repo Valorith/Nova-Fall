@@ -1,13 +1,16 @@
 import type { ResourceStorage } from '@nova-fall/shared';
+import {
+  TRANSFER_TIME_PER_NODE_MS,
+  TRANSFER_TIME_PER_RESOURCE_MS,
+  TRANSFER_JOB_INTERVAL_MS,
+} from '@nova-fall/shared';
 
-// Transfer duration factors:
-// - 1 minute per node in the path (minimum/distance factor)
-// - 1 second per resource unit (quantity factor)
-export const TRANSFER_TIME_PER_NODE_MS = 60 * 1000;
-export const TRANSFER_TIME_PER_RESOURCE_MS = 1000;
-
-// Job tick interval - transfers align completion to this interval
-export const TRANSFER_JOB_INTERVAL_MS = 30 * 1000;
+// Re-export transfer constants from shared package
+export {
+  TRANSFER_TIME_PER_NODE_MS,
+  TRANSFER_TIME_PER_RESOURCE_MS,
+  TRANSFER_JOB_INTERVAL_MS,
+};
 
 /**
  * Calculate the next tick time after a given timestamp using epoch-based alignment.

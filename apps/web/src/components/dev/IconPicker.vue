@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 
 interface IconManifest {
   categories: Record<string, string[]>;
@@ -26,6 +26,7 @@ const error = ref<string | null>(null);
 const selectedType = ref<IconType>('items');
 const selectedCategory = ref<string>('');
 const searchQuery = ref('');
+const pickerContentRef = ref<HTMLElement | null>(null);
 
 // Get current manifest based on selected type
 const manifest = computed(() => manifests.value[selectedType.value]);
@@ -52,11 +53,21 @@ onMounted(async () => {
   }
 });
 
-// Reset selection when modal opens
+// Reset selection when modal opens and scroll to selected icon
 watch(() => props.show, (isShown) => {
   if (isShown) {
     selectedCategory.value = '';
     searchQuery.value = '';
+
+    // Scroll to selected icon after DOM updates
+    nextTick(() => {
+      setTimeout(() => {
+        const selectedElement = pickerContentRef.value?.querySelector('.icon-item.selected');
+        if (selectedElement) {
+          selectedElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100); // Small delay to ensure icons are rendered
+    });
   }
 });
 
@@ -156,7 +167,7 @@ function formatCategoryName(category: string): string {
           </select>
         </div>
 
-        <div class="picker-content">
+        <div ref="pickerContentRef" class="picker-content">
           <div v-if="loading" class="picker-loading">
             Loading icons...
           </div>
@@ -321,6 +332,26 @@ function formatCategoryName(category: string): string {
   overflow-y: auto;
   padding: 16px;
   min-height: 300px;
+}
+
+/* Wider scrollbar for easier grabbing */
+.picker-content::-webkit-scrollbar {
+  width: 21px;
+}
+
+.picker-content::-webkit-scrollbar-track {
+  background: #0a0d12;
+  border-radius: 10px;
+}
+
+.picker-content::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 10px;
+  border: 4px solid #0a0d12;
+}
+
+.picker-content::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
 }
 
 .picker-loading,

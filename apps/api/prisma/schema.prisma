@@ -546,9 +546,11 @@ model ItemDefinition {
   // Stacking
   stackSize       Int          @default(1000)  // Max per storage slot (0 = unlimited)
 
+  // HQ Shop - any item with hqCost > 0 can be purchased at HQ
+  hqCost          Int?         // Credits to purchase from HQ (null = not purchasable)
+
   // For node cores only
   targetNodeType  NodeType?    // Which node type this core activates
-  coreCost        Int?         // Credits to purchase from HQ
   efficiency      Int          @default(1) // 1-5: bonus per point above 1 (+10% production/speed, -10% trade fee)
 
   // Market settings (for tradeable items)
@@ -563,6 +565,10 @@ model ItemDefinition {
   // Flag to indicate this item represents a craftable blueprint
   isBlueprint       Boolean      @default(false)
   linkedBlueprintId String?      // Reference to the Blueprint this item represents
+
+  // For units only - combat stats (used when entering combat view)
+  // JSON: { health, damage, armor, speed, range, attackSpeed, upkeep }
+  unitStats         Json?
 
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -887,6 +893,8 @@ enum ItemCategory {
   EQUIPMENT      // Items that can be equipped
   CRAFTED        // Items produced via blueprints
   BLUEPRINT      // Blueprint items linked to craftable recipes
+  UNIT           // Military units (trained at Barracks)
+  BUILDING       // Structures (manufactured at Manufacturing Plant)
 }
 
 // ==================== BLUEPRINTS ====================
@@ -908,4 +916,5 @@ enum BlueprintCategory {
   BUILDINGS
   EQUIPMENT
   NODE_CORE
+  UNIT           // Military unit training
 }

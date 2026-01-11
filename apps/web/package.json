@@ -14,6 +14,9 @@
   },
   "dependencies": {
     "@nova-fall/shared": "workspace:*",
+    "@babylonjs/core": "^7.0.0",
+    "@babylonjs/loaders": "^7.0.0",
+    "@babylonjs/gui": "^7.0.0",
     "vue": "^3.4.0",
     "vue-router": "^4.2.0",
     "pinia": "^2.1.0",

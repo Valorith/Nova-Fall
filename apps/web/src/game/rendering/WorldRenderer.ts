@@ -1218,7 +1218,7 @@ export class WorldRenderer {
     if (this.transferAnimationFrame !== null) return; // Already running
 
     const animate = () => {
-      this.transferFlowPhase += 0.08; // Adjust speed of flow
+      this.transferFlowPhase += 0.039; // Adjust speed of flow (slowed 51% from original)
       if (this.transferFlowPhase > Math.PI * 2) {
         this.transferFlowPhase -= Math.PI * 2;
       }
@@ -1236,12 +1236,15 @@ export class WorldRenderer {
       cancelAnimationFrame(this.transferAnimationFrame);
       this.transferAnimationFrame = null;
     }
-    this.transferGraphics.clear();
+    // Guard against HMR/destroy race conditions
+    this.transferGraphics?.clear();
   }
 
   // Render animated transfer flow lines
   private renderTransferLines(): void {
     const g = this.transferGraphics;
+    // Guard against HMR/destroy race conditions
+    if (!g) return;
     g.clear();
 
     if (this.pendingTransfers.length === 0) return;

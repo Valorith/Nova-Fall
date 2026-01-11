@@ -4,3 +4,4 @@ export * from './map.js';
 export * from './blueprint.js';
 export * from './itemDefinition.js';
 export * from './crafting.js';
+export * from './combat.js';

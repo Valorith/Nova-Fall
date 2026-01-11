@@ -15,6 +15,7 @@ import CoreShopPanel from '@/components/game/CoreShopPanel.vue';
 import CoreSlotPanel from '@/components/game/CoreSlotPanel.vue';
 import CraftingPanel from '@/components/game/CraftingPanel.vue';
 import BlueprintLearnModal from '@/components/game/BlueprintLearnModal.vue';
+import CombatView from '@/components/game/CombatView.vue';
 import type { VictoryEvent } from '@/services/socket';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
@@ -49,6 +50,8 @@ const isShopOpen = ref(false);
 const isCraftingOpen = ref(false);
 const isBlueprintLearnOpen = ref(false);
 const selectedBlueprintItemId = ref<string | null>(null);
+const inCombatView = ref(false);
+const combatViewRef = ref<InstanceType<typeof CombatView> | null>(null);
 
 // Transfer mode state (for click-to-select-destination flow)
 const isTransferMode = ref(false);
@@ -90,25 +93,31 @@ const selectedNodes = computed(() => {
 const primarySelectedNode = computed(() => selectedNodes.value[0] ?? null);
 
 // Get storage for the selected node (from actual node data, fallback to mock)
-// Excludes credits since they are global, not stored in nodes
 const selectedNodeStorage = computed<ResourceStorage>(() => {
   if (!primarySelectedNode.value) return {};
   // Use actual node storage from MapNode, fallback to mock storage only if undefined
   // Note: Empty storage {} is valid - don't fall back just because storage is empty
   const nodeData = primarySelectedNode.value.storage as ResourceStorage | undefined;
-  const rawStorage = nodeData !== undefined
+  return nodeData !== undefined
     ? nodeData
     : (nodeStorage.value[primarySelectedNode.value.id] ?? {});
-
-  // Filter out credits - they're a global resource, not node storage
-  const { credits: _, ...nodeResources } = rawStorage;
-  return nodeResources;
 });
 
 // Get storage capacity for the selected node
 const selectedNodeCapacity = computed(() => {
   if (!primarySelectedNode.value) return 0;
   return NODE_BASE_STORAGE[primarySelectedNode.value.type] ?? 10000;
+});
+
+// Get garrison units from the selected node (unit items in storage)
+const selectedNodeGarrison = computed(() => {
+  const storageItems = itemsStore.getStorageItems(selectedNodeStorage.value);
+  return storageItems.filter(item => item.display.category === 'UNIT');
+});
+
+// Total garrison count
+const selectedNodeGarrisonCount = computed(() => {
+  return selectedNodeGarrison.value.reduce((sum, item) => sum + item.amount, 0);
 });
 
 // Get current player ID
@@ -655,6 +664,9 @@ onMounted(async () => {
         }
       });
 
+      // Reload item definitions (in case they were edited in dev panel)
+      await itemsStore.reloadItems();
+
       // Load from API with session scope
       await gameStore.loadMapData(props.sessionId);
       if (!engine.value) return; // Component unmounted during async operation
@@ -848,11 +860,32 @@ async function handleSignOut() {
   window.location.href = '/';
 }
 
-function handleFocusNode() {
-  if (primarySelectedNode.value) {
-    engine.value?.panTo(primarySelectedNode.value.positionX, primarySelectedNode.value.positionY, true);
-    engine.value?.setZoomLevel('node');
-  }
+function handleEnterCombat() {
+  if (!primarySelectedNode.value) return;
+
+  // Create a mock combat setup for testing
+  const mockSetup = {
+    battleId: `test-battle-${Date.now()}`,
+    attackerId: 'attacker-1',
+    defenderId: authStore.user?.playerId || 'defender-1',
+    nodeId: primarySelectedNode.value.id,
+    nodeType: primarySelectedNode.value.type,
+    arenaLayout: Array(40).fill(null).map(() => Array(40).fill('walkable')) as import('@nova-fall/shared').TileType[][],
+    attackerUnits: [{ unitTypeId: 'militia', count: 10 }],
+    defenderUnits: [{ unitTypeId: 'militia', count: 5, deployed: true }],
+    defenderBuildings: [],
+    hqMaxHealth: 10000,
+    combatDuration: 1800,
+  };
+
+  // Enter combat view
+  inCombatView.value = true;
+  combatViewRef.value?.enterCombat(mockSetup);
+}
+
+function handleExitCombat() {
+  inCombatView.value = false;
+  combatViewRef.value?.exitCombat();
 }
 
 // Check if market is available (Trade Hub owned by current player)
@@ -893,7 +926,7 @@ const canTransferResources = computed(() => {
   // Check if node has any resources to transfer
   const storage = selectedNodeStorage.value;
   const hasResources = Object.entries(storage).some(
-    ([key, amount]) => key !== 'credits' && amount && amount > 0
+    ([, amount]) => amount && amount > 0
   );
 
   // Check if there's at least one other owned node to transfer to
@@ -1026,10 +1059,7 @@ const sourceNodeScreenPos = computed(() => {
 const transferSourceStorage = computed<ItemStorage>(() => {
   if (!transferSourceNode.value) return {};
   const nodeData = transferSourceNode.value.storage as ItemStorage | undefined;
-  if (!nodeData) return {};
-  // Filter out credits - they're a global resource, not node storage
-  const { credits: _, ...nodeResources } = nodeData;
-  return nodeResources;
+  return nodeData ?? {};
 });
 
 // Check if selected node is HQ (Capital) owned by current player
@@ -1451,8 +1481,16 @@ function handleBlueprintLearned(storage: Record<string, number>) {
     @mousemove="handleMouseMove"
     @contextmenu="handleRightClick"
   >
-    <!-- Game Canvas Container -->
-    <div ref="gameContainer" class="absolute inset-0" />
+    <!-- Game Canvas Container (Tactical Map) -->
+    <div v-show="!inCombatView" ref="gameContainer" class="absolute inset-0" />
+
+    <!-- Combat View (3D Babylon.js Arena) -->
+    <CombatView
+      v-show="inCombatView"
+      ref="combatViewRef"
+      :visible="inCombatView"
+      @exit="handleExitCombat"
+    />
 
     <!-- Transfer Mode Connector Line -->
     <svg
@@ -1841,6 +1879,37 @@ function handleBlueprintLearned(storage: Record<string, number>) {
               </div>
             </div>
 
+            <!-- Garrison (Unit Items) -->
+            <div v-if="selectedNodeGarrison.length > 0">
+              <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">
+                Garrison
+                <span class="text-green-400 font-medium ml-1">({{ selectedNodeGarrisonCount }} units)</span>
+              </p>
+              <div class="bg-gray-800/50 rounded p-3">
+                <div class="grid grid-cols-2 gap-2">
+                  <div
+                    v-for="unit in selectedNodeGarrison"
+                    :key="unit.itemId"
+                    class="flex items-center gap-2 bg-green-900/20 border border-green-500/30 rounded px-2 py-1.5"
+                  >
+                    <span
+                      v-if="itemsStore.isIconUrl(unit.display.icon)"
+                      class="w-6 h-6 flex-shrink-0"
+                    >
+                      <img :src="unit.display.icon!" :alt="unit.display.name" class="w-full h-full object-contain" />
+                    </span>
+                    <span v-else class="text-lg flex-shrink-0" :style="{ color: unit.display.color }">
+                      {{ unit.display.icon ?? '🪖' }}
+                    </span>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-medium text-green-100 truncate">{{ unit.display.name }}</p>
+                    </div>
+                    <span class="text-sm font-bold text-green-300">x{{ unit.amount }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Active Transfers -->
             <div v-if="selectedNodeTransfers.outgoing.length > 0 || selectedNodeTransfers.incoming.length > 0">
               <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Active Transfers</p>
@@ -1951,10 +2020,10 @@ function handleBlueprintLearned(storage: Record<string, number>) {
                 {{ isClaiming ? 'Claiming...' : 'Claim Node' }}
               </button>
               <button
-                class="w-full py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm font-medium transition-colors"
-                @click="handleFocusNode"
+                class="w-full py-2 px-4 bg-purple-600 hover:bg-purple-500 text-white rounded text-sm font-medium transition-colors"
+                @click="handleEnterCombat"
               >
-                Focus on Node
+                Combat View
               </button>
             </div>
           </div>

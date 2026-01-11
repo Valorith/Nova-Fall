@@ -1661,19 +1661,19 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
 
 ### 2.5.7 Unit Training Framework
 
-- [ ] **Define initial unit types**
-  - [ ] Basic infantry unit (trained at Barracks)
-  - [ ] Unit stats structure (health, damage, speed, etc.)
-  - [ ] Training cost and time
+- [x] **Define initial unit types**
+  - [x] Basic infantry unit (trained at Barracks) - 3 units defined: Militia, Marine, Heavy Trooper
+  - [x] Unit stats structure (health, shield, damage, armor, speed, range, attackSpeed)
+  - [x] Training cost and time - defined in UNIT_TYPES with costs and trainingTime
 
-- [ ] **Barracks training integration**
-  - [ ] Use crafting system for unit training
-  - [ ] Units added to node garrison on completion
+- [x] **Barracks training integration**
+  - [x] Use crafting system for unit training - blueprints with BARRACKS nodeType
+  - [x] Units added to node storage on completion (handled by crafting system)
 
-- [ ] **Verify Section 2.5.7:**
-  - [ ] Can train basic unit at Barracks
-  - [ ] Unit appears in garrison after training
-  - [ ] Training uses crafting UI
+- [x] **Verify Section 2.5.7:**
+  - [x] Can train basic unit at Barracks
+  - [x] Unit appears in storage after training
+  - [x] Training uses crafting UI
 
 ### Phase 2.5 Deliverable
 
@@ -1681,423 +1681,503 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
 
 ---
 
-## Phase 3: Buildings & Construction (Week 7-8)
+## Phase 3: Building Items (Week 7-8)
 
-### 3.1 Building Configuration
+> **Design Note:** Buildings exist as items in the tactical hex view. They are manufactured
+> at Manufacturing Plant nodes using the crafting/blueprint system. The actual 3D placement
+> and construction of buildings in Combat Mode is handled in Phase 4. Building quality/tiers
+> come from blueprint quality, not upgrades.
 
-- [ ] **Define building types**
+### 3.1 Building Item Configuration
 
+- [x] **Add BUILDING category to schema**
+  - [x] Add BUILDING to ItemCategory enum in Prisma schema
+  - [x] Run migration
+  - [x] Regenerate Prisma client
+
+- [x] **Define BuildingStats interface**
   ```typescript
-  // packages/shared/src/config/structures.ts
-  export const STRUCTURES = {
+  // packages/shared/src/config/buildings.ts
+  export interface BuildingStats {
+    health: number;
+    shield: number;      // Shield hit points (absorbs damage before health)
+    shieldRange: number; // 0 = personal shield, >0 = AOE radius protecting allies
+    damage: number;      // For defense buildings (turrets)
+    armor: number;
+    range: number;       // Attack/effect range
+    attackSpeed: number; // For defense buildings
+  }
+  ```
+
+- [x] **Define building types**
+  ```typescript
+  export const BUILDING_TYPES: Record<string, BuildingTypeDefinition> = {
+    // Defense
     pulse_turret: {
       id: 'pulse_turret',
       name: 'Pulse Turret',
-      category: 'defense',
+      description: 'Basic defensive turret. Fires energy bolts at enemies.',
+      icon: '🔫',
       tier: 1,
-      cost: { credits: 500, iron: 100 },
-      buildTime: 300, // seconds
-      upkeep: 5, // credits/hour
-      health: 100,
-      stats: { damage: 10, range: 3, attackSpeed: 1.0 },
-      size: { width: 1, height: 1 },
+      category: 'defense',
+      baseStats: { health: 100, shield: 0, damage: 15, armor: 10, range: 3, attackSpeed: 1.0 },
+      craftTime: 120,
+      craftCost: { credits: 200, steelBar: 3, energy: 20 },
     },
-    // ... more structures
+    shield_generator: {
+      id: 'shield_generator',
+      name: 'Shield Generator',
+      description: 'Provides shield protection to nearby units and buildings.',
+      icon: '🛡️',
+      tier: 1,
+      category: 'defense',
+      baseStats: { health: 80, shield: 50, damage: 0, armor: 5, range: 4, attackSpeed: 0 },
+      craftTime: 180,
+      craftCost: { credits: 300, steelBar: 2, energy: 50 },
+    },
+    wall_segment: {
+      id: 'wall_segment',
+      name: 'Wall Segment',
+      description: 'Sturdy defensive wall. Blocks enemy movement.',
+      icon: '🧱',
+      tier: 1,
+      category: 'defense',
+      baseStats: { health: 200, shield: 0, damage: 0, armor: 30, range: 0, attackSpeed: 0 },
+      craftTime: 60,
+      craftCost: { credits: 50, steelBar: 2 },
+    },
+    // Support
+    repair_station: {
+      id: 'repair_station',
+      name: 'Repair Station',
+      description: 'Repairs nearby friendly units and buildings over time.',
+      icon: '🔧',
+      tier: 1,
+      category: 'support',
+      baseStats: { health: 60, shield: 0, damage: 0, armor: 5, range: 3, attackSpeed: 0 },
+      craftTime: 150,
+      craftCost: { credits: 250, steelBar: 4, energy: 30 },
+    },
   };
   ```
 
-- [ ] **Building categories**
-  - [ ] Defense (turrets, walls, traps)
-  - [ ] Production (factories, refineries)
-  - [ ] Storage (warehouses)
-  - [ ] Research (labs)
-  - [ ] Command (HQ, barracks)
+- [x] **Building sub-categories**
+  - [x] Defense (turrets, walls, shield generators)
+  - [x] Support (repair stations, buff stations)
 
-- [ ] **Verify Section 3.1:**
-  - [ ] Building config loads correctly (check one from each category)
-  - [ ] Building stats match config values
-  - [ ] Tier requirements enforced
+- [x] **Verify Section 3.1:**
+  - [x] BUILDING category exists in schema
+  - [x] BuildingStats interface includes shield field
+  - [x] Building types defined with stats
 
-### 3.2 Node Grid System
+### 3.2 Building Items & Blueprints
 
-- [ ] **Grid implementation**
-  - [ ] Define grid size per node type
-  - [ ] Coordinate system (0,0 to N,N)
-  - [ ] Collision detection for placement
+- [x] **Create seed-buildings.ts script**
+  - [x] Create ItemDefinition entries for each building type
+  - [x] Set category to BUILDING
+  - [x] Include buildingStats (reuses unitStats field)
+  - [x] Create Blueprint entries for Manufacturing Plant
 
-- [ ] **Grid rendering**
-  - [ ] Show grid at zoom level 3
-  - [ ] Highlight valid placements
-  - [ ] Show occupied cells
-  - [ ] Preview building on hover
+- [x] **Update ItemDefinition schema if needed**
+  - [x] Reuse unitStats JSON field (same structure)
+  - [x] Buildings use same stats structure as units
 
-- [ ] **Verify Section 3.2:**
-  - [ ] Zoom to level 3 on owned node → grid visible
-  - [ ] Valid placement cells highlighted green
-  - [ ] Occupied cells show existing buildings
-  - [ ] Hover shows building preview at cursor
+- [x] **Add db:seed-buildings script to package.json**
 
-### 3.3 Construction System
+- [x] **Verify Section 3.2:**
+  - [x] Run seed script successfully
+  - [x] Building items appear in Item Editor with BUILDING category
+  - [x] Building blueprints appear in Blueprint Editor
+  - [x] Can craft buildings at Manufacturing Plant
+  - [x] Buildings appear in node storage after crafting
 
-- [ ] **Build queue**
-  - [ ] One active construction per node
-  - [ ] Queue additional constructions
-  - [ ] Cancel queued items
+### 3.3 Building Stats in UI
 
-- [ ] **Construction process**
-  - [ ] Validate requirements (tech, resources)
-  - [ ] Reserve grid space
-  - [ ] Deduct resources
-  - [ ] Create building in CONSTRUCTING state
-  - [ ] Set completion time
+- [x] **Update ItemsEditor for BUILDING category**
+  - [x] Show "Building Stats" section for BUILDING items
+  - [x] Display all stats: health, shield, shieldRange, damage, armor, range, attackSpeed
 
-- [ ] **Construction worker job**
-  - [ ] Check for completed constructions
-  - [ ] Update building status
-  - [ ] Emit completion events
-
-- [ ] **API endpoints**
-  - [ ] `GET /nodes/:id/buildings` - List buildings
-  - [ ] `POST /nodes/:id/buildings` - Start construction
-  - [ ] `DELETE /buildings/:id` - Demolish
-  - [ ] `POST /buildings/:id/cancel` - Cancel construction
-
-- [ ] **Verify Section 3.3:**
-  - [ ] Start building construction → resources deducted
-  - [ ] Building appears in CONSTRUCTING state on grid
-  - [ ] Progress timer counts down
-  - [ ] Building completes and becomes active
-  - [ ] Queue second building while first constructs
-
-### 3.4 Building UI
-
-- [ ] **Building placement mode**
-  - [ ] Enter placement mode from menu
-  - [ ] Show buildable area
-  - [ ] Snap to grid
-  - [ ] Confirm/cancel buttons
-
-- [ ] **Building info panel**
-  - [ ] Stats display
-  - [ ] Health bar
-  - [ ] Upgrade options
-  - [ ] Demolish button
-
-- [ ] **Construction progress**
-  - [ ] Progress bar on building
-  - [ ] Time remaining
-  - [ ] Queue display
-
-- [ ] **Verify Section 3.4:**
-  - [ ] Click build button → placement mode activates
-  - [ ] Place building on valid cell → construction starts
-  - [ ] Click existing building → info panel shows stats
-  - [ ] Demolish button removes building
-  - [ ] Construction progress bar updates in real-time
-
-### 3.5 Building Effects
-
-- [ ] **Defense buildings**
-  - [ ] Auto-targeting system (for combat)
-  - [ ] Range visualization
-  - [ ] Damage calculation
-
-- [ ] **Production buildings**
-  - [ ] Add to node production rate
-  - [ ] Crafting queue (basic)
-
-- [ ] **Storage buildings**
-  - [ ] Increase node capacity
-
-- [ ] **Verify Section 3.5:**
-  - [ ] Defense building shows range circle when selected
-  - [ ] Production building adds to node resource generation
-  - [ ] Storage building increases node storage capacity
-  - [ ] Building upkeep added to node upkeep cost
+- [x] **Verify Section 3.3:**
+  - [x] ItemsEditor shows building stats for BUILDING category items
+  - [x] Can edit building stats in dev panel
+  - [x] Stats persist correctly
 
 ### Phase 3 Deliverable
 
-✓ Players can construct buildings, see them on the map, buildings affect gameplay
+✅ **PHASE 3 COMPLETE** (2026-01-11)
+
+✓ Building items can be manufactured at Manufacturing Plant, stored in nodes, ready for Phase 4 3D placement
+
+> **Deferred to Phase 4:** 3D grid placement, construction in Combat Mode, building effects during combat
 
 ---
 
-## Phase 4: Combat System (Week 9-11)
+## Phase 4: Combat System (Week 9-14)
 
-### 4.1 Unit Configuration
+> **Design Document:** See `docs/COMBAT-MODE-DESIGN.md` for complete technical specification.
+>
+> **Priority:** 3D Combat Mode is the primary focus of this phase. The real-time Babylon.js battle
+> system is a massive undertaking and should be built first. Battle lifecycle and other features
+> integrate with the combat mode once it's functional.
 
-- [ ] **Define unit types**
-  ```typescript
-  // packages/shared/src/config/units.ts
-  export const UNITS = {
-    marine: {
-      id: 'marine',
-      name: 'Marine',
-      category: 'infantry',
-      tier: 1,
-      cost: { credits: 100, iron: 20 },
-      trainTime: 60, // seconds
-      upkeep: 2, // credits/hour
-      stats: {
-        health: 50,
-        damage: 5,
-        armor: 'light',
-        speed: 1.0,
-        range: 1,
-      },
-    },
-    // ... more units
-  };
-  ```
+### Already Complete (from earlier phases)
 
-- [ ] **Verify Section 4.1:**
-  - [ ] Unit config loads correctly
-  - [ ] Unit stats accessible from shared package
-  - [ ] Multiple unit types defined (infantry, vehicle, etc.)
+The following combat prerequisites were completed in Phase 2.5:
 
-### 4.2 Unit Recruitment
+- [x] **Unit types defined** (`packages/shared/src/config/units.ts`)
+  - [x] UnitStats interface with health, shield, shieldRange, damage, armor, speed, range, attackSpeed
+  - [x] 3 unit types: Militia, Marine, Heavy Trooper
+  - [x] Veterancy system with multipliers
 
-- [ ] **Barracks building**
-  - [ ] Required for recruitment
-  - [ ] Training queue
-  - [ ] Concurrent training slots
+- [x] **Building types defined** (`packages/shared/src/config/buildings.ts`)
+  - [x] BuildingStats interface with health, shield, shieldRange, damage, armor, range, attackSpeed
+  - [x] 7 building types: turrets, walls, shield generator, repair station, supply depot
 
-- [ ] **Recruitment process**
-  - [ ] Validate requirements
-  - [ ] Deduct costs
-  - [ ] Add to training queue
-  - [ ] Create unit on completion
+- [x] **Unit training via Barracks**
+  - [x] Uses crafting system for training queue
+  - [x] Units stored in node storage after training
 
-- [ ] **Unit management UI**
-  - [ ] Unit list per node
-  - [ ] Training queue display
-  - [ ] Unit details panel
-  - [ ] Disband option
+- [x] **Building manufacturing via Manufacturing Plant**
+  - [x] Uses crafting system
+  - [x] Buildings stored in node storage after crafting
+
+---
+
+### 4.1 Combat Foundation (Babylon.js Integration)
+
+> Corresponds to Phase A in COMBAT-MODE-DESIGN.md
+
+- [x] **Babylon.js integration with Vue**
+  - [x] Add @babylonjs/core, @babylonjs/loaders, @babylonjs/gui to apps/web
+  - [x] Create CombatEngine class (engine initialization, scene setup)
+  - [x] Create useCombatEngine composable
+  - [x] Implement view switching (v-show toggle, NOT v-if)
+  - [x] Engine pause/resume for hidden canvas
+  - [x] WebGL context preservation strategy
+  - [x] High-DPI display support (devicePixelRatio handling)
+
+- [x] **Basic arena rendering**
+  - [x] Flat 60x60 tile grid (120m x 120m arena)
+  - [ ] Ground texture with ThinInstances for performance
+  - [x] HQ placeholder at center (2x2 tiles)
+  - [x] Spawn zone visualization (arena perimeter)
+  - [x] Basic lighting and skybox
+
+- [x] **Camera system**
+  - [x] ArcRotateCamera with isometric default (45° angle)
+  - [x] Pan controls (WASD, drag, edge scroll)
+  - [x] Zoom controls (mouse wheel, pinch)
+  - [x] Q/E rotation (45° increments)
+  - [ ] Camera bounds limiting to arena
+
+- [~] **WebSocket combat events** (Types defined, handlers pending)
+  - [x] Define CombatInput type (deploy, move, attack, ability)
+  - [x] Define CombatState type (tick, units, projectiles, HQ health)
+  - [ ] Client → Server event handling
+  - [ ] Server → Client state broadcast
+  - [ ] Connection/reconnection handling
+
+- [~] **Verify Section 4.1:**
+  - [x] Toggle combat view without WebGL context loss
+  - [x] Basic arena renders with grid and HQ placeholder
+  - [x] Camera controls work (pan, zoom, rotate)
+  - [ ] WebSocket events send/receive correctly
+  - [x] Performance acceptable (60 FPS empty arena)
+
+---
+
+### 4.2 Core Combat Mechanics
+
+> Corresponds to Phase B in COMBAT-MODE-DESIGN.md
+
+- [ ] **Unit spawning and movement**
+  - [ ] Create UnitManager class
+  - [ ] Spawn units at perimeter spawn zones
+  - [ ] Basic unit meshes (placeholder boxes initially)
+  - [ ] Movement system (grid-based logic, smooth visual interpolation)
+  - [ ] Unit state machine (SPAWNING, IDLE, MOVING, ATTACKING, DEAD)
+
+- [ ] **Flow Field pathfinding**
+  - [ ] Implement Dijkstra integration field from HQ
+  - [ ] Generate flow direction per tile
+  - [ ] Units follow flow toward HQ (siege behavior)
+  - [ ] Obstacle handling (walls block tiles, recalculate flow)
+  - [ ] Flow field visualization (debug mode)
+
+- [ ] **Basic combat (hitscan damage)**
+  - [ ] Target acquisition system (nearest enemy in range)
+  - [ ] Hitscan weapon implementation
+  - [ ] Damage calculation with armor reduction
+  - [ ] Health tracking and death handling
+  - [ ] Damage numbers (floating text)
+
+- [ ] **HQ health and destruction**
+  - [ ] HQ health bar UI (prominent display)
+  - [ ] Damage accumulation tracking
+  - [ ] Visual damage states (HEALTHY → DAMAGED → CRITICAL)
+  - [ ] Destruction animation sequence
+  - [ ] Victory condition detection (HQ destroyed)
 
 - [ ] **Verify Section 4.2:**
-  - [ ] Build barracks at owned node
-  - [ ] Recruit unit → resources deducted, training starts
-  - [ ] Training timer counts down
-  - [ ] Unit appears in garrison when complete
-  - [ ] Disband unit → unit removed
+  - [ ] Units spawn from perimeter
+  - [ ] Units follow Flow Field toward HQ
+  - [ ] Units attack enemies in range
+  - [ ] Health bars update correctly
+  - [ ] HQ destruction triggers victory
 
-### 4.3 Unit Movement
+---
 
-- [ ] **Movement orders**
-  - [ ] Select units
-  - [ ] Choose destination node
-  - [ ] Calculate route (shortest path)
-  - [ ] Calculate travel time
+### 4.3 Full Combat Features
 
-- [ ] **Movement execution**
-  - [ ] Update unit status
-  - [ ] Track position along route
-  - [ ] Handle arrival
+> Corresponds to Phase C in COMBAT-MODE-DESIGN.md
 
-- [ ] **Movement UI**
-  - [ ] Show moving units on map
-  - [ ] Movement indicators
-  - [ ] ETA display
-  - [ ] Cancel movement
+- [ ] **A* manual orders**
+  - [ ] Implement A* pathfinding for player-issued moves
+  - [ ] Click-to-move with path preview
+  - [ ] Order queue (shift-click waypoints)
+  - [ ] Order completion → AI behavior reverts
+
+- [ ] **Tower targeting and firing**
+  - [ ] Tower placement from defense state
+  - [ ] Auto-target nearest enemy in range
+  - [ ] Priority override (player selects target)
+  - [ ] Target cooldown to prevent flicker
+  - [ ] Range circle visualization
+
+- [ ] **Projectile system**
+  - [ ] Create ProjectileManager class
+  - [ ] Travel time projectiles
+  - [ ] Homing missiles (with turn rate)
+  - [ ] Area damage with falloff
+  - [ ] Projectile visual effects (trails, impacts)
+
+- [ ] **Shield mechanics**
+  - [ ] Shield generator placement
+  - [ ] Shield bubble rendering (Fresnel shader)
+  - [ ] Sphere-ray intersection for projectile blocking
+  - [ ] Shield health pool and recharge delay
+  - [ ] Visual feedback on shield hit
 
 - [ ] **Verify Section 4.3:**
+  - [ ] Click-to-move works with path preview
+  - [ ] Towers target and fire at enemies
+  - [ ] Projectiles travel and hit targets
+  - [ ] Shields block projectiles from outside
+  - [ ] Shield recharges after delay
+
+---
+
+### 4.4 Multiplayer Sync
+
+> Corresponds to Phase D in COMBAT-MODE-DESIGN.md
+
+- [ ] **Server-authoritative state**
+  - [ ] Combat server with 20 TPS tick rate (50ms)
+  - [ ] Authoritative game state on server
+  - [ ] Input validation and anti-cheat basics
+  - [ ] State broadcasting to both players
+
+- [ ] **Client prediction/reconciliation**
+  - [ ] Local prediction for responsive feel
+  - [ ] Server state reconciliation on mismatch
+  - [ ] Smooth correction of prediction errors
+  - [ ] Lag compensation for fairness
+
+- [ ] **Real-time state synchronization**
+  - [ ] Delta compression (only send changes)
+  - [ ] Interpolation buffer (100ms behind server)
+  - [ ] Priority updates (nearby units > distant)
+  - [ ] Bandwidth optimization
+
+- [ ] **Latency compensation**
+  - [ ] Ping/pong latency measurement
+  - [ ] Display latency indicator in UI
+  - [ ] Input buffering for stability
+  - [ ] Graceful disconnection handling
+  - [ ] Mid-battle reconnection support
+
+- [ ] **Verify Section 4.4:**
+  - [ ] Both players see same game state (within 100ms)
+  - [ ] Actions feel responsive (prediction works)
+  - [ ] State syncs correctly after network hiccup
+  - [ ] Reconnection works mid-battle
+
+---
+
+### 4.5 Combat UI
+
+- [ ] **Combat HUD**
+  - [ ] Timer display (countdown from 30:00)
+  - [ ] HQ health bar (prominent, central)
+  - [ ] Menu and Surrender buttons
+  - [ ] Minimap with unit positions
+
+- [ ] **Selection system**
+  - [ ] Click to select unit
+  - [ ] Ctrl+click for multi-select
+  - [ ] Drag box selection
+  - [ ] Selection ring under units
+  - [ ] Selected unit stats panel
+
+- [ ] **Attacker deployment UI**
+  - [ ] Deployment bar with unit types
+  - [ ] Click unit → click spawn zone to deploy
+  - [ ] Unit count display per type
+  - [ ] Deploy All button
+
+- [ ] **Defender controls**
+  - [ ] Tower list panel
+  - [ ] Target priority override
+  - [ ] Tower enable/disable toggle
+  - [ ] Garrison unit management
+
+- [ ] **Verify Section 4.5:**
+  - [ ] Timer counts down correctly
+  - [ ] Can select and control units
+  - [ ] Deployment UI works for attacker
+  - [ ] Tower controls work for defender
+
+---
+
+### 4.6 Battle Lifecycle
+
+- [ ] **Attack initiation (from tactical map)**
+  - [ ] Select attacking units at staging node
+  - [ ] Choose target enemy node
+  - [ ] Validate attack (not on cooldown, valid path)
+  - [ ] Generate random prep time (24h ± 4h)
+  - [ ] Create Battle record with PREP_PHASE status
+  - [ ] Notify defender immediately
+
+- [ ] **Preparation Mode (20-28 hours)**
+  - [ ] Attacker: add/remove units, assign consumables
+  - [ ] Defender: move garrison, position defenses
+  - [ ] Countdown timer visible to both
+  - [ ] Final 1 hour: forces locked
+
+- [ ] **Combat Mode transition**
+  - [ ] Automatic transition when prep timer ends
+  - [ ] Snapshot attack force and defense state
+  - [ ] Start 30-minute combat window
+  - [ ] Launch 3D combat view for online players
+
+- [ ] **Battle resolution**
+  - [ ] Victory conditions: destroy HQ (attacker) or survive 30 min (defender)
+  - [ ] Time limit warnings (10m, 5m, 2m, 1m, 30s)
+  - [ ] Node ownership transfer on attacker victory
+  - [ ] Unit retreat to adjacent node on defender loss
+  - [ ] 3-day attack cooldown on node
+
+- [ ] **Post-battle processing**
+  - [ ] Award experience to surviving units
+  - [ ] Generate battle report
+  - [ ] Update player statistics
+  - [ ] Corporation notifications
+
+- [ ] **Absent player AI**
+  - [ ] Attacker AI: deploy units gradually, follow Flow Field
+  - [ ] Defender AI: towers auto-target, garrison defends
+  - [ ] Battle proceeds without human intervention
+
+- [ ] **Verify Section 4.6:**
+  - [ ] Attack initiation creates battle with correct prep time
+  - [ ] Prep phase allows force modification
+  - [ ] Combat starts automatically when timer ends
+  - [ ] Victory/defeat resolved correctly
+  - [ ] Cooldown applies after battle
+
+---
+
+### 4.7 Polish & Assets
+
+> Corresponds to Phase E in COMBAT-MODE-DESIGN.md
+
+- [ ] **Visual effects (Babylon.js)**
+  - [ ] GlowLayer for lasers/shields/abilities
+  - [ ] Particle systems (explosions, smoke, sparks)
+  - [ ] Cascaded Shadow Maps
+  - [ ] Post-processing (bloom, vignette, color grading)
+
+- [ ] **Animations**
+  - [ ] Unit idle/walk/attack animations
+  - [ ] Tower rotation and firing
+  - [ ] Building destruction sequences
+  - [ ] Spawn/death effects
+
+- [ ] **Audio integration**
+  - [ ] Spatial audio setup
+  - [ ] Weapon firing sounds
+  - [ ] Explosion/impact sounds
+  - [ ] UI feedback sounds
+  - [ ] Victory/defeat fanfare
+
+- [ ] **Asset acquisition**
+  - [ ] Unit models (Quaternius, Kenney, or purchased)
+  - [ ] Tower/structure models
+  - [ ] Terrain tiles and props by node type
+  - [ ] Effect textures and particles
+
+- [ ] **Asset pipeline**
+  - [ ] GLB format standardization
+  - [ ] Scale normalization (1 unit = 1 meter)
+  - [ ] Animation setup (Mixamo for humanoids)
+  - [ ] Texture optimization (KTX2 compression)
+  - [ ] Asset manifest for preloading
+
+- [ ] **Style unification**
+  - [ ] Faction color shader
+  - [ ] Consistent low-poly aesthetic
+  - [ ] Post-processing for visual cohesion
+
+- [ ] **Performance optimization**
+  - [ ] ThinInstances for terrain/props
+  - [ ] LOD for units at distance
+  - [ ] Object pooling for projectiles/particles
+  - [ ] Spatial hash for collision queries
+  - [ ] Profiling and optimization pass
+
+- [ ] **Verify Section 4.7:**
+  - [ ] Visual effects render correctly
+  - [ ] Animations play smoothly
+  - [ ] Audio plays with spatial positioning
+  - [ ] 60 FPS with 50+ units on mid-range hardware
+  - [ ] 3D models load correctly
+  - [ ] Load times < 5 seconds
+
+---
+
+### 4.8 Unit Movement (Tactical Map)
+
+> This section covers unit movement on the tactical hex map, outside of combat
+
+- [ ] **Movement orders**
+  - [ ] Select units in node storage
+  - [ ] Choose destination node (owned nodes only for now)
+  - [ ] Calculate route (shortest path through owned territory)
+  - [ ] Calculate travel time based on distance
+
+- [ ] **Movement execution**
+  - [ ] Update unit status to MOVING
+  - [ ] Track position along route
+  - [ ] Handle arrival at destination
+
+- [ ] **Movement UI**
+  - [ ] Show moving units indicator on map
+  - [ ] Movement path visualization
+  - [ ] ETA display
+  - [ ] Cancel movement option
+
+- [ ] **Verify Section 4.8:**
   - [ ] Select units and order move to adjacent owned node
   - [ ] Units show as moving on map
   - [ ] ETA displays correctly
   - [ ] Units arrive at destination after travel time
-  - [ ] Cancel movement returns units to origin
 
-### 4.4 Battle System - Phases
-
-#### Attack Phase Overview
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           ATTACK TIMELINE                                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  INITIATION ──► PREPARATION MODE ──► COMBAT MODE ──► RESOLUTION ──► COOLDOWN│
-│      │              (20-28 hours)      (~30 min)         │         (3 days) │
-│      │                   │                │              │            │     │
-│      │         Both sides prepare    Real-time TD    Winner         No new  │
-│      │         Move units, upgrade   Attacker has    determined     player  │
-│      │         Position defenses     time limit      Units move     attacks │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-- [ ] **Attack initiation**
-  - [ ] Select attacking units at staging node
-  - [ ] Choose target node (must be reachable)
-  - [ ] Validate attack is possible (not on cooldown, valid path)
-  - [ ] Generate random prep time (24h ± 4h = 20-28 hours)
-  - [ ] Create Battle record with PREP_PHASE status
-  - [ ] Notify defender immediately
-  - [ ] Both players see countdown timer
-
-- [ ] **Preparation Mode (20-28 hours)**
-  - [ ] Attacker can:
-    - [ ] Add/remove units from attack force
-    - [ ] Assign consumable items
-    - [ ] View defender's visible defenses
-    - [ ] Cancel attack (forfeit deposit if any)
-  - [ ] Defender can:
-    - [ ] Move garrison units from other nodes
-    - [ ] Build/upgrade defenses (if time permits)
-    - [ ] Position defensive structures
-    - [ ] Assign consumable items
-    - [ ] Request corporation reinforcements
-  - [ ] Countdown timer visible to both
-  - [ ] Final 1 hour: Forces locked, no changes allowed
-
-- [ ] **Combat Mode Transition**
-  - [ ] Automatic transition when prep timer ends
-  - [ ] Snapshot attack force and defense state
-  - [ ] Start 30-minute combat window timer
-  - [ ] Switch both players to tactical view (if online)
-  - [ ] Begin real-time simulation
-
-- [ ] **Verify Section 4.4:**
-  - [ ] Initiate attack on enemy node → Battle created with PREP_PHASE
-  - [ ] Prep timer shows 20-28 hour countdown
-  - [ ] Defender receives notification immediately
-  - [ ] Both sides can modify forces during prep
-  - [ ] Forces lock 1 hour before combat (no more changes)
-  - [ ] Combat mode starts automatically when timer ends
-
-### 4.5 Battle System - Execution
-
-- [ ] **Combat view (PixiJS)**
-  - [ ] Switch to zoom level 4
-  - [ ] Render node defense layout
-  - [ ] Show spawn points
-  - [ ] Unit sprites
-  - [ ] Health bars
-
-- [ ] **Real-time simulation**
-  - [ ] Server-authoritative with client prediction
-  - [ ] 60ms tick rate during combat
-  - [ ] State synchronization via WebSocket
-
-- [ ] **Attacker mechanics**
-  - [ ] Unit deployment from spawn points
-  - [ ] Pathfinding to objectives
-  - [ ] Auto-attack nearest enemy
-  - [ ] Player can issue move/attack commands
-
-- [ ] **Defender mechanics**
-  - [ ] Tower auto-targeting
-  - [ ] Player can override targets
-  - [ ] Garrison unit deployment
-  - [ ] Trap activation
-
-- [ ] **Verify Section 4.5:**
-  - [ ] Combat view renders with defense layout
-  - [ ] Attacker units spawn and move toward objective
-  - [ ] Defender towers auto-target attackers
-  - [ ] Units take damage and health bars update
-  - [ ] State syncs between server and clients
-
-### 4.6 Combat Actions
-
-- [ ] **Attacker actions**
-  - [ ] Deploy unit (from reserve)
-  - [ ] Move unit to position
-  - [ ] Attack specific target
-  - [ ] Use ability
-  - [ ] Use consumable item
-  - [ ] Retreat (withdraw forces)
-
-- [ ] **Defender actions**
-  - [ ] Retarget tower
-  - [ ] Activate trap
-  - [ ] Deploy garrison unit
-  - [ ] Use consumable item
-  - [ ] Emergency repairs
-
-- [ ] **Combat consumables**
-  - [ ] EMP bomb (disable electronics)
-  - [ ] Repair drone (heal units/buildings)
-  - [ ] Shield booster (temp defense)
-  - [ ] Rally flag (buff nearby units)
-
-- [ ] **Verify Section 4.6:**
-  - [ ] Attacker can deploy units from reserve
-  - [ ] Attacker can issue move/attack commands
-  - [ ] Defender can retarget towers
-  - [ ] Consumable items can be activated
-  - [ ] Actions execute in real-time
-
-### 4.7 Battle Resolution
-
-- [ ] **Victory conditions**
-  - [ ] Attacker Victory: Destroy Command Center within time limit
-  - [ ] Defender Victory: Timer expires (30 min) OR all attackers destroyed
-
-- [ ] **Time limit enforcement**
-  - [ ] 30-minute combat window
-  - [ ] Warnings at 10 min, 5 min, 2 min, 1 min, 30 sec
-  - [ ] Auto-resolve at timeout (defender wins)
-
-- [ ] **Attack Failed (Defender Wins)**
-  - [ ] All surviving attack units auto-withdraw to origin node
-  - [ ] Attacker receives casualty report
-  - [ ] Defender units remain in place
-  - [ ] Node enters 3-minute attack immunity (brief cooldown)
-  - [ ] Node then enters 3-day player attack cooldown
-  - [ ] NPC attacks still possible during cooldown
-
-- [ ] **Attack Succeeded (Attacker Wins)**
-  - [ ] All surviving defending mobile units withdraw to random adjacent friendly node
-    - [ ] If no adjacent friendly node, units are captured/destroyed
-  - [ ] All infrastructure (buildings) transfers to attacker ownership
-  - [ ] Node ownership transfers to attacker
-  - [ ] Attacker's surviving units become garrison
-  - [ ] Node storage contents transfer to attacker
-  - [ ] Node enters 3-minute attack immunity
-  - [ ] Node then enters 3-day player attack cooldown
-
-- [ ] **Post-Battle Processing**
-  - [ ] Calculate and award experience to surviving units
-  - [ ] Generate battle report for both players
-  - [ ] Update player statistics
-  - [ ] Trigger corporation notifications if applicable
-  - [ ] Store battle log for replay (stretch goal)
-
-- [ ] **Cooldown System**
-  - [ ] Track `lastAttackedAt` timestamp on node
-  - [ ] Track `attackCooldownUntil` timestamp (3 days from resolution)
-  - [ ] Validate cooldown before allowing new player attacks
-  - [ ] Display cooldown timer in node info panel
-  - [ ] NPC attacks bypass player cooldown
-
-- [ ] **Verify Section 4.7:**
-  - [ ] Attacker destroys Command Center → attacker wins
-  - [ ] Timer expires with Command Center intact → defender wins
-  - [ ] Winner determined correctly, node ownership transfers if attacker wins
-  - [ ] Surviving defender units retreat to adjacent node
-  - [ ] 3-day cooldown applies to node after battle
-
-### 4.8 Absent Player AI
-
-- [ ] **Attacker AI (if absent)**
-  - [ ] Deploy all units gradually
-  - [ ] Basic pathfinding to objective
-  - [ ] No ability usage
-  - [ ] No consumable usage
-
-- [ ] **Defender AI (if absent)**
-  - [ ] Tower auto-target: nearest
-  - [ ] Deploy garrison automatically
-  - [ ] No manual interventions
-
-- [ ] **Verify Section 4.8:**
-  - [ ] Battle proceeds when attacker is offline (AI deploys units)
-  - [ ] Battle proceeds when defender is offline (AI manages defense)
-  - [ ] Battle resolves correctly with no human intervention
+---
 
 ### Phase 4 Deliverable
 
-✓ Full combat loop works: schedule attack, real-time battle, resolution
+✓ Full combat loop works: schedule attack → preparation phase → real-time 3D battle → resolution
 
 ---
 

@@ -622,25 +622,25 @@ export interface CoreInstallResult {
   storage?: ItemStorage;
 }
 
-// Purchase a core at HQ - adds to HQ storage
-export async function purchaseCore(
+// Purchase an item at HQ - adds to HQ storage
+export async function purchaseItem(
   nodeId: string,
-  coreId: string,
+  itemId: string,
   playerId: string,
   gameSessionId: string,
-  sessionPlayerId: string
+  sessionPlayerId: string,
+  quantity: number = 1
 ): Promise<CorePurchaseResult> {
-  // Look up core from ItemDefinition database
-  const coreDef = await prisma.itemDefinition.findFirst({
+  // Look up item from ItemDefinition database (any item with hqCost set)
+  const itemDef = await prisma.itemDefinition.findFirst({
     where: {
-      itemId: coreId,
-      category: 'NODE_CORE',
-      coreCost: { not: null },
+      itemId: itemId,
+      hqCost: { not: null },
     },
   });
 
-  if (!coreDef || coreDef.coreCost === null) {
-    return { success: false, error: 'Invalid core type or core not purchasable' };
+  if (!itemDef || itemDef.hqCost === null) {
+    return { success: false, error: 'Invalid item or item not purchasable at HQ' };
   }
 
   // Get session player to check HQ and credits
@@ -658,15 +658,21 @@ export async function purchaseCore(
 
   // Verify the nodeId is the HQ
   if (nodeId !== sessionPlayer.hqNodeId) {
-    return { success: false, error: 'Cores can only be purchased at your headquarters' };
+    return { success: false, error: 'Items can only be purchased at your headquarters' };
+  }
+
+  // Validate quantity
+  if (quantity < 1 || !Number.isInteger(quantity)) {
+    return { success: false, error: 'Invalid quantity' };
   }
 
   // Check if player has enough credits
   const playerResources = sessionPlayer.resources as ResourceStorage;
   const credits = playerResources.credits ?? 0;
+  const totalCost = itemDef.hqCost * quantity;
 
-  if (credits < coreDef.coreCost) {
-    return { success: false, error: `Not enough credits. Need ${coreDef.coreCost}, have ${credits}` };
+  if (credits < totalCost) {
+    return { success: false, error: `Not enough credits. Need ${totalCost}, have ${credits}` };
   }
 
   // Get HQ node to add core to storage
@@ -679,13 +685,13 @@ export async function purchaseCore(
     return { success: false, error: 'HQ not found or not owned by you' };
   }
 
-  // Deduct credits and add core to HQ storage
-  const updatedCredits = credits - coreDef.coreCost;
+  // Deduct credits and add item to HQ storage
+  const updatedCredits = credits - totalCost;
   const hqStorage = hqNode.storage as ItemStorage;
-  const currentCoreCount = hqStorage[coreId] ?? 0;
+  const currentItemCount = hqStorage[itemId] ?? 0;
   const updatedStorage: ItemStorage = {
     ...hqStorage,
-    [coreId]: currentCoreCount + 1,
+    [itemId]: currentItemCount + quantity,
   };
 
   // Update both in a transaction

@@ -4,6 +4,7 @@ import { transfersApi, type TransferResponse, type CreateTransferRequest } from 
 import { useGameStore } from '@/stores/game';
 import { useItemsStore } from '@/stores/items';
 import type { MapNode, ItemStorage } from '@nova-fall/shared';
+import { calculateTransferDuration, formatTransferDuration } from '@nova-fall/shared';
 
 const props = defineProps<{
   sourceNode: MapNode;
@@ -32,7 +33,7 @@ const transferableResources = computed(() => {
   const storage = props.nodeStorage as ItemStorage;
 
   for (const [type, amount] of Object.entries(storage)) {
-    if (type === 'credits' || !amount || amount <= 0) continue;
+    if (!amount || amount <= 0) continue;
     const display = itemsStore.getItemDisplay(type);
     items.push({
       type,
@@ -65,6 +66,20 @@ const transferPreview = computed(() => {
     }
   }
   return items;
+});
+
+// Calculate total quantity of resources being transferred
+const totalTransferQuantity = computed(() => {
+  return Object.values(transferAmounts.value).reduce((sum, amount) => sum + (amount || 0), 0);
+});
+
+// Estimate transfer duration (assumes adjacent nodes, distance = 1)
+// Actual time may be longer if path goes through multiple nodes
+const estimatedTransferTime = computed(() => {
+  if (totalTransferQuantity.value <= 0) return '';
+  // Assume minimum distance of 1 (adjacent nodes)
+  const durationMs = calculateTransferDuration(1, totalTransferQuantity.value);
+  return formatTransferDuration(durationMs);
 });
 
 // Source node's pending transfers (outgoing)
@@ -311,7 +326,7 @@ watch([() => props.sourceNode.id, () => props.destNode.id], () => {
           </span>
         </div>
         <div class="transfer-panel__preview-time">
-          Arrival in ~30 seconds
+          Arrival in ~{{ estimatedTransferTime }}
         </div>
       </div>
 

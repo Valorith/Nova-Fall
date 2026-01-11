@@ -159,19 +159,22 @@ const tabs: { id: DevTab; label: string; icon: string }[] = [
 
 .back-link {
   display: block;
-  padding: 10px 16px;
-  background: #1a1f2e;
-  border-radius: 6px;
-  color: #6b7280;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border-radius: 8px;
+  color: #ffffff;
   text-decoration: none;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
   text-align: center;
   transition: all 0.15s;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 .back-link:hover {
-  background: #232938;
-  color: #9ca3af;
+  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
 }
 
 /* Content */

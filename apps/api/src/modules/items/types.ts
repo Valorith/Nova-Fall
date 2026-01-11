@@ -1,4 +1,5 @@
 import type { ItemCategory, NodeType, BlueprintQuality } from '@prisma/client';
+import type { UnitStats } from '@nova-fall/shared';
 
 export interface ItemDefinitionInput {
   itemId: string;
@@ -10,7 +11,7 @@ export interface ItemDefinitionInput {
   color?: string;
   stackSize?: number;
   targetNodeType?: NodeType | null;
-  coreCost?: number | null;
+  hqCost?: number | null;
   efficiency?: number;
   isTradeable?: boolean;
   buyPrice?: number | null;
@@ -18,6 +19,7 @@ export interface ItemDefinitionInput {
   productionRates?: Record<string, number> | null;
   isBlueprint?: boolean;
   linkedBlueprintId?: string | null;
+  unitStats?: UnitStats | null;
 }
 
 export interface ItemDefinitionListQuery {

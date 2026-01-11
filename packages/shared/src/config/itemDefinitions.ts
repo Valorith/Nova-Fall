@@ -8,6 +8,8 @@ export const ITEM_CATEGORY_NAMES: Record<DbItemCategory, string> = {
   [DbItemCategory.EQUIPMENT]: 'Equipment',
   [DbItemCategory.CRAFTED]: 'Crafted',
   [DbItemCategory.BLUEPRINT]: 'Blueprint',
+  [DbItemCategory.UNIT]: 'Unit',
+  [DbItemCategory.BUILDING]: 'Building',
 };
 
 // Category icons
@@ -18,6 +20,8 @@ export const ITEM_CATEGORY_ICONS: Record<DbItemCategory, string> = {
   [DbItemCategory.EQUIPMENT]: '🛡️',
   [DbItemCategory.CRAFTED]: '🔨',
   [DbItemCategory.BLUEPRINT]: '📜',
+  [DbItemCategory.UNIT]: '🪖',
+  [DbItemCategory.BUILDING]: '🏗️',
 };
 
 // Category colors
@@ -28,6 +32,8 @@ export const ITEM_CATEGORY_COLORS: Record<DbItemCategory, string> = {
   [DbItemCategory.EQUIPMENT]: '#22c55e', // Green
   [DbItemCategory.CRAFTED]: '#eab308', // Yellow
   [DbItemCategory.BLUEPRINT]: '#ec4899', // Pink
+  [DbItemCategory.UNIT]: '#4ade80', // Light green for military units
+  [DbItemCategory.BUILDING]: '#dc2626', // Red for structures/buildings
 };
 
 // Tier names

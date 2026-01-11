@@ -24,6 +24,8 @@
     "db:seed": "pnpm --filter @nova-fall/api db:seed",
     "db:reseed-map": "pnpm --filter @nova-fall/api db:reseed-map",
     "db:seed-resources": "pnpm --filter @nova-fall/api db:seed-resources",
+    "db:seed-units": "pnpm --filter @nova-fall/api db:seed-units",
+    "db:seed-buildings": "pnpm --filter @nova-fall/api db:seed-buildings",
     "db:studio": "pnpm --filter @nova-fall/api db:studio",
     "clean": "pnpm -r clean && rm -rf node_modules",
     "prepare": "husky"
