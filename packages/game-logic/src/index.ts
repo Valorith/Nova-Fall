@@ -5,3 +5,6 @@ export const GAME_LOGIC_VERSION = '0.1.0';
 
 // Economy calculations
 export * from './economy';
+
+// Combat calculations
+export * from './combat';

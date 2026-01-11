@@ -3,6 +3,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { Redis } from 'ioredis';
 import pino from 'pino';
+import type { CombatInput, CombatSetup, CombatState, CombatResult } from '@nova-fall/shared';
+import { COMBAT_EVENTS } from '@nova-fall/shared';
 
 const loggerOptions: pino.LoggerOptions =
   process.env.NODE_ENV === 'development'
@@ -44,6 +46,12 @@ const redis = new Redis(REDIS_URL);
 // Track which session each socket is viewing
 const socketSessions = new Map<string, string>();
 
+// Track which battle each socket is in (for combat mode)
+const socketBattles = new Map<string, string>();
+
+// Track player ID for each socket (authenticated via API)
+const socketPlayers = new Map<string, string>();
+
 // Helper to get viewer count key
 function getViewerKey(sessionId: string): string {
   return `session:${sessionId}:viewers`;
@@ -82,6 +90,11 @@ redisSub.subscribe(
   'crafting:completed',
   'game:victory',
   'player:eliminated',
+  // Combat channels
+  'combat:setup',
+  'combat:state',
+  'combat:end',
+  'combat:error',
   (err, count) => {
     if (err) {
       logger.error({ err }, 'Failed to subscribe to Redis channels');
@@ -200,6 +213,40 @@ redisSub.on('message', (channel, message) => {
         }
         break;
 
+      // Combat events - broadcast to battle room
+      case 'combat:setup':
+        if (data.battleId) {
+          io.to(`battle:${data.battleId}`).emit(COMBAT_EVENTS.COMBAT_SETUP, data as CombatSetup);
+          logger.info({ battleId: data.battleId }, 'Combat setup broadcast');
+        }
+        break;
+
+      case 'combat:state':
+        if (data.battleId) {
+          io.to(`battle:${data.battleId}`).emit(COMBAT_EVENTS.STATE_UPDATE, data as CombatState);
+          // Don't log every state update to avoid spam (20 TPS)
+        }
+        break;
+
+      case 'combat:end':
+        if (data.battleId) {
+          io.to(`battle:${data.battleId}`).emit(COMBAT_EVENTS.COMBAT_END, data as CombatResult);
+          logger.info({ battleId: data.battleId, winnerId: data.winnerId }, 'Combat end broadcast');
+        }
+        break;
+
+      case 'combat:error':
+        if (data.battleId && data.playerId) {
+          // Send error only to the specific player
+          const targetSocket = [...io.sockets.sockets.values()].find(
+            (s) => socketPlayers.get(s.id) === data.playerId && socketBattles.get(s.id) === data.battleId
+          );
+          if (targetSocket) {
+            targetSocket.emit(COMBAT_EVENTS.COMBAT_ERROR, { message: data.message, code: data.code });
+          }
+        }
+        break;
+
       default:
         logger.warn({ channel }, 'Unknown channel');
     }
@@ -260,6 +307,89 @@ io.on('connection', (socket) => {
     logger.debug({ socketId: socket.id, battleId }, 'Client unsubscribed from battle');
   });
 
+  // ============ Combat Mode Events ============
+
+  // Authenticate socket with player ID (called after API auth)
+  socket.on('auth:player', (playerId: string) => {
+    socketPlayers.set(socket.id, playerId);
+    logger.info({ socketId: socket.id, playerId }, 'Socket authenticated with player');
+  });
+
+  // Join a combat battle
+  socket.on(COMBAT_EVENTS.JOIN_COMBAT, async (data: { battleId: string; playerId: string }) => {
+    const { battleId, playerId } = data;
+
+    // Store player ID if not already set
+    if (!socketPlayers.has(socket.id)) {
+      socketPlayers.set(socket.id, playerId);
+    }
+
+    // Leave previous battle if any
+    const previousBattle = socketBattles.get(socket.id);
+    if (previousBattle && previousBattle !== battleId) {
+      socket.leave(`battle:${previousBattle}`);
+      logger.debug({ socketId: socket.id, battleId: previousBattle }, 'Left previous battle');
+    }
+
+    // Join battle room
+    socket.join(`battle:${battleId}`);
+    socketBattles.set(socket.id, battleId);
+    logger.info({ socketId: socket.id, battleId, playerId }, 'Player joined combat battle');
+
+    // Publish join event to Redis for combat server to handle
+    await redis.publish('combat:player_joined', JSON.stringify({ battleId, playerId, socketId: socket.id }));
+  });
+
+  // Leave a combat battle
+  socket.on(COMBAT_EVENTS.LEAVE_COMBAT, async (data: { battleId: string }) => {
+    const { battleId } = data;
+    const playerId = socketPlayers.get(socket.id);
+
+    if (socketBattles.get(socket.id) === battleId) {
+      socket.leave(`battle:${battleId}`);
+      socketBattles.delete(socket.id);
+      logger.info({ socketId: socket.id, battleId, playerId }, 'Player left combat battle');
+
+      // Publish leave event to Redis for combat server
+      await redis.publish('combat:player_left', JSON.stringify({ battleId, playerId, socketId: socket.id }));
+    }
+  });
+
+  // Send combat input (deploy, move, attack, ability)
+  socket.on(COMBAT_EVENTS.SEND_INPUT, async (input: CombatInput) => {
+    const battleId = socketBattles.get(socket.id);
+    const playerId = socketPlayers.get(socket.id);
+
+    if (!battleId || !playerId) {
+      socket.emit(COMBAT_EVENTS.COMBAT_ERROR, { message: 'Not in a battle', code: 'NOT_IN_BATTLE' });
+      return;
+    }
+
+    // Publish input to Redis for combat server to process
+    await redis.publish('combat:input', JSON.stringify({
+      battleId,
+      playerId,
+      input,
+    }));
+
+    logger.debug({ socketId: socket.id, battleId, playerId, type: input.type }, 'Combat input received');
+  });
+
+  // Request current combat state (for reconnection)
+  socket.on(COMBAT_EVENTS.REQUEST_STATE, async (data: { battleId: string }) => {
+    const { battleId } = data;
+    const playerId = socketPlayers.get(socket.id);
+
+    // Publish state request to Redis for combat server
+    await redis.publish('combat:request_state', JSON.stringify({
+      battleId,
+      playerId,
+      socketId: socket.id,
+    }));
+
+    logger.debug({ socketId: socket.id, battleId, playerId }, 'Combat state requested');
+  });
+
   socket.on('disconnect', async (reason) => {
     // Decrement viewer count if socket was in a session
     const sessionId = socketSessions.get(socket.id);
@@ -267,7 +397,23 @@ io.on('connection', (socket) => {
       await decrementViewers(sessionId);
       socketSessions.delete(socket.id);
     }
-    logger.info({ socketId: socket.id, reason, sessionId }, 'Client disconnected');
+
+    // Handle combat disconnect
+    const battleId = socketBattles.get(socket.id);
+    const playerId = socketPlayers.get(socket.id);
+    if (battleId && playerId) {
+      // Publish disconnect event for combat server
+      await redis.publish('combat:player_disconnected', JSON.stringify({
+        battleId,
+        playerId,
+        socketId: socket.id,
+        reason,
+      }));
+      socketBattles.delete(socket.id);
+    }
+    socketPlayers.delete(socket.id);
+
+    logger.info({ socketId: socket.id, reason, sessionId, battleId }, 'Client disconnected');
   });
 });
 

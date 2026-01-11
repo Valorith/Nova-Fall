@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 4 - Combat System    |
 | **Overall Progress**   | Phases 0-3 complete        |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 43                         |
+| **Total Sessions**     | 46                         |
 
 ---
 
@@ -2759,6 +2759,94 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 
 ---
 
+## Session 44 - 2026-01-11
+
+**Duration:** ~2 hours
+**Phase:** Phase 4 - Combat System
+**Focus:** Section 4.2 - Core Combat Mechanics
+
+### Completed Tasks
+
+**Unit Spawning and Movement:**
+- [x] Created UnitManager class for unit rendering and state management
+- [x] Integrated UnitManager into CombatEngine
+- [x] Implemented spawn at perimeter spawn zones
+- [x] Basic unit meshes (placeholder cylinders)
+- [x] Movement system with smooth interpolation
+- [x] Unit state machine (SPAWNING, IDLE, MOVING, ATTACKING, DEAD)
+- [x] Health bars above units with color-coding (green/orange/red)
+
+**Flow Field Pathfinding:**
+- [x] Implemented Dijkstra integration field from Core (center of arena)
+- [x] Generate flow direction per tile (8 directions)
+- [x] Obstacle handling (blocked tiles, diagonal corner blocking)
+- [x] Flow field visualization (debug mode with arrows)
+- [x] Safe array access helpers (get2D, set2D) for TypeScript strict mode
+
+**Combat Logic (game-logic package):**
+- [x] Created combat/damage.ts with damage calculations
+- [x] Armor damage reduction (diminishing returns formula)
+- [x] Shield absorption before health
+- [x] Target acquisition (nearest enemy in range)
+- [x] Attack cooldown system
+- [x] Created CombatSimulator class for server-side simulation
+- [x] Unit-to-unit combat processing
+- [x] Unit-to-Core damage processing
+- [x] Turret attack processing
+- [x] Victory condition detection (Core destroyed or all attackers dead)
+
+**Core Health System:**
+- [x] Core health bar in HUD (top bar below navbar)
+- [x] Dynamic health percentage display
+- [x] Visual damage states (healthy=green, damaged=orange, critical=red pulsing)
+- [x] Time remaining display
+- [x] Real-time updates from server state via WebSocket
+
+### Files Created
+- `apps/web/src/game/combat/UnitManager.ts` - Unit rendering and interpolation
+- `apps/web/src/game/combat/FlowField.ts` - Dijkstra pathfinding
+- `packages/game-logic/src/combat/damage.ts` - Combat calculations
+- `packages/game-logic/src/combat/simulator.ts` - Combat simulation
+- `packages/game-logic/src/combat/index.ts` - Combat module exports
+
+### Files Modified
+- `apps/web/src/game/combat/CombatEngine.ts` - Integrated UnitManager and FlowField
+- `apps/web/src/game/combat/index.ts` - Added exports
+- `apps/web/src/composables/useCombatEngine.ts` - Added Core health tracking
+- `apps/web/src/components/game/CombatView.vue` - Dynamic HUD with Core health
+- `packages/game-logic/src/index.ts` - Added combat exports
+- `docs/DEVELOPMENT-PLAN.md` - Updated Section 4.2 checkboxes
+
+### Technical Details
+
+**Damage Calculation:**
+```typescript
+// Damage after armor: damage * (100 / (100 + armor))
+// This gives diminishing returns on armor
+```
+
+**Flow Field Algorithm:**
+- Dijkstra from Core (2x2 tiles at center)
+- 8-directional movement with diagonal cost (sqrt(2))
+- Diagonal blocking (can't cut corners through obstacles)
+- Direction stored as index 0-7, -1 for blocked/unreachable
+
+### Notes
+
+- Section 4.2 nearly complete - only floating damage numbers and destruction animation pending
+- Combat simulation logic ready for server integration
+- All TypeScript strict mode errors resolved
+- Lint errors fixed in new combat files
+
+### Next Session Plan
+
+1. Verify Section 4.2 (manual testing of combat flow)
+2. Begin Section 4.3: Full Combat Features (buildings, turrets, projectiles)
+3. Add floating damage numbers
+4. Core destruction animation
+
+---
+
 ## Session 43 - 2026-01-11
 
 **Duration:** ~1 hour
@@ -2965,6 +3053,136 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 1. Begin Phase 4: Combat System
 2. Section 4.1: Unit Configuration
 3. Section 4.2: Unit Recruitment
+
+---
+
+## Session 46 - 2026-01-11
+
+**Duration:** ~1.5 hours
+**Phase:** Phase 4 - Combat System
+**Focus:** Arena scaling, unit tile sizes, camera improvements
+
+### Completed Tasks
+
+**Arena Scaling:**
+- [x] Increased tile size from 2m to 8m (arena now 480m x 480m)
+- [x] Increased zoom speed (wheelPrecision: 20 → 5)
+- [x] Max zoom distance now scales with arena size
+
+**Unit Tile Size System:**
+- [x] Added `tileSize` field to UnitDefinition (Prisma schema, shared types)
+- [x] Units now scale based on their tileSize setting (1-10 tiles)
+- [x] Added tile size slider to Unit Editor with NxN display
+- [x] Placeholder meshes scale dynamically based on tileSize
+- [x] 3D model loading scales to tileSize
+
+**Skill Updates:**
+- [x] Updated `/update` skill to sync mac-claude.md with CLAUDE.md
+
+### Technical Details
+
+**Arena Constants:**
+```typescript
+TILE_SIZE = 8; // 8 meters per tile (was 2)
+ARENA_SIZE = 60; // 60x60 tiles
+ARENA_METERS = 480; // 480m x 480m arena
+```
+
+**Unit Scaling:**
+- Unit size calculated as: `TILE_SIZE * tileSize * 0.8`
+- A 1x1 unit fills 80% of an 8m tile (6.4m)
+- Health bar size scales proportionally
+
+**Files Modified:**
+- `apps/api/prisma/schema.prisma` - Added tileSize field
+- `packages/shared/src/types/unitDefinition.ts` - Added tileSize to types
+- `apps/web/src/components/dev/UnitsEditor.vue` - Tile size slider
+- `apps/web/src/game/combat/CombatEngine.ts` - Arena scaling, camera
+- `apps/web/src/game/combat/UnitManager.ts` - Dynamic unit sizing
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Tile size 8m (was 2m) | Larger arena feels better, more room for units |
+| Unit tileSize configurable 1-10 | Different unit types can have different footprints |
+| Sync mac-claude.md in /update | Keeps macOS development environment in sync |
+
+### Notes
+
+- Database migration needed: `npx prisma migrate dev --name add_unit_tile_size`
+- Arena is now 4x larger (480m vs 120m previously)
+
+### Next Session Plan
+
+1. Run database migration for tileSize field
+2. Continue Section 4.3: Full Combat Features
+3. Implement tower targeting and firing
+
+---
+
+## Session 45 - 2026-01-11
+
+**Duration:** ~2 hours
+**Phase:** Phase 4 - Combat System
+**Focus:** Combat Dev Panel improvements, building model loading, camera controls
+
+### Completed Tasks
+
+**Dev Panel - Link Item Selector:**
+- [x] Auto-save linked items when clicking outside dropdown (UnitsEditor.vue, BuildingsEditor.vue)
+- [x] Display linked items as small cards with quality-colored borders
+- [x] Hover-to-reveal unlink buttons on item cards
+
+**Dev Panel - Model Selector:**
+- [x] Horizontal scrollable mesh panel instead of tall expanding list
+- [x] Small preview thumbnails for each mesh option
+- [x] Better UX for selecting meshes from large pack files
+
+**Combat View - Building Models:**
+- [x] Fixed pack file mesh loading (pattern matching parent/grandparent names)
+- [x] Buildings now scale to respect tile dimensions from settings
+- [x] Fixed "Clear All" to properly dispose entire mesh hierarchies (TransformNode)
+- [x] Mesh centering when reparenting from pack files
+
+**Combat View - Camera:**
+- [x] Reduced minimum zoom from 30 to 5 for close-up views
+
+### Technical Details
+
+**Pack File Mesh Loading:**
+- GLB pack files have meshes named like "Object_X" with turret IDs in parent/grandparent nodes
+- Added pattern matching logic similar to ModelPreview.vue
+- Handles both T-series (`T-A01_123`) and other naming conventions
+
+**Building Model Scaling:**
+- Models scale to fill their tile footprint (TILE_SIZE = 2 meters)
+- 1x1 tile = 2m x 2m, 2x2 tiles = 4m x 4m
+- Removed minimum height constraint that was incorrectly scaling models UP
+- Pack file meshes centered before scaling to handle scattered world positions
+
+**Mesh Hierarchy Disposal:**
+- Changed `devBuildingMeshes` from `Map<string, Mesh>` to `Map<string, TransformNode>`
+- Added recursive `disposeBuildingNode()` function
+- Properly disposes all descendants including rotating turret parts
+
+**Files Modified:**
+- `apps/web/src/components/dev/UnitsEditor.vue` - Auto-save, card display
+- `apps/web/src/components/dev/BuildingsEditor.vue` - Same changes
+- `apps/web/src/components/dev/ModelSelectorModal.vue` - Horizontal mesh picker
+- `apps/web/src/game/combat/CombatEngine.ts` - Building model loading, scaling, disposal, camera zoom
+
+### Notes
+
+- Combat dev panel now much more usable for placing buildings
+- Building models properly scale to their configured tile footprint
+- Camera can zoom in close enough to inspect unit/building models in detail
+
+### Next Session Plan
+
+1. Continue Section 4.3: Full Combat Features
+2. Implement A* pathfinding for manual orders
+3. Tower targeting and firing
 
 ---
 

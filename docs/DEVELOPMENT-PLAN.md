@@ -1858,7 +1858,7 @@ The following combat prerequisites were completed in Phase 2.5:
 
 - [x] **Basic arena rendering**
   - [x] Flat 60x60 tile grid (120m x 120m arena)
-  - [ ] Ground texture with ThinInstances for performance
+  - [x] Ground texture with ThinInstances for performance
   - [x] HQ placeholder at center (2x2 tiles)
   - [x] Spawn zone visualization (arena perimeter)
   - [x] Basic lighting and skybox
@@ -1868,20 +1868,20 @@ The following combat prerequisites were completed in Phase 2.5:
   - [x] Pan controls (WASD, drag, edge scroll)
   - [x] Zoom controls (mouse wheel, pinch)
   - [x] Q/E rotation (45° increments)
-  - [ ] Camera bounds limiting to arena
+  - [x] Camera bounds limiting to arena
 
-- [~] **WebSocket combat events** (Types defined, handlers pending)
+- [x] **WebSocket combat events**
   - [x] Define CombatInput type (deploy, move, attack, ability)
   - [x] Define CombatState type (tick, units, projectiles, HQ health)
-  - [ ] Client → Server event handling
-  - [ ] Server → Client state broadcast
-  - [ ] Connection/reconnection handling
+  - [x] Client → Server event handling
+  - [x] Server → Client state broadcast
+  - [x] Connection/reconnection handling
 
-- [~] **Verify Section 4.1:**
+- [x] **Verify Section 4.1:**
   - [x] Toggle combat view without WebGL context loss
   - [x] Basic arena renders with grid and HQ placeholder
   - [x] Camera controls work (pan, zoom, rotate)
-  - [ ] WebSocket events send/receive correctly
+  - [x] WebSocket events send/receive correctly
   - [x] Performance acceptable (60 FPS empty arena)
 
 ---
@@ -1890,33 +1890,33 @@ The following combat prerequisites were completed in Phase 2.5:
 
 > Corresponds to Phase B in COMBAT-MODE-DESIGN.md
 
-- [ ] **Unit spawning and movement**
-  - [ ] Create UnitManager class
-  - [ ] Spawn units at perimeter spawn zones
-  - [ ] Basic unit meshes (placeholder boxes initially)
-  - [ ] Movement system (grid-based logic, smooth visual interpolation)
-  - [ ] Unit state machine (SPAWNING, IDLE, MOVING, ATTACKING, DEAD)
+- [x] **Unit spawning and movement**
+  - [x] Create UnitManager class
+  - [x] Spawn units at perimeter spawn zones
+  - [x] Basic unit meshes (placeholder boxes initially)
+  - [x] Movement system (grid-based logic, smooth visual interpolation)
+  - [x] Unit state machine (SPAWNING, IDLE, MOVING, ATTACKING, DEAD)
 
-- [ ] **Flow Field pathfinding**
-  - [ ] Implement Dijkstra integration field from HQ
-  - [ ] Generate flow direction per tile
-  - [ ] Units follow flow toward HQ (siege behavior)
-  - [ ] Obstacle handling (walls block tiles, recalculate flow)
-  - [ ] Flow field visualization (debug mode)
+- [x] **Flow Field pathfinding**
+  - [x] Implement Dijkstra integration field from HQ
+  - [x] Generate flow direction per tile
+  - [x] Units follow flow toward HQ (siege behavior)
+  - [x] Obstacle handling (walls block tiles, recalculate flow)
+  - [x] Flow field visualization (debug mode)
 
-- [ ] **Basic combat (hitscan damage)**
-  - [ ] Target acquisition system (nearest enemy in range)
-  - [ ] Hitscan weapon implementation
-  - [ ] Damage calculation with armor reduction
-  - [ ] Health tracking and death handling
+- [x] **Basic combat (hitscan damage)**
+  - [x] Target acquisition system (nearest enemy in range)
+  - [x] Hitscan weapon implementation
+  - [x] Damage calculation with armor reduction
+  - [x] Health tracking and death handling
   - [ ] Damage numbers (floating text)
 
-- [ ] **HQ health and destruction**
-  - [ ] HQ health bar UI (prominent display)
-  - [ ] Damage accumulation tracking
-  - [ ] Visual damage states (HEALTHY → DAMAGED → CRITICAL)
+- [x] **HQ health and destruction**
+  - [x] HQ health bar UI (prominent display)
+  - [x] Damage accumulation tracking
+  - [x] Visual damage states (HEALTHY → DAMAGED → CRITICAL)
   - [ ] Destruction animation sequence
-  - [ ] Victory condition detection (HQ destroyed)
+  - [x] Victory condition detection (HQ destroyed)
 
 - [ ] **Verify Section 4.2:**
   - [ ] Units spawn from perimeter

@@ -4,6 +4,8 @@ import {
   itemsApi,
   uploadsApi,
   blueprintsApi,
+  unitsApi,
+  buildingsApi,
   type ItemDefinitionListQuery,
   type Blueprint,
 } from '@/services/api';
@@ -19,7 +21,8 @@ import {
   MIN_EFFICIENCY,
   MAX_EFFICIENCY,
   type DbItemDefinition,
-  type UnitStats,
+  type DbUnitDefinition,
+  type DbBuildingDefinition,
 } from '@nova-fall/shared';
 
 // State
@@ -57,20 +60,19 @@ const form = ref({
   sellPrice: null as number | null,
   productionRates: {} as Record<string, number>,
   linkedBlueprintId: null as string | null,
-  unitStats: null as UnitStats | null,
+  unitDefinitionId: null as string | null,
+  buildingDefinitionId: null as string | null,
 });
 
-// Default unit stats for new units/buildings
-const defaultUnitStats: UnitStats = {
-  health: 100,
-  shield: 0,
-  shieldRange: 0,
-  damage: 10,
-  armor: 5,
-  speed: 2,
-  range: 1,
-  attackSpeed: 1.0,
-};
+// Unit/Building definition state
+const unitDefinitions = ref<DbUnitDefinition[]>([]);
+const buildingDefinitions = ref<DbBuildingDefinition[]>([]);
+const loadingUnits = ref(false);
+const loadingBuildings = ref(false);
+const unitSearchQuery = ref('');
+const buildingSearchQuery = ref('');
+const showUnitDropdown = ref(false);
+const showBuildingDropdown = ref(false);
 
 // Blueprint selection state
 const blueprints = ref<Blueprint[]>([]);
@@ -189,15 +191,20 @@ function startEdit() {
     sellPrice: selectedItem.value.sellPrice,
     productionRates: selectedItem.value.productionRates || {},
     linkedBlueprintId: selectedItem.value.linkedBlueprintId,
-    unitStats: selectedItem.value.unitStats || null,
+    unitDefinitionId: selectedItem.value.unitDefinitionId || null,
+    buildingDefinitionId: selectedItem.value.buildingDefinitionId || null,
   };
   // Fetch blueprints if this is a blueprint category item
   if (selectedItem.value.category === DbItemCategory.BLUEPRINT) {
     fetchBlueprints();
   }
-  // Initialize unit stats if this is a unit or building
-  if ((selectedItem.value.category === DbItemCategory.UNIT || selectedItem.value.category === DbItemCategory.BUILDING) && !form.value.unitStats) {
-    form.value.unitStats = { ...defaultUnitStats };
+  // Fetch unit definitions if this is a UNIT category item
+  if (selectedItem.value.category === DbItemCategory.UNIT) {
+    fetchUnitDefinitions();
+  }
+  // Fetch building definitions if this is a BUILDING category item
+  if (selectedItem.value.category === DbItemCategory.BUILDING) {
+    fetchBuildingDefinitions();
   }
   isEditing.value = true;
   isCreating.value = false;
@@ -223,7 +230,8 @@ function startCreate() {
     sellPrice: null,
     productionRates: {},
     linkedBlueprintId: null,
-    unitStats: null,
+    unitDefinitionId: null,
+    buildingDefinitionId: null,
   };
   isEditing.value = false;
   isCreating.value = true;
@@ -259,7 +267,8 @@ async function save() {
       sellPrice: form.value.isTradeable ? form.value.sellPrice : null,
       productionRates: Object.keys(cleanedProductionRates).length > 0 ? cleanedProductionRates : null,
       linkedBlueprintId: form.value.category === DbItemCategory.BLUEPRINT ? form.value.linkedBlueprintId : null,
-      unitStats: (form.value.category === DbItemCategory.UNIT || form.value.category === DbItemCategory.BUILDING) ? form.value.unitStats : null,
+      unitDefinitionId: form.value.category === DbItemCategory.UNIT ? form.value.unitDefinitionId : null,
+      buildingDefinitionId: form.value.category === DbItemCategory.BUILDING ? form.value.buildingDefinitionId : null,
     };
 
     if (isCreating.value) {
@@ -412,9 +421,8 @@ function getQualityName(quality: string): string {
 const showNodeCoreFields = computed(() => form.value.category === DbItemCategory.NODE_CORE);
 const showTradeFields = computed(() => form.value.isTradeable);
 const showBlueprintFields = computed(() => form.value.category === DbItemCategory.BLUEPRINT);
-const showUnitFields = computed(() =>
-  form.value.category === DbItemCategory.UNIT || form.value.category === DbItemCategory.BUILDING
-);
+const showUnitLinkField = computed(() => form.value.category === DbItemCategory.UNIT);
+const showBuildingLinkField = computed(() => form.value.category === DbItemCategory.BUILDING);
 
 // Filtered blueprints for dropdown
 const filteredBlueprints = computed(() => {
@@ -457,14 +465,98 @@ function clearLinkedBlueprint() {
   form.value.linkedBlueprintId = null;
 }
 
-// Watch category to fetch blueprints when BLUEPRINT category selected
-// and initialize unit stats when UNIT category selected
+// Fetch unit definitions for selection
+async function fetchUnitDefinitions() {
+  if (unitDefinitions.value.length > 0) return; // Already fetched
+  loadingUnits.value = true;
+  try {
+    const response = await unitsApi.getAll({ limit: 500 });
+    unitDefinitions.value = response.data.units;
+  } catch (err) {
+    console.error('Failed to load unit definitions:', err);
+  } finally {
+    loadingUnits.value = false;
+  }
+}
+
+// Fetch building definitions for selection
+async function fetchBuildingDefinitions() {
+  if (buildingDefinitions.value.length > 0) return; // Already fetched
+  loadingBuildings.value = true;
+  try {
+    const response = await buildingsApi.getAll({ limit: 500 });
+    buildingDefinitions.value = response.data.buildings;
+  } catch (err) {
+    console.error('Failed to load building definitions:', err);
+  } finally {
+    loadingBuildings.value = false;
+  }
+}
+
+// Filtered unit definitions for dropdown
+const filteredUnitDefinitions = computed(() => {
+  const query = unitSearchQuery.value.toLowerCase();
+  if (!query) return unitDefinitions.value;
+  return unitDefinitions.value.filter(
+    (u) => u.name.toLowerCase().includes(query)
+  );
+});
+
+// Filtered building definitions for dropdown
+const filteredBuildingDefinitions = computed(() => {
+  const query = buildingSearchQuery.value.toLowerCase();
+  if (!query) return buildingDefinitions.value;
+  return buildingDefinitions.value.filter(
+    (b) => b.name.toLowerCase().includes(query)
+  );
+});
+
+// Get linked unit definition
+const linkedUnitDefinition = computed(() => {
+  if (!form.value.unitDefinitionId) return null;
+  return unitDefinitions.value.find((u) => u.id === form.value.unitDefinitionId);
+});
+
+// Get linked building definition
+const linkedBuildingDefinition = computed(() => {
+  if (!form.value.buildingDefinitionId) return null;
+  return buildingDefinitions.value.find((b) => b.id === form.value.buildingDefinitionId);
+});
+
+// Select a unit definition
+function selectUnitDefinition(unit: DbUnitDefinition) {
+  form.value.unitDefinitionId = unit.id;
+  showUnitDropdown.value = false;
+  unitSearchQuery.value = '';
+}
+
+// Select a building definition
+function selectBuildingDefinition(building: DbBuildingDefinition) {
+  form.value.buildingDefinitionId = building.id;
+  showBuildingDropdown.value = false;
+  buildingSearchQuery.value = '';
+}
+
+// Clear linked unit definition
+function clearLinkedUnit() {
+  form.value.unitDefinitionId = null;
+}
+
+// Clear linked building definition
+function clearLinkedBuilding() {
+  form.value.buildingDefinitionId = null;
+}
+
+// Watch category to fetch blueprints/units/buildings when category changes
 watch(() => form.value.category, (category) => {
   if (category === DbItemCategory.BLUEPRINT) {
     fetchBlueprints();
   }
-  if ((category === DbItemCategory.UNIT || category === DbItemCategory.BUILDING) && !form.value.unitStats) {
-    form.value.unitStats = { ...defaultUnitStats };
+  if (category === DbItemCategory.UNIT) {
+    fetchUnitDefinitions();
+  }
+  if (category === DbItemCategory.BUILDING) {
+    fetchBuildingDefinitions();
   }
 });
 
@@ -729,47 +821,37 @@ onMounted(() => {
               </div>
             </template>
 
-            <!-- Unit/Building Stats display -->
-            <template v-if="selectedItem.category === 'UNIT' || selectedItem.category === 'BUILDING'">
-              <div class="detail-section-header">{{ selectedItem.category === 'UNIT' ? 'Unit' : 'Building' }} Combat Stats</div>
-              <div v-if="selectedItem.unitStats" class="unit-stats-display">
-                <div class="stat-item">
-                  <span class="stat-label">Health</span>
-                  <span class="stat-value health">{{ selectedItem.unitStats.health }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Shield</span>
-                  <span class="stat-value shield">{{ selectedItem.unitStats.shield }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Shield Range</span>
-                  <span class="stat-value" :class="{ 'aoe-shield': selectedItem.unitStats.shieldRange > 0 }">
-                    {{ selectedItem.unitStats.shieldRange > 0 ? selectedItem.unitStats.shieldRange + ' tiles (AOE)' : 'Personal' }}
-                  </span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Damage</span>
-                  <span class="stat-value damage">{{ selectedItem.unitStats.damage }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Armor</span>
-                  <span class="stat-value armor">{{ selectedItem.unitStats.armor }}</span>
-                </div>
-                <div v-if="selectedItem.category === 'UNIT'" class="stat-item">
-                  <span class="stat-label">Speed</span>
-                  <span class="stat-value">{{ selectedItem.unitStats.speed }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Range</span>
-                  <span class="stat-value">{{ selectedItem.unitStats.range }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">Attack Speed</span>
-                  <span class="stat-value">{{ selectedItem.unitStats.attackSpeed }}/s</span>
+            <!-- Linked Unit Definition display -->
+            <template v-if="selectedItem.category === 'UNIT'">
+              <div class="detail-section-header">Linked Unit Definition</div>
+              <div v-if="selectedItem.unitDefinition" class="linked-definition-display">
+                <div class="definition-name">{{ selectedItem.unitDefinition.name }}</div>
+                <div class="definition-category">{{ selectedItem.unitDefinition.category }}</div>
+                <div class="definition-stats">
+                  HP: {{ selectedItem.unitDefinition.health }} |
+                  DMG: {{ selectedItem.unitDefinition.damage }} |
+                  SPD: {{ selectedItem.unitDefinition.speed }}
                 </div>
               </div>
               <div v-else class="stats-not-set">
-                <span class="not-set-message">Stats not configured. Click Edit to set combat stats.</span>
+                <span class="not-set-message">No unit definition linked. Click Edit to link a unit.</span>
+              </div>
+            </template>
+
+            <!-- Linked Building Definition display -->
+            <template v-if="selectedItem.category === 'BUILDING'">
+              <div class="detail-section-header">Linked Building Definition</div>
+              <div v-if="selectedItem.buildingDefinition" class="linked-definition-display">
+                <div class="definition-name">{{ selectedItem.buildingDefinition.name }}</div>
+                <div class="definition-category">{{ selectedItem.buildingDefinition.category }}</div>
+                <div class="definition-stats">
+                  Size: {{ selectedItem.buildingDefinition.width }}x{{ selectedItem.buildingDefinition.height }} |
+                  HP: {{ selectedItem.buildingDefinition.health }} |
+                  {{ selectedItem.buildingDefinition.damage > 0 ? 'DMG: ' + selectedItem.buildingDefinition.damage : 'Non-combat' }}
+                </div>
+              </div>
+              <div v-else class="stats-not-set">
+                <span class="not-set-message">No building definition linked. Click Edit to link a building.</span>
               </div>
             </template>
 
@@ -972,51 +1054,92 @@ onMounted(() => {
               </div>
             </template>
 
-            <!-- Unit/Building Stats fields -->
-            <template v-if="showUnitFields && form.unitStats">
-              <div class="section-header">{{ form.category === DbItemCategory.UNIT ? 'Unit' : 'Building' }} Combat Stats</div>
-              <p class="section-hint">Configure stats for this {{ form.category === DbItemCategory.UNIT ? 'unit' : 'building' }} when it enters combat</p>
-              <div class="unit-stats-grid">
-                <div class="form-group">
-                  <label>Health</label>
-                  <input v-model.number="form.unitStats.health" type="number" min="1" class="form-input" />
-                  <span class="hint">Hit points before death</span>
+            <!-- Unit Definition link (shown when category is UNIT) -->
+            <template v-if="showUnitLinkField">
+              <div class="section-header">Linked Unit Definition</div>
+              <p class="section-hint">Link this item to a unit definition for combat stats and 3D model</p>
+              <div class="form-group">
+                <label>Unit Definition</label>
+                <div class="definition-selector">
+                  <div v-if="linkedUnitDefinition" class="linked-definition">
+                    <span class="definition-info">
+                      <span class="def-name">{{ linkedUnitDefinition.name }}</span>
+                      <span class="def-category">{{ linkedUnitDefinition.category }}</span>
+                    </span>
+                    <button type="button" class="btn-clear" @click="clearLinkedUnit">&times;</button>
+                  </div>
+                  <div v-else class="definition-search-wrapper">
+                    <input
+                      v-model="unitSearchQuery"
+                      type="text"
+                      placeholder="Search unit definitions..."
+                      class="form-input"
+                      @focus="showUnitDropdown = true"
+                    />
+                    <div v-if="showUnitDropdown && filteredUnitDefinitions.length > 0" class="definition-dropdown">
+                      <div
+                        v-for="unit in filteredUnitDefinitions"
+                        :key="unit.id"
+                        class="definition-option"
+                        @click="selectUnitDefinition(unit)"
+                      >
+                        <span class="def-name">{{ unit.name }}</span>
+                        <span class="def-stats">HP: {{ unit.health }} | DMG: {{ unit.damage }}</span>
+                        <span class="def-category">{{ unit.category }}</span>
+                      </div>
+                    </div>
+                    <div v-if="loadingUnits" class="loading-definitions">Loading...</div>
+                    <div v-if="!loadingUnits && unitDefinitions.length === 0" class="no-definitions">
+                      No unit definitions found. Create one in the Units tab first.
+                    </div>
+                  </div>
                 </div>
-                <div class="form-group">
-                  <label>Shield</label>
-                  <input v-model.number="form.unitStats.shield" type="number" min="0" class="form-input" />
-                  <span class="hint">Shield HP (absorbs damage first)</span>
+                <span class="hint">Select a unit definition to link combat stats and 3D model to this item</span>
+              </div>
+            </template>
+
+            <!-- Building Definition link (shown when category is BUILDING) -->
+            <template v-if="showBuildingLinkField">
+              <div class="section-header">Linked Building Definition</div>
+              <p class="section-hint">Link this item to a building definition for stats and 3D model</p>
+              <div class="form-group">
+                <label>Building Definition</label>
+                <div class="definition-selector">
+                  <div v-if="linkedBuildingDefinition" class="linked-definition">
+                    <span class="definition-info">
+                      <span class="def-name">{{ linkedBuildingDefinition.name }}</span>
+                      <span class="def-size">{{ linkedBuildingDefinition.width }}x{{ linkedBuildingDefinition.height }}</span>
+                      <span class="def-category">{{ linkedBuildingDefinition.category }}</span>
+                    </span>
+                    <button type="button" class="btn-clear" @click="clearLinkedBuilding">&times;</button>
+                  </div>
+                  <div v-else class="definition-search-wrapper">
+                    <input
+                      v-model="buildingSearchQuery"
+                      type="text"
+                      placeholder="Search building definitions..."
+                      class="form-input"
+                      @focus="showBuildingDropdown = true"
+                    />
+                    <div v-if="showBuildingDropdown && filteredBuildingDefinitions.length > 0" class="definition-dropdown">
+                      <div
+                        v-for="building in filteredBuildingDefinitions"
+                        :key="building.id"
+                        class="definition-option"
+                        @click="selectBuildingDefinition(building)"
+                      >
+                        <span class="def-name">{{ building.name }}</span>
+                        <span class="def-stats">{{ building.width }}x{{ building.height }} | HP: {{ building.health }}</span>
+                        <span class="def-category">{{ building.category }}</span>
+                      </div>
+                    </div>
+                    <div v-if="loadingBuildings" class="loading-definitions">Loading...</div>
+                    <div v-if="!loadingBuildings && buildingDefinitions.length === 0" class="no-definitions">
+                      No building definitions found. Create one in the Buildings tab first.
+                    </div>
+                  </div>
                 </div>
-                <div class="form-group">
-                  <label>Shield Range</label>
-                  <input v-model.number="form.unitStats.shieldRange" type="number" min="0" step="0.1" class="form-input" />
-                  <span class="hint">0 = personal shield, &gt;0 = AOE radius protecting allies</span>
-                </div>
-                <div class="form-group">
-                  <label>Damage</label>
-                  <input v-model.number="form.unitStats.damage" type="number" min="0" class="form-input" />
-                  <span class="hint">Damage per attack</span>
-                </div>
-                <div class="form-group">
-                  <label>Armor</label>
-                  <input v-model.number="form.unitStats.armor" type="number" min="0" class="form-input" />
-                  <span class="hint">Damage reduction</span>
-                </div>
-                <div v-if="form.category === DbItemCategory.UNIT" class="form-group">
-                  <label>Speed</label>
-                  <input v-model.number="form.unitStats.speed" type="number" min="0" step="0.1" class="form-input" />
-                  <span class="hint">Movement speed (tiles/min)</span>
-                </div>
-                <div class="form-group">
-                  <label>Range</label>
-                  <input v-model.number="form.unitStats.range" type="number" min="0" step="0.1" class="form-input" />
-                  <span class="hint">Attack range in tiles</span>
-                </div>
-                <div class="form-group">
-                  <label>Attack Speed</label>
-                  <input v-model.number="form.unitStats.attackSpeed" type="number" min="0.1" step="0.1" class="form-input" />
-                  <span class="hint">Attacks per second</span>
-                </div>
+                <span class="hint">Select a building definition to link stats and 3D model to this item</span>
               </div>
             </template>
 
@@ -2029,5 +2152,136 @@ onMounted(() => {
 
 .stat-value.armor {
   color: #f59e0b;
+}
+
+/* Definition selector styles */
+.definition-selector {
+  position: relative;
+}
+
+.linked-definition {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #0a0d12;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+}
+
+.definition-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.def-name {
+  font-weight: 600;
+  color: #e5e5e5;
+}
+
+.def-category {
+  font-size: 11px;
+  color: #6b7280;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  background: #1a1f2e;
+  border-radius: 4px;
+}
+
+.def-size {
+  font-size: 12px;
+  color: #9ca3af;
+  padding: 2px 6px;
+  background: #1a1f2e;
+  border-radius: 4px;
+}
+
+.def-stats {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.definition-search-wrapper {
+  position: relative;
+}
+
+.definition-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 250px;
+  overflow-y: auto;
+  background: #1a1f2e;
+  border: 1px solid #2a3040;
+  border-radius: 6px;
+  margin-top: 4px;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.definition-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid #2a3040;
+}
+
+.definition-option:last-child {
+  border-bottom: none;
+}
+
+.definition-option:hover {
+  background: #232938;
+}
+
+.definition-option .def-name {
+  flex: 1;
+}
+
+.loading-definitions,
+.no-definitions {
+  padding: 12px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.no-definitions {
+  color: #f59e0b;
+}
+
+/* Linked definition display in view mode */
+.linked-definition-display {
+  padding: 12px;
+  background: #1a1f2e;
+  border-radius: 8px;
+  border: 1px solid #2a3040;
+  margin-top: 8px;
+}
+
+.linked-definition-display .definition-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #e5e5e5;
+  margin-bottom: 4px;
+}
+
+.linked-definition-display .definition-category {
+  font-size: 11px;
+  color: #6b7280;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.linked-definition-display .definition-stats {
+  font-size: 13px;
+  color: #9ca3af;
 }
 </style>

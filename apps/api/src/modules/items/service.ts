@@ -32,6 +32,10 @@ export const itemDefinitionService = {
     const [items, total] = await Promise.all([
       prisma.itemDefinition.findMany({
         where,
+        include: {
+          unitDefinition: true,
+          buildingDefinition: true,
+        },
         orderBy: [{ category: 'asc' }, { name: 'asc' }],
         take: limit,
         skip: offset,
@@ -44,12 +48,24 @@ export const itemDefinitionService = {
 
   // Get a single item definition by database ID
   async getById(id: string) {
-    return prisma.itemDefinition.findUnique({ where: { id } });
+    return prisma.itemDefinition.findUnique({
+      where: { id },
+      include: {
+        unitDefinition: true,
+        buildingDefinition: true,
+      },
+    });
   },
 
   // Get a single item definition by itemId
   async getByItemId(itemId: string) {
-    return prisma.itemDefinition.findUnique({ where: { itemId } });
+    return prisma.itemDefinition.findUnique({
+      where: { itemId },
+      include: {
+        unitDefinition: true,
+        buildingDefinition: true,
+      },
+    });
   },
 
   // Create a new item definition
@@ -76,11 +92,21 @@ export const itemDefinitionService = {
     }
     if (data.isBlueprint !== undefined) createData.isBlueprint = data.isBlueprint;
     if (data.linkedBlueprintId !== undefined) createData.linkedBlueprintId = data.linkedBlueprintId;
-    if (data.unitStats !== undefined) {
-      createData.unitStats = data.unitStats as unknown as Prisma.InputJsonValue;
+    // For create, only connect if an ID is provided (no disconnect needed for new records)
+    if (data.unitDefinitionId) {
+      createData.unitDefinition = { connect: { id: data.unitDefinitionId } };
+    }
+    if (data.buildingDefinitionId) {
+      createData.buildingDefinition = { connect: { id: data.buildingDefinitionId } };
     }
 
-    return prisma.itemDefinition.create({ data: createData });
+    return prisma.itemDefinition.create({
+      data: createData,
+      include: {
+        unitDefinition: true,
+        buildingDefinition: true,
+      },
+    });
   },
 
   // Update an existing item definition
@@ -106,13 +132,28 @@ export const itemDefinitionService = {
     }
     if (data.isBlueprint !== undefined) updateData.isBlueprint = data.isBlueprint;
     if (data.linkedBlueprintId !== undefined) updateData.linkedBlueprintId = data.linkedBlueprintId;
-    if (data.unitStats !== undefined) {
-      updateData.unitStats = data.unitStats as unknown as Prisma.InputJsonValue;
+    if (data.unitDefinitionId !== undefined) {
+      if (data.unitDefinitionId === null) {
+        updateData.unitDefinition = { disconnect: true };
+      } else {
+        updateData.unitDefinition = { connect: { id: data.unitDefinitionId } };
+      }
+    }
+    if (data.buildingDefinitionId !== undefined) {
+      if (data.buildingDefinitionId === null) {
+        updateData.buildingDefinition = { disconnect: true };
+      } else {
+        updateData.buildingDefinition = { connect: { id: data.buildingDefinitionId } };
+      }
     }
 
     return prisma.itemDefinition.update({
       where: { id },
       data: updateData,
+      include: {
+        unitDefinition: true,
+        buildingDefinition: true,
+      },
     });
   },
 
@@ -151,11 +192,20 @@ export const itemDefinitionService = {
     if (original.productionRates) {
       createData.productionRates = original.productionRates;
     }
-    if (original.unitStats) {
-      createData.unitStats = original.unitStats;
+    if (original.unitDefinitionId) {
+      createData.unitDefinition = { connect: { id: original.unitDefinitionId } };
+    }
+    if (original.buildingDefinitionId) {
+      createData.buildingDefinition = { connect: { id: original.buildingDefinitionId } };
     }
 
-    return prisma.itemDefinition.create({ data: createData });
+    return prisma.itemDefinition.create({
+      data: createData,
+      include: {
+        unitDefinition: true,
+        buildingDefinition: true,
+      },
+    });
   },
 
   // Get item definition stats

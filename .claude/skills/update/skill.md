@@ -1,6 +1,6 @@
 ---
 name: update
-description: End-of-session documentation updater. Updates DEVELOPMENT-PLAN.md checkboxes, adds PROGRESS.md session entries, updates GAME-DESIGN-DOCUMENT.md if design changed, and syncs CLAUDE.md status. Use when finishing a coding session or when the user says "update docs" or "end session".
+description: End-of-session documentation updater. Updates DEVELOPMENT-PLAN.md checkboxes, adds PROGRESS.md session entries, updates GAME-DESIGN-DOCUMENT.md if design changed, syncs CLAUDE.md status, and keeps mac-claude.md in parity. Use when finishing a coding session or when the user says "update docs" or "end session".
 ---
 
 # Update Skill
@@ -83,7 +83,26 @@ Update the "Current Status" section in `CLAUDE.md` with:
 
 Also add any new entries to the Key Decisions Log if decisions were made.
 
-### Step 6: Summary Report
+### Step 6: Sync mac-claude.md
+
+The file `docs/mac-claude.md` is a macOS-specific version of CLAUDE.md used when developing on a MacBook. It should stay in parity with the main CLAUDE.md except for platform-specific sections.
+
+**Sections to keep in sync:**
+- Current Status table (must match CLAUDE.md exactly)
+- Key Decisions Log (must match CLAUDE.md exactly)
+- Any other non-platform-specific content that was updated
+
+**Sections that differ intentionally (do NOT sync):**
+- Development Rules section (macOS vs WSL/Windows warnings)
+- Prohibited Actions list (mac version doesn't have WSL warning)
+- The mac-specific decision entry about "Switched to macOS development"
+
+After updating CLAUDE.md, read `docs/mac-claude.md` and update:
+1. The Current Status table to match CLAUDE.md
+2. Any new Key Decisions entries (except platform-specific ones)
+3. The footer version number and sync date
+
+### Step 7: Summary Report
 
 After all updates are complete, provide a summary to the user:
 
@@ -98,6 +117,7 @@ After all updates are complete, provide a summary to the user:
 - GAME-DESIGN-DOCUMENT.md: [Changes made or "No changes needed"]
 - PROGRESS.md: [Session entry added]
 - CLAUDE.md: [Status updated, N decisions logged]
+- mac-claude.md: [Synced with CLAUDE.md]
 
 ### Current State:
 - Phase Progress: [X/Y tasks complete]

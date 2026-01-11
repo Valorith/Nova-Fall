@@ -7,6 +7,7 @@ export const config = {
     env: env.NODE_ENV,
     isDev: env.NODE_ENV === 'development',
     isProd: env.NODE_ENV === 'production',
+    modelsPath: env.MODELS_PATH,
   },
 
   database: {

@@ -1,5 +1,6 @@
 import type { NodeType, BlueprintQuality } from './enums.js';
-import type { UnitStats } from '../config/units.js';
+import type { DbUnitDefinition } from './unitDefinition.js';
+import type { DbBuildingDefinition } from './buildingDefinition.js';
 
 // Item definition as stored in the database (database model)
 // Named DbItemDefinition to avoid conflict with the hardcoded ItemDefinition in config/items.ts
@@ -22,7 +23,13 @@ export interface DbItemDefinition {
   productionRates: Record<string, number> | null; // Node type -> hourly rate
   isBlueprint: boolean; // Flag indicating this item is a craftable blueprint
   linkedBlueprintId: string | null; // Reference to the Blueprint this item represents
-  unitStats: UnitStats | null; // Combat stats for UNIT category items
+
+  // Links to Unit/Building definitions
+  unitDefinitionId: string | null;
+  unitDefinition: DbUnitDefinition | null;
+  buildingDefinitionId: string | null;
+  buildingDefinition: DbBuildingDefinition | null;
+
   createdAt: string;
   updatedAt: string;
 }
@@ -46,6 +53,7 @@ export interface DbItemDefinitionInput {
   productionRates?: Record<string, number> | null;
   isBlueprint?: boolean;
   linkedBlueprintId?: string | null;
-  unitStats?: UnitStats | null;
+  unitDefinitionId?: string | null;
+  buildingDefinitionId?: string | null;
 }
 

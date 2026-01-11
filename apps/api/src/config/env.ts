@@ -37,6 +37,9 @@ const envSchema = z.object({
   // Game Settings
   GAME_TICK_INTERVAL: z.coerce.number().default(5000),
   UPKEEP_CHECK_INTERVAL: z.coerce.number().default(3600000),
+
+  // Asset Paths
+  MODELS_PATH: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

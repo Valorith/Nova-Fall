@@ -1,5 +1,4 @@
 import type { ItemCategory, NodeType, BlueprintQuality } from '@prisma/client';
-import type { UnitStats } from '@nova-fall/shared';
 
 export interface ItemDefinitionInput {
   itemId: string;
@@ -19,7 +18,8 @@ export interface ItemDefinitionInput {
   productionRates?: Record<string, number> | null;
   isBlueprint?: boolean;
   linkedBlueprintId?: string | null;
-  unitStats?: UnitStats | null;
+  unitDefinitionId?: string | null;
+  buildingDefinitionId?: string | null;
 }
 
 export interface ItemDefinitionListQuery {

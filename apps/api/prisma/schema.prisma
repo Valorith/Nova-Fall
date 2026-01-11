@@ -566,9 +566,12 @@ model ItemDefinition {
   isBlueprint       Boolean      @default(false)
   linkedBlueprintId String?      // Reference to the Blueprint this item represents
 
-  // For units only - combat stats (used when entering combat view)
-  // JSON: { health, damage, armor, speed, range, attackSpeed, upkeep }
-  unitStats         Json?
+  // Links to Unit/Building definitions (for UNIT/BUILDING category items)
+  unitDefinitionId     String?
+  unitDefinition       UnitDefinition? @relation(fields: [unitDefinitionId], references: [id])
+
+  buildingDefinitionId String?
+  buildingDefinition   BuildingDefinition? @relation(fields: [buildingDefinitionId], references: [id])
 
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -577,6 +580,71 @@ model ItemDefinition {
   @@index([quality])
   @@index([itemId])
   @@index([isTradeable])
+  @@index([unitDefinitionId])
+  @@index([buildingDefinitionId])
+}
+
+// ==================== UNIT DEFINITIONS ====================
+
+model UnitDefinition {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  modelPath   String?  // Path to 3D model (e.g., "/models/units/marine.glb")
+
+  // Size (in tiles)
+  tileSize    Float    @default(1)  // Size of unit in tiles
+
+  // Base combat stats
+  health      Int      @default(100)
+  shield      Int      @default(0)
+  shieldRange Float    @default(0)  // 0=personal shield, >0=AOE radius protecting allies
+  damage      Int      @default(10)
+  armor       Int      @default(5)
+  speed       Float    @default(2)  // Movement speed (tiles per minute)
+  range       Float    @default(1)  // Attack range in tiles
+  attackSpeed Float    @default(1)  // Attacks per second
+
+  // Category: infantry | combat_vehicle | support_vehicle
+  category    String   @default("infantry")
+
+  // Relations
+  items       ItemDefinition[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ==================== BUILDING DEFINITIONS ====================
+
+model BuildingDefinition {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  modelPath   String?  // Path to 3D model (e.g., "/models/buildings/turret.glb")
+
+  // Size (in tiles)
+  width       Int      @default(1)
+  height      Int      @default(1)
+
+  // Base combat stats
+  health      Int      @default(200)
+  shield      Int      @default(0)
+  armor       Int      @default(10)
+
+  // Combat capability (0 = non-combat building)
+  damage      Int      @default(0)
+  range       Float    @default(0)
+  attackSpeed Float    @default(0)
+
+  // Category: turret | wall | structure | utility
+  category    String   @default("structure")
+
+  // Relations
+  items       ItemDefinition[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // ==================== BLUEPRINTS ====================

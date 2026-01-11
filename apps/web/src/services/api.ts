@@ -424,6 +424,109 @@ export const settingsApi = {
   resetNodeIcons: () => api.delete<{ data: NodeIconsMap }>('/api/settings/node-icons'),
 };
 
+// Units API
+import type {
+  DbUnitDefinition,
+  DbUnitDefinitionInput,
+  UnitCategory,
+} from '@nova-fall/shared';
+
+export interface UnitDefinitionListQuery {
+  category?: UnitCategory;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface UnitDefinitionListResponse {
+  units: DbUnitDefinition[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface UnitDefinitionStats {
+  total: number;
+  byCategory: Record<string, number>;
+}
+
+export const unitsApi = {
+  getAll: (query?: UnitDefinitionListQuery) =>
+    api.get<UnitDefinitionListResponse>('/units', { params: query }),
+  getById: (id: string) => api.get<DbUnitDefinition>(`/units/${id}`),
+  getStats: () => api.get<UnitDefinitionStats>('/units/stats'),
+  getCategories: () => api.get<{ categories: UnitCategory[] }>('/units/categories'),
+  create: (data: DbUnitDefinitionInput) => api.post<DbUnitDefinition>('/units', data),
+  update: (id: string, data: Partial<DbUnitDefinitionInput>) =>
+    api.put<DbUnitDefinition>(`/units/${id}`, data),
+  delete: (id: string) => api.delete(`/units/${id}`),
+  duplicate: (id: string, newName?: string) =>
+    api.post<DbUnitDefinition>(`/units/${id}/duplicate`, { name: newName }),
+};
+
+// Buildings API
+import type {
+  DbBuildingDefinition,
+  DbBuildingDefinitionInput,
+  BuildingCategory,
+} from '@nova-fall/shared';
+
+export interface BuildingDefinitionListQuery {
+  category?: BuildingCategory;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface BuildingDefinitionListResponse {
+  buildings: DbBuildingDefinition[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface BuildingDefinitionStats {
+  total: number;
+  byCategory: Record<string, number>;
+}
+
+export const buildingsApi = {
+  getAll: (query?: BuildingDefinitionListQuery) =>
+    api.get<BuildingDefinitionListResponse>('/buildings', { params: query }),
+  getById: (id: string) => api.get<DbBuildingDefinition>(`/buildings/${id}`),
+  getStats: () => api.get<BuildingDefinitionStats>('/buildings/stats'),
+  getCategories: () => api.get<{ categories: BuildingCategory[] }>('/buildings/categories'),
+  create: (data: DbBuildingDefinitionInput) => api.post<DbBuildingDefinition>('/buildings', data),
+  update: (id: string, data: Partial<DbBuildingDefinitionInput>) =>
+    api.put<DbBuildingDefinition>(`/buildings/${id}`, data),
+  delete: (id: string) => api.delete(`/buildings/${id}`),
+  duplicate: (id: string, newName?: string) =>
+    api.post<DbBuildingDefinition>(`/buildings/${id}/duplicate`, { name: newName }),
+};
+
+// Models API (for 3D model file discovery)
+export interface ModelFile {
+  path: string;
+  filename: string;
+  category: 'buildings' | 'units' | 'other';
+  size: number;
+  isPack?: boolean;
+  meshes?: string[];
+}
+
+export interface ModelListResponse {
+  buildings: ModelFile[];
+  units: ModelFile[];
+  other: ModelFile[];
+}
+
+export const modelsApi = {
+  getAll: () => api.get<ModelListResponse>('/models'),
+  getInfo: (path: string) => api.get<ModelFile>('/models/info', { params: { path } }),
+};
+
 // Re-export shared types for convenience
 export type { Blueprint, BlueprintInput, BlueprintMaterial, BlueprintCategory, BlueprintQuality };
 export type { CraftingQueue, ItemStorage };
+export type { DbUnitDefinition, DbUnitDefinitionInput, UnitCategory };
+export type { DbBuildingDefinition, DbBuildingDefinitionInput, BuildingCategory };

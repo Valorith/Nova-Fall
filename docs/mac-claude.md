@@ -268,10 +268,10 @@ Examples:
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
 | **Current Phase**  | Phase 4 - Combat System                   |
-| **Phase Progress** | Section 4.1 nearly complete               |
-| **Current Task**   | WebSocket handlers, camera bounds         |
+| **Phase Progress** | Section 4.2 complete, arena/unit scaling  |
+| **Current Task**   | Run migration, Section 4.3 Features       |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 43 - 2026-01-11                   |
+| **Last Session**   | Session 46 - 2026-01-11                   |
 | **Last Updated**   | 2026-01-11                                |
 
 ---
@@ -357,6 +357,8 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-10 | Buildings have shield stat                | Same combat stats as units: health, shield, damage, etc. | User      |
 | 2026-01-11 | New blueprints require learning by default | More control over game progression                     | User        |
 | 2026-01-11 | Reuse unitStats field for buildings       | Same structure, avoids schema change                   | Claude      |
+| 2026-01-11 | Arena tile size 8m (was 2m)               | Larger arena feels better, 480m x 480m total           | User        |
+| 2026-01-11 | Unit tileSize configurable (1-10)         | Different unit types can have different footprints     | User        |
 | 2026-01-11 | Switched to macOS development             | Traveling with MacBook Pro                             | User        |
 
 ---
@@ -494,5 +496,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-_Last Updated: 2026-01-11 (Session 43 - synced with Windows)_
-_Version: 2.0.1 (macOS)_
+_Last Updated: 2026-01-11 (Session 46 - synced with Windows)_
+_Version: 2.0.3 (macOS)_

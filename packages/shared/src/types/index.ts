@@ -3,5 +3,7 @@ export * from './node.js';
 export * from './map.js';
 export * from './blueprint.js';
 export * from './itemDefinition.js';
+export * from './unitDefinition.js';
+export * from './buildingDefinition.js';
 export * from './crafting.js';
 export * from './combat.js';

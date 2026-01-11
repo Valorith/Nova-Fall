@@ -1,5 +1,13 @@
 import { io, type Socket } from 'socket.io-client';
-import type { MapNode, ResourceStorage } from '@nova-fall/shared';
+import type {
+  MapNode,
+  ResourceStorage,
+  CombatInput,
+  CombatSetup,
+  CombatState,
+  CombatResult,
+} from '@nova-fall/shared';
+import { COMBAT_EVENTS } from '@nova-fall/shared';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:3002';
 
@@ -119,6 +127,12 @@ export interface CraftingCompletedEvent {
   playerId: string;
 }
 
+// Combat events
+export interface CombatErrorEvent {
+  message: string;
+  code: string;
+}
+
 // Socket event handlers
 interface EventHandlers {
   'node:update': (event: NodeUpdateEvent) => void;
@@ -132,6 +146,11 @@ interface EventHandlers {
   'game:victory': (event: VictoryEvent) => void;
   'player:eliminated': (event: PlayerEliminatedEvent) => void;
   'crafting:completed': (event: CraftingCompletedEvent) => void;
+  // Combat events
+  'combat:setup': (event: CombatSetup) => void;
+  'combat:state': (event: CombatState) => void;
+  'combat:end': (event: CombatResult) => void;
+  'combat:error': (event: CombatErrorEvent) => void;
   connect: () => void;
   disconnect: (reason: string) => void;
   connect_error: (error: Error) => void;
@@ -221,6 +240,23 @@ class GameSocket {
     this.socket.on('crafting:completed', (data: CraftingCompletedEvent) => {
       this.handlers['crafting:completed']?.(data);
     });
+
+    // Combat events
+    this.socket.on(COMBAT_EVENTS.COMBAT_SETUP, (data: CombatSetup) => {
+      this.handlers['combat:setup']?.(data);
+    });
+
+    this.socket.on(COMBAT_EVENTS.STATE_UPDATE, (data: CombatState) => {
+      this.handlers['combat:state']?.(data);
+    });
+
+    this.socket.on(COMBAT_EVENTS.COMBAT_END, (data: CombatResult) => {
+      this.handlers['combat:end']?.(data);
+    });
+
+    this.socket.on(COMBAT_EVENTS.COMBAT_ERROR, (data: CombatErrorEvent) => {
+      this.handlers['combat:error']?.(data);
+    });
   }
 
   disconnect(): void {
@@ -265,6 +301,33 @@ class GameSocket {
 
   leaveSession(sessionId: string): void {
     this.socket?.emit('leave:session', sessionId);
+  }
+
+  // ============ Combat Methods ============
+
+  // Authenticate socket with player ID
+  authenticatePlayer(playerId: string): void {
+    this.socket?.emit('auth:player', playerId);
+  }
+
+  // Join a combat battle
+  joinCombat(battleId: string, playerId: string): void {
+    this.socket?.emit(COMBAT_EVENTS.JOIN_COMBAT, { battleId, playerId });
+  }
+
+  // Leave a combat battle
+  leaveCombat(battleId: string): void {
+    this.socket?.emit(COMBAT_EVENTS.LEAVE_COMBAT, { battleId });
+  }
+
+  // Send combat input (deploy, move, attack, ability)
+  sendCombatInput(input: CombatInput): void {
+    this.socket?.emit(COMBAT_EVENTS.SEND_INPUT, input);
+  }
+
+  // Request current combat state (for reconnection)
+  requestCombatState(battleId: string): void {
+    this.socket?.emit(COMBAT_EVENTS.REQUEST_STATE, { battleId });
   }
 
   get isConnected(): boolean {

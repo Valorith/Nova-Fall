@@ -12,6 +12,7 @@
 
 import { ref, onMounted, defineExpose } from 'vue';
 import { useCombatEngine } from '../../composables/useCombatEngine';
+import CombatDevPanel from './CombatDevPanel.vue';
 import type { CombatResult } from '@nova-fall/shared';
 
 // Props
@@ -33,11 +34,17 @@ const emit = defineEmits<{
 const {
   isActive,
   isLoading,
+  isConnected,
   error,
   currentBattleId,
+  combatResult,
+  coreHealth,
+  coreHealthPercent,
+  formattedTimeRemaining,
   initEngine,
   enterCombat,
   exitCombat,
+  sendInput,
   updateState,
   handleCombatEnd,
   rotateCamera,
@@ -46,6 +53,23 @@ const {
 
 // Canvas reference
 const canvasRef = ref<HTMLCanvasElement | null>(null);
+
+// Dev panel state
+const showDevPanel = ref(true); // Show by default in dev mode
+const devPanelRef = ref<InstanceType<typeof CombatDevPanel> | null>(null);
+const isPlacementMode = ref(false);
+
+// Handle placement mode change from dev panel
+const handlePlacementModeChange = (active: boolean) => {
+  isPlacementMode.value = active;
+};
+
+// Handle canvas click - forward to dev panel if in placement mode
+const handleCanvasClick = (event: MouseEvent) => {
+  if (isPlacementMode.value && devPanelRef.value) {
+    devPanelRef.value.handleArenaClick(event);
+  }
+};
 
 // Initialize engine when mounted
 onMounted(() => {
@@ -58,10 +82,13 @@ onMounted(() => {
 defineExpose({
   enterCombat,
   exitCombat,
+  sendInput,
   updateState,
   handleCombatEnd,
   isActive,
+  isConnected,
   currentBattleId,
+  combatResult,
 });
 
 // Handle exit button
@@ -78,7 +105,12 @@ const handleRotateRight = () => rotateCamera('right');
 <template>
   <div class="combat-view">
     <!-- Babylon.js Canvas -->
-    <canvas ref="canvasRef" class="combat-canvas" />
+    <canvas
+      ref="canvasRef"
+      class="combat-canvas"
+      :class="{ 'placement-mode': isPlacementMode }"
+      @click="handleCanvasClick"
+    />
 
     <!-- Loading Overlay -->
     <div v-if="isLoading" class="loading-overlay">
@@ -97,14 +129,19 @@ const handleRotateRight = () => rotateCamera('right');
       <!-- Top Bar -->
       <div class="hud-top">
         <div class="timer">
-          <span class="timer-label">Time Remaining</span>
-          <span class="timer-value">30:00</span>
+          <span class="timer-label">Time</span>
+          <span class="timer-value">{{ formattedTimeRemaining }}</span>
         </div>
         <div class="hq-health">
-          <span class="hq-label">HQ Health</span>
+          <span class="hq-label">Core Health</span>
           <div class="hq-bar">
-            <div class="hq-bar-fill" style="width: 100%" />
+            <div
+              class="hq-bar-fill"
+              :class="coreHealth.damageState"
+              :style="{ width: coreHealthPercent + '%' }"
+            />
           </div>
+          <span class="hq-percent" :class="coreHealth.damageState">{{ coreHealthPercent }}%</span>
         </div>
       </div>
 
@@ -128,6 +165,14 @@ const handleRotateRight = () => rotateCamera('right');
         </button>
       </div>
     </div>
+
+    <!-- Dev Panel -->
+    <CombatDevPanel
+      ref="devPanelRef"
+      :visible="showDevPanel"
+      @close="showDevPanel = false"
+      @placement-mode-change="handlePlacementModeChange"
+    />
   </div>
 </template>
 
@@ -145,6 +190,10 @@ const handleRotateRight = () => rotateCamera('right');
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.combat-canvas.placement-mode {
+  cursor: crosshair;
 }
 
 /* Loading Overlay */
@@ -219,33 +268,34 @@ const handleRotateRight = () => rotateCamera('right');
 /* Top Bar */
 .hud-top {
   position: absolute;
-  top: 16px;
+  top: 56px; /* Just below the navbar */
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 12px 24px;
-  border-radius: 8px;
+  gap: 24px;
+  background: rgba(0, 0, 0, 0.75);
+  padding: 8px 20px;
+  border-radius: 0 0 8px 8px;
   border: 1px solid #333;
+  border-top: none;
 }
 
 .timer {
   display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: 8px;
 }
 
 .timer-label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: #888;
   text-transform: uppercase;
 }
 
 .timer-value {
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: bold;
   color: #fff;
   font-variant-numeric: tabular-nums;
@@ -253,23 +303,22 @@ const handleRotateRight = () => rotateCamera('right');
 
 .hq-health {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  width: 200px;
+  gap: 8px;
 }
 
 .hq-label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: #888;
   text-transform: uppercase;
-  margin-bottom: 4px;
+  white-space: nowrap;
 }
 
 .hq-bar {
-  width: 100%;
-  height: 12px;
+  width: 180px;
+  height: 10px;
   background: #1a1a24;
-  border-radius: 6px;
+  border-radius: 5px;
   overflow: hidden;
   border: 1px solid #333;
 }
@@ -277,7 +326,47 @@ const handleRotateRight = () => rotateCamera('right');
 .hq-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, #4caf50, #8bc34a);
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.hq-bar-fill.healthy {
+  background: linear-gradient(90deg, #4caf50, #8bc34a);
+}
+
+.hq-bar-fill.damaged {
+  background: linear-gradient(90deg, #ff9800, #ffc107);
+}
+
+.hq-bar-fill.critical {
+  background: linear-gradient(90deg, #f44336, #e91e63);
+  animation: pulse-critical 1s ease-in-out infinite;
+}
+
+@keyframes pulse-critical {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.hq-percent {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #8bc34a;
+  min-width: 40px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s ease;
+}
+
+.hq-percent.healthy {
+  color: #8bc34a;
+}
+
+.hq-percent.damaged {
+  color: #ffc107;
+}
+
+.hq-percent.critical {
+  color: #f44336;
 }
 
 /* Camera Controls */

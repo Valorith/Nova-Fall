@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData, type TransferData } from '../game';
-import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, NODE_CLAIM_COST_BY_TIER, nodeRequiresCore, getNodeProduction, nodeHasProduction, nodeSupportsCrafting, RESOURCES, getCraftingProgress, type MapNode, type ResourceStorage, type ItemStorage, type CraftingQueueItem, type CraftingQueue } from '@nova-fall/shared';
+import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, NODE_CLAIM_COST_BY_TIER, nodeRequiresCore, getNodeProduction, nodeHasProduction, nodeSupportsCrafting, RESOURCES, getCraftingProgress, type MapNode, type ResourceStorage, type ItemStorage, type CraftingQueueItem, type CraftingQueue, type TileType } from '@nova-fall/shared';
 import PlayerResourcesPanel, { type UpkeepBreakdownItem, type IncomeBreakdownItem } from '@/components/game/PlayerResourcesPanel.vue';
 import ResourceDisplay from '@/components/game/ResourceDisplay.vue';
 import NodeTooltip from '@/components/game/NodeTooltip.vue';
@@ -863,14 +863,20 @@ async function handleSignOut() {
 function handleEnterCombat() {
   if (!primarySelectedNode.value) return;
 
+  const playerId = authStore.user?.playerId;
+  if (!playerId) {
+    console.warn('Cannot enter combat: no player ID');
+    return;
+  }
+
   // Create a mock combat setup for testing
   const mockSetup = {
     battleId: `test-battle-${Date.now()}`,
     attackerId: 'attacker-1',
-    defenderId: authStore.user?.playerId || 'defender-1',
+    defenderId: playerId,
     nodeId: primarySelectedNode.value.id,
     nodeType: primarySelectedNode.value.type,
-    arenaLayout: Array(40).fill(null).map(() => Array(40).fill('walkable')) as import('@nova-fall/shared').TileType[][],
+    arenaLayout: Array(40).fill(null).map(() => Array(40).fill('walkable')) as TileType[][],
     attackerUnits: [{ unitTypeId: 'militia', count: 10 }],
     defenderUnits: [{ unitTypeId: 'militia', count: 5, deployed: true }],
     defenderBuildings: [],
@@ -880,7 +886,7 @@ function handleEnterCombat() {
 
   // Enter combat view
   inCombatView.value = true;
-  combatViewRef.value?.enterCombat(mockSetup);
+  combatViewRef.value?.enterCombat(mockSetup, playerId);
 }
 
 function handleExitCombat() {
