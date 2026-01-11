@@ -73,6 +73,43 @@ pnpm db:generate
 
 ---
 
+### ⚠️ Database Safety (CRITICAL) ⚠️
+
+**Global data (ItemDefinition, Blueprint, User, Player) must NEVER be wiped during routine workflow.**
+
+These tables contain manually configured game data that takes significant time to recreate. Losing this data is extremely costly.
+
+#### ❌ NEVER suggest these commands for routine work:
+
+| Command | Why it's dangerous |
+|---------|-------------------|
+| `prisma migrate reset` | Drops ALL tables including global data |
+| `pnpm db:reset` | Same as above - wipes everything |
+| Deleting/recreating the database | Loses all configuration |
+
+#### ✅ SAFE commands for routine workflow:
+
+| Command | What it does |
+|---------|--------------|
+| `pnpm db:reseed-map` | Reseeds map nodes only, **preserves items/blueprints** |
+| `pnpm db:migrate` | Applies new migrations without data loss |
+| `pnpm db:generate` | Regenerates Prisma client (no data changes) |
+
+#### 🚨 Before suggesting ANY database command, ask yourself:
+
+1. Will this command drop tables? → **DON'T SUGGEST IT**
+2. Will this delete ItemDefinition or Blueprint data? → **DON'T SUGGEST IT**
+3. Does the user just need to regenerate map nodes? → Use `pnpm db:reseed-map`
+
+#### When full reset is truly needed (rare):
+
+Only suggest `prisma migrate reset` when:
+- Schema changes require it (breaking migration)
+- User explicitly requests full wipe
+- **ALWAYS warn the user** that ItemDefinition and Blueprint data will be lost
+
+---
+
 ### Checklist Discipline (CRITICAL)
 
 The development plan is the single source of truth. Adherence is mandatory.
@@ -238,10 +275,10 @@ Examples:
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
 | **Current Phase**  | Phase 2.5 - Node Activation & Production  |
-| **Phase Progress** | Sections 2.5.1-2.5.4 complete             |
-| **Current Task**   | Section 2.5.5 - Crafting System           |
+| **Phase Progress** | Sections 2.5.1-2.5.6 complete             |
+| **Current Task**   | Ready for Section 2.5.7 (Unit Training)   |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 36 - 2026-01-10                   |
+| **Last Session**   | Session 37 - 2026-01-10                   |
 | **Last Updated**   | 2026-01-10                                |
 
 ---
@@ -313,6 +350,10 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-08 | Unified ItemStorage type (items.ts)       | Generic Record<string, number> for any item category   | Claude      |
 | 2026-01-09 | Refinery has no passive production        | Only serves as crafting facility, no passive output    | User        |
 | 2026-01-09 | HOURLY_PRODUCTION in shared package       | Single source of truth for frontend and backend        | Claude      |
+| 2026-01-10 | NEVER wipe global tables in routine work  | ItemDefinition/Blueprint data is costly to recreate    | User        |
+| 2026-01-10 | Use db:reseed-map for map regeneration    | Preserves items/blueprints, only resets game nodes     | User        |
+| 2026-01-10 | CoreShopPanel fetches from ItemDefinition | Cores configured in Item Editor, not hardcoded         | User        |
+| 2026-01-10 | Blueprints filtered by learned status     | Only show unlearned or player-learned blueprints       | User        |
 
 ---
 

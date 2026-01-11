@@ -1,4 +1,5 @@
 import type { NodeType, NodeStatus, RoadType, UpkeepStatus } from '@prisma/client';
+import type { CraftingQueue } from '@nova-fall/shared';
 
 // Node data for map display (minimal)
 export interface MapNodeResponse {
@@ -18,6 +19,7 @@ export interface MapNodeResponse {
   claimedAt?: string | null; // When the node was claimed (used for crown countdown)
   storage?: Record<string, number>; // Resources stored in the node
   installedCoreId?: string | null; // Installed node core (activates production)
+  craftingQueue?: CraftingQueue; // Active and queued crafting jobs
 }
 
 // Full node details

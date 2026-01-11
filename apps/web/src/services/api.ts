@@ -65,11 +65,28 @@ export const authApi = {
 };
 
 // Nodes API
+// Core item from database
+export interface CoreDefinition {
+  itemId: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  color: string;
+  targetNodeType: string | null;
+  cost: number;
+  efficiency: number;
+  quality: string;
+}
+
 export const nodesApi = {
   getAll: () => api.get('/nodes'),
   getById: (id: string) => api.get(`/nodes/${id}`),
   claim: (id: string) => api.post(`/nodes/${id}/claim`),
   abandon: (id: string) => api.post(`/nodes/${id}/abandon`),
+  getCores: () => api.get<{ cores: CoreDefinition[] }>('/nodes/cores'),
+  // Dev endpoints
+  devAddItem: (nodeId: string, itemId: string, quantity: number) =>
+    api.post<{ storage: Record<string, number> }>(`/nodes/${nodeId}/dev/add-item`, { itemId, quantity }),
 };
 
 // Sessions API
@@ -251,6 +268,7 @@ import { DbItemCategory } from '@nova-fall/shared';
 
 export interface ItemDefinitionListQuery {
   category?: DbItemCategory;
+  quality?: BlueprintQuality;
   isTradeable?: boolean;
   search?: string;
   limit?: number;
@@ -323,5 +341,78 @@ export const uploadsApi = {
   listIcons: () => api.get<{ icons: IconInfo[] }>('/uploads/icons'),
 };
 
+// Crafting API
+import type { CraftingQueue, ItemStorage } from '@nova-fall/shared';
+
+export interface StartCraftRequest {
+  blueprintId: string;
+  quantity: number;
+}
+
+export interface StartCraftResponse {
+  queue: CraftingQueue;
+  storage: ItemStorage;
+  message: string;
+}
+
+export interface CancelCraftResponse {
+  queue: CraftingQueue;
+  storage: ItemStorage;
+  refunded: ItemStorage;
+  message: string;
+}
+
+export interface GetBlueprintsForNodeResponse {
+  blueprints: Blueprint[];
+}
+
+export interface GetCraftingQueueResponse {
+  queue: CraftingQueue;
+}
+
+export interface LearnBlueprintResponse {
+  storage?: Record<string, number>;
+  blueprintId: string;
+  alreadyLearned?: boolean;
+  message: string;
+}
+
+export interface CheckBlueprintLearnedResponse {
+  blueprintId: string;
+  blueprintName?: string;
+  learned: boolean;
+}
+
+export const craftingApi = {
+  getBlueprintsForNode: (nodeId: string) =>
+    api.get<GetBlueprintsForNodeResponse>(`/nodes/${nodeId}/blueprints`),
+  getCraftingQueue: (nodeId: string) =>
+    api.get<GetCraftingQueueResponse>(`/nodes/${nodeId}/crafting`),
+  startCraft: (nodeId: string, data: StartCraftRequest) =>
+    api.post<StartCraftResponse>(`/nodes/${nodeId}/craft`, data),
+  cancelCraft: (nodeId: string, queueId: string) =>
+    api.delete<CancelCraftResponse>(`/nodes/${nodeId}/craft/${queueId}`),
+  learnBlueprint: (nodeId: string, blueprintItemId: string) =>
+    api.post<LearnBlueprintResponse>(`/nodes/${nodeId}/learn-blueprint`, { blueprintItemId }),
+  checkBlueprintLearned: (blueprintId: string) =>
+    api.get<CheckBlueprintLearnedResponse>(`/blueprints/${blueprintId}/learned`),
+};
+
+// Settings API
+export interface NodeIconsMap {
+  [nodeType: string]: string;
+}
+
+export const settingsApi = {
+  getAll: () => api.get<{ data: Record<string, unknown> }>('/api/settings'),
+  get: (key: string) => api.get<{ data: { key: string; value: unknown } }>(`/api/settings/${key}`),
+  set: (key: string, value: unknown) => api.put<{ data: { key: string; value: unknown } }>(`/api/settings/${key}`, { value }),
+  getNodeIcons: () => api.get<{ data: NodeIconsMap }>('/api/settings/node-icons'),
+  setNodeIcon: (nodeType: string, icon: string) =>
+    api.put<{ data: { nodeType: string; icon: string } }>(`/api/settings/node-icons/${nodeType}`, { icon }),
+  resetNodeIcons: () => api.delete<{ data: NodeIconsMap }>('/api/settings/node-icons'),
+};
+
 // Re-export shared types for convenience
 export type { Blueprint, BlueprintInput, BlueprintMaterial, BlueprintCategory, BlueprintQuality };
+export type { CraftingQueue, ItemStorage };

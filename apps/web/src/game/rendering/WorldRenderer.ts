@@ -321,7 +321,10 @@ export class WorldRenderer {
     // Re-render nameplates if map data exists (defer to next frame for proper rendering)
     if (this.mapData) {
       requestAnimationFrame(() => {
-        this.renderNameplates();
+        // Check if renderer still valid (may be destroyed during HMR)
+        if (this.nameplateLayer) {
+          this.renderNameplates();
+        }
       });
     }
   }
@@ -1053,7 +1056,7 @@ export class WorldRenderer {
 
   // Render stylized nameplates at each corner for HQs
   private renderNameplates(): void {
-    if (!this.mapData) return;
+    if (!this.mapData || !this.nameplateLayer) return;
 
     // Clear existing nameplates
     this.nameplateLayer.removeChildren();
@@ -1165,7 +1168,8 @@ export class WorldRenderer {
     // Force PixiJS to recognize the new children by updating position
     this.nameplateLayer.position.set(0.001, 0.001);
     requestAnimationFrame(() => {
-      this.nameplateLayer.position.set(0, 0);
+      // Check if layer still exists (may be destroyed during HMR)
+      this.nameplateLayer?.position.set(0, 0);
     });
   }
 

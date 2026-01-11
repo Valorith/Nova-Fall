@@ -1579,10 +1579,10 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
 
 ### 2.5.5 Crafting System
 
-- [ ] **Define recipe system**
+- [x] **Define blueprint system**
   ```typescript
-  // packages/shared/src/config/recipes.ts
-  export interface Recipe {
+  // packages/shared/src/config/blueprints.ts
+  export interface Blueprint {
     id: string;
     name: string;
     category: 'refinement' | 'manufacturing' | 'training';
@@ -1592,7 +1592,7 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
     craftTime: number;  // seconds
   }
 
-  export const RECIPES = {
+  export const BLUEPRINTS = {
     steel_bar: {
       id: 'steel_bar',
       name: 'Steel Bar',
@@ -1608,56 +1608,56 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
   };
   ```
 
-- [ ] **Crafting queue system**
-  - [ ] Add crafting queue to Node model (JSON field)
-  - [ ] Queue items with recipe, quantity, start time, completion time
-  - [ ] Process completed crafts in economy tick (or dedicated job)
+- [x] **Crafting queue system**
+  - [x] Add crafting queue to Node model (JSON field)
+  - [x] Queue items with blueprint, quantity, start time, completion time
+  - [x] Process completed crafts in dedicated worker job (instant via delayed BullMQ jobs)
 
-- [ ] **API endpoints**
-  - [ ] `GET /nodes/:id/recipes` - Available recipes for node type
-  - [ ] `POST /nodes/:id/craft` - Start crafting (add to queue)
-  - [ ] `DELETE /nodes/:id/craft/:queueId` - Cancel queued craft
-  - [ ] `GET /nodes/:id/craft/queue` - Get current crafting queue
+- [x] **API endpoints**
+  - [x] `GET /nodes/:id/blueprints` - Available blueprints for node type
+  - [x] `POST /nodes/:id/craft` - Start crafting (add to queue)
+  - [x] `DELETE /nodes/:id/craft/:queueId` - Cancel queued craft
+  - [x] `GET /nodes/:id/craft/queue` - Get current crafting queue
 
-- [ ] **Verify Section 2.5.5:**
-  - [ ] Recipes load correctly for each node type
-  - [ ] Can start crafting with sufficient materials
-  - [ ] Materials deducted when crafting starts
-  - [ ] Crafting completes after craft time
-  - [ ] Output items added to node storage
-  - [ ] Can cancel queued crafts (materials refunded)
+- [x] **Verify Section 2.5.5:**
+  - [x] Blueprints load correctly for each node type
+  - [x] Can start crafting with sufficient materials
+  - [x] Materials deducted when crafting starts
+  - [x] Crafting completes after craft time
+  - [x] Output items added to node storage
+  - [x] Can cancel queued crafts (materials refunded)
 
 ### 2.5.6 Crafting UI
 
-- [ ] **Create reusable CraftingPanel component**
-  - [ ] Left section: Recipe list (filterable by category)
-  - [ ] Middle section: Selected recipe material requirements
-    - [ ] Show required items with current inventory counts
-    - [ ] Visual indicator for sufficient/insufficient materials
-  - [ ] Right section: Crafting controls
-    - [ ] Quantity selector
-    - [ ] Craft button (disabled if insufficient materials)
-    - [ ] Output preview (what you'll receive)
-    - [ ] Estimated completion time
+- [x] **Create reusable CraftingPanel component**
+  - [x] Left section: Blueprint list (filterable by category)
+  - [x] Middle section: Selected blueprint material requirements
+    - [x] Show required items with current inventory counts
+    - [x] Visual indicator for sufficient/insufficient materials
+  - [x] Right section: Crafting controls
+    - [x] Quantity selector
+    - [x] Craft button (disabled if insufficient materials)
+    - [x] Output preview (what you'll receive)
+    - [x] Estimated completion time
 
-- [ ] **Crafting queue display**
-  - [ ] Show active crafting with progress bar
-  - [ ] Show queued items with position and ETA
-  - [ ] Cancel button for queued items
+- [x] **Crafting queue display**
+  - [x] Show active crafting with progress bar (continuously updating)
+  - [x] Show queued items with position and ETA
+  - [x] Cancel button for queued items
 
-- [ ] **Integrate with node types**
-  - [ ] Refinery Complex: Show refinement recipes
-  - [ ] Manufacturing Plant: Show manufacturing recipes
-  - [ ] Barracks: Show unit training recipes
-  - [ ] (Future) Research Station: Recipe discovery
+- [x] **Integrate with node types**
+  - [x] Refinery Complex: Show refinement blueprints
+  - [x] Manufacturing Plant: Show manufacturing blueprints
+  - [x] Barracks: Show unit training blueprints
+  - [ ] (Future) Research Station: Blueprint discovery
 
-- [ ] **Verify Section 2.5.6:**
-  - [ ] Crafting UI opens for applicable node types
-  - [ ] Recipe list displays correctly
-  - [ ] Material requirements update based on selection
-  - [ ] Can craft items through UI
-  - [ ] Queue displays with progress
-  - [ ] Can cancel queued items
+- [x] **Verify Section 2.5.6:**
+  - [x] Crafting UI opens for applicable node types
+  - [x] Blueprint list displays correctly
+  - [x] Material requirements update based on selection
+  - [x] Can craft items through UI
+  - [x] Queue displays with progress
+  - [x] Can cancel queued items
 
 ### 2.5.7 Unit Training Framework
 

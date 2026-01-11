@@ -46,6 +46,11 @@ export interface UpkeepTickEvent {
   upkeepInterval: number;
 }
 
+export interface NodeStorageUpdate {
+  nodeId: string;
+  storage: ResourceStorage;
+}
+
 export interface PlayerEconomyResult {
   playerId: string;
   sessionId: string;
@@ -56,6 +61,7 @@ export interface PlayerEconomyResult {
   upkeepPaid: boolean;
   nodesProcessed: number;
   resourcesGenerated: ResourceStorage;
+  nodeStorageUpdates?: NodeStorageUpdate[];
 }
 
 export interface EconomyProcessedEvent {
@@ -90,6 +96,29 @@ export interface PlayerEliminatedEvent {
   reason: string;
 }
 
+export interface CraftingQueueItemEvent {
+  id: string;
+  blueprintId: string;
+  outputItemId?: string;
+  quantity: number;
+  completedRuns: number;
+  timePerRun: number;
+  startedAt: number;
+  completesAt: number;
+}
+
+export interface CraftingCompletedEvent {
+  nodeId: string;
+  queueItemId: string;
+  blueprintId: string;
+  quantity: number;
+  outputs: Record<string, number>;
+  storage: Record<string, number>;
+  queue: CraftingQueueItemEvent[];
+  sessionId: string;
+  playerId: string;
+}
+
 // Socket event handlers
 interface EventHandlers {
   'node:update': (event: NodeUpdateEvent) => void;
@@ -102,6 +131,7 @@ interface EventHandlers {
   'transfer:completed': (event: TransferCompletedEvent) => void;
   'game:victory': (event: VictoryEvent) => void;
   'player:eliminated': (event: PlayerEliminatedEvent) => void;
+  'crafting:completed': (event: CraftingCompletedEvent) => void;
   connect: () => void;
   disconnect: (reason: string) => void;
   connect_error: (error: Error) => void;
@@ -149,30 +179,22 @@ class GameSocket {
 
     // Game events
     this.socket.on('node:update', (data: NodeUpdateEvent) => {
-      console.log('[Socket] Node update:', data.nodeId);
       this.handlers['node:update']?.(data);
     });
 
     this.socket.on('node:claimed', (data: NodeClaimedEvent) => {
-      console.log('[Socket] Node claimed:', data.nodeId, 'by', data.playerName);
       this.handlers['node:claimed']?.(data);
     });
 
     this.socket.on('battle:start', (data: BattleStartEvent) => {
-      console.log('[Socket] Battle started:', data.battleId);
       this.handlers['battle:start']?.(data);
     });
 
     this.socket.on('battle:update', (data: BattleUpdateEvent) => {
-      console.log('[Socket] Battle update:', data.battleId, data.status);
       this.handlers['battle:update']?.(data);
     });
 
     this.socket.on('resources:update', (data: ResourcesUpdateEvent) => {
-      // Only log occasionally to avoid spam
-      if (data.tick % 12 === 0) {
-        console.log('[Socket] Resources update tick:', data.tick, 'nodes:', data.updates.length);
-      }
       this.handlers['resources:update']?.(data);
     });
 
@@ -181,23 +203,23 @@ class GameSocket {
     });
 
     this.socket.on('economy:processed', (data: EconomyProcessedEvent) => {
-      console.log('[Socket] Economy processed:', data.results.length, 'players');
       this.handlers['economy:processed']?.(data);
     });
 
     this.socket.on('transfer:completed', (data: TransferCompletedEvent) => {
-      console.log('[Socket] Transfer completed:', data.transferId, data.status);
       this.handlers['transfer:completed']?.(data);
     });
 
     this.socket.on('game:victory', (data: VictoryEvent) => {
-      console.log('[Socket] Victory!', data.winnerName, 'wins by', data.reason);
       this.handlers['game:victory']?.(data);
     });
 
     this.socket.on('player:eliminated', (data: PlayerEliminatedEvent) => {
-      console.log('[Socket] Player eliminated:', data.playerName, data.reason);
       this.handlers['player:eliminated']?.(data);
+    });
+
+    this.socket.on('crafting:completed', (data: CraftingCompletedEvent) => {
+      this.handlers['crafting:completed']?.(data);
     });
   }
 

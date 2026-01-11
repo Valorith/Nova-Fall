@@ -16,6 +16,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "db:reseed-map": "tsx prisma/reseed-map.ts",
+    "db:seed-resources": "tsx prisma/seed-resources.ts",
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
     "clean": "rm -rf dist"

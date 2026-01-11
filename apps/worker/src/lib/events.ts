@@ -30,3 +30,31 @@ export async function publishUpkeepTick(event: UpkeepTickEvent): Promise<void> {
 export async function publishTransferCompleted(event: TransferCompletedEvent): Promise<void> {
   await publisherRedis.publish('transfer:completed', JSON.stringify(event));
 }
+
+// Crafting events
+export interface CraftingQueueItemEvent {
+  id: string;
+  blueprintId: string;
+  outputItemId?: string;
+  quantity: number;
+  completedRuns: number;
+  timePerRun: number;
+  startedAt: number;
+  completesAt: number;
+}
+
+export interface CraftingCompletedEvent {
+  nodeId: string;
+  queueItemId: string;
+  blueprintId: string;
+  quantity: number;
+  outputs: Record<string, number>;
+  storage: Record<string, number>;
+  queue: CraftingQueueItemEvent[];
+  sessionId: string;
+  playerId: string;
+}
+
+export async function publishCraftingCompleted(event: CraftingCompletedEvent): Promise<void> {
+  await publisherRedis.publish('crafting:completed', JSON.stringify(event));
+}

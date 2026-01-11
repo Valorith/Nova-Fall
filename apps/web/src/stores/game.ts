@@ -12,6 +12,7 @@ import {
   type PlayerEconomyResult,
   type TransferCompletedEvent,
   type VictoryEvent,
+  type CraftingCompletedEvent,
 } from '@/services/socket';
 
 // API response types
@@ -61,6 +62,9 @@ export const useGameStore = defineStore('game', () => {
 
   // Callback for victory events (registered by GameView)
   let victoryCallback: ((event: VictoryEvent) => void) | null = null;
+
+  // Callback for crafting completed events (registered by GameView)
+  let craftingCompletedCallback: ((event: CraftingCompletedEvent) => void) | null = null;
 
   const nodeList = computed(() => Array.from(nodes.value.values()));
 
@@ -183,7 +187,6 @@ export const useGameStore = defineStore('game', () => {
     // Find the current player's result
     const playerResult = event.results.find((r) => r.playerId === currentPlayerId);
     if (playerResult && economyProcessedCallback) {
-      console.log('[GameStore] Economy update for current player:', playerResult);
       economyProcessedCallback(playerResult);
     }
   }
@@ -201,8 +204,6 @@ export const useGameStore = defineStore('game', () => {
   // Handle transfer completed events
   function handleTransferCompleted(event: TransferCompletedEvent, currentPlayerId: string | null): void {
     if (!currentPlayerId || event.playerId !== currentPlayerId) return;
-
-    console.log('[GameStore] Transfer completed for current player:', event.transferId, event.status);
     transferCompletedCallback?.(event);
   }
 
@@ -218,7 +219,6 @@ export const useGameStore = defineStore('game', () => {
 
   // Handle victory events
   function handleVictory(event: VictoryEvent): void {
-    console.log('[GameStore] Victory event:', event.winnerName, 'wins by', event.reason);
     victoryCallback?.(event);
   }
 
@@ -230,6 +230,22 @@ export const useGameStore = defineStore('game', () => {
   // Unregister victory callback
   function offVictory(): void {
     victoryCallback = null;
+  }
+
+  // Handle crafting completed events
+  function handleCraftingCompleted(event: CraftingCompletedEvent, currentPlayerId: string | null): void {
+    if (!currentPlayerId || event.playerId !== currentPlayerId) return;
+    craftingCompletedCallback?.(event);
+  }
+
+  // Register callback for crafting completed events
+  function onCraftingCompleted(callback: (event: CraftingCompletedEvent) => void): void {
+    craftingCompletedCallback = callback;
+  }
+
+  // Unregister crafting callback
+  function offCraftingCompleted(): void {
+    craftingCompletedCallback = null;
   }
 
   // Get storage for a node
@@ -264,6 +280,7 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.on('economy:processed', (event) => handleEconomyProcessed(event, playerId ?? null));
     gameSocket.on('transfer:completed', (event) => handleTransferCompleted(event, playerId ?? null));
     gameSocket.on('game:victory', handleVictory);
+    gameSocket.on('crafting:completed', (event) => handleCraftingCompleted(event, playerId ?? null));
 
     gameSocket.connect();
 
@@ -289,10 +306,12 @@ export const useGameStore = defineStore('game', () => {
     gameSocket.off('upkeep:tick');
     gameSocket.off('economy:processed');
     gameSocket.off('transfer:completed');
+    gameSocket.off('crafting:completed');
     gameSocket.disconnect();
     isSocketConnected.value = false;
     economyProcessedCallback = null;
     transferCompletedCallback = null;
+    craftingCompletedCallback = null;
   }
 
   return {
@@ -329,5 +348,7 @@ export const useGameStore = defineStore('game', () => {
     offTransferCompleted,
     onVictory,
     offVictory,
+    onCraftingCompleted,
+    offCraftingCompleted,
   };
 });

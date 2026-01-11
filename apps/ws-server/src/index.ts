@@ -79,6 +79,7 @@ redisSub.subscribe(
   'upkeep:tick',
   'economy:processed',
   'transfer:completed',
+  'crafting:completed',
   'game:victory',
   'player:eliminated',
   (err, count) => {
@@ -172,6 +173,14 @@ redisSub.on('message', (channel, message) => {
         // Broadcast transfer completion to session
         if (data.sessionId) {
           io.to(`session:${data.sessionId}`).emit('transfer:completed', data);
+        }
+        break;
+
+      case 'crafting:completed':
+        // Broadcast crafting completion to session
+        if (data.sessionId) {
+          io.to(`session:${data.sessionId}`).emit('crafting:completed', data);
+          logger.debug({ sessionId: data.sessionId, nodeId: data.nodeId }, 'Crafting completed event broadcast');
         }
         break;
 

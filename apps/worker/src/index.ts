@@ -4,6 +4,7 @@ import { prisma } from './lib/prisma.js';
 import { processUpkeep } from './jobs/upkeep.js';
 import { processCompletedTransfers } from './jobs/transfers.js';
 import { processKOTHVictory, handleCrownOwnershipChange, checkDominationVictory } from './jobs/victory.js';
+import { processCompletedCrafts, CRAFTING_JOB_INTERVAL_MS } from './jobs/crafting.js';
 
 export const VERSION = '0.1.0';
 
@@ -11,6 +12,7 @@ export const VERSION = '0.1.0';
 const UPKEEP_QUEUE = 'upkeep';
 const TRANSFERS_QUEUE = 'transfers';
 const VICTORY_QUEUE = 'victory';
+const CRAFTING_QUEUE = 'crafting';
 
 // Create queues
 const upkeepQueue = new Queue(UPKEEP_QUEUE, {
@@ -30,6 +32,14 @@ const transfersQueue = new Queue(TRANSFERS_QUEUE, {
 });
 
 const victoryQueue = new Queue(VICTORY_QUEUE, {
+  connection: redis,
+  defaultJobOptions: {
+    removeOnComplete: 10,
+    removeOnFail: 50,
+  },
+});
+
+const craftingQueue = new Queue(CRAFTING_QUEUE, {
   connection: redis,
   defaultJobOptions: {
     removeOnComplete: 10,
@@ -75,6 +85,25 @@ const victoryWorker = new Worker(
   }
 );
 
+// Crafting worker processes completed crafts
+// Handles both polling jobs and delayed scheduled jobs
+const craftingWorker = new Worker(
+  CRAFTING_QUEUE,
+  async (job) => {
+    if (job.name === 'crafting-scheduled' && job.data.nodeId) {
+      // Scheduled job for a specific node - process just that node
+      await processCompletedCrafts(job.data.nodeId);
+    } else {
+      // Polling job - process all due crafts
+      await processCompletedCrafts();
+    }
+  },
+  {
+    connection: redis,
+    concurrency: 1,
+  }
+);
+
 // Handle worker events
 upkeepWorker.on('completed', () => {
   // Silent completion - logged in job itself
@@ -104,6 +133,14 @@ victoryWorker.on('error', (err) => {
   console.error('Victory worker error:', err);
 });
 
+craftingWorker.on('failed', (job, err) => {
+  console.error(`Crafting job ${job?.id} failed:`, err);
+});
+
+craftingWorker.on('error', (err) => {
+  console.error('Crafting worker error:', err);
+});
+
 // Setup repeating jobs
 async function setupRepeatingJobs(): Promise<void> {
   // Remove any existing repeating jobs from upkeep queue
@@ -124,6 +161,12 @@ async function setupRepeatingJobs(): Promise<void> {
     await victoryQueue.removeRepeatableByKey(job.key);
   }
   // Note: Victory queue now only processes delayed KOTH jobs (scheduled by API)
+
+  // Remove any existing repeating jobs from crafting queue
+  const craftingRepeatableJobs = await craftingQueue.getRepeatableJobs();
+  for (const job of craftingRepeatableJobs) {
+    await craftingQueue.removeRepeatableByKey(job.key);
+  }
 
   // Run upkeep immediately on startup to initialize timer and process any pending work
   console.log('Running initial upkeep job...');
@@ -165,12 +208,29 @@ async function setupRepeatingJobs(): Promise<void> {
     }
   );
   console.log(`Transfers job aligned to epoch (first tick in ${delayUntilNextTick}ms, then every 30s)`);
+
+  // Run crafting immediately to process any pending crafts
+  console.log('Running initial crafting job...');
+  await craftingQueue.add('crafting-init', {});
+
+  // Add crafting repeating job (every 30 seconds, aligned to epoch like transfers)
+  await craftingQueue.add(
+    'crafting',
+    {},
+    {
+      delay: delayUntilNextTick,
+      repeat: {
+        every: CRAFTING_JOB_INTERVAL_MS,
+      },
+    }
+  );
+  console.log(`Crafting job aligned to epoch (first tick in ${delayUntilNextTick}ms, then every 30s)`);
 }
 
 // Setup victory event subscriptions
 async function setupVictoryEventSubscription(): Promise<void> {
   // Subscribe to victory-related events from API
-  await subscriberRedis.subscribe('crown:changed', 'hq:captured');
+  await subscriberRedis.subscribe('crown:changed', 'hq:captured', 'crafting:schedule');
 
   subscriberRedis.on('message', async (channel, message) => {
     try {
@@ -186,13 +246,25 @@ async function setupVictoryEventSubscription(): Promise<void> {
           // HQ was captured - check if game is over (Domination)
           await checkDominationVictory(data.sessionId);
           break;
+
+        case 'crafting:schedule':
+          // Schedule a delayed crafting job for a specific node
+          if (data.nodeId && typeof data.delay === 'number') {
+            await craftingQueue.add(
+              'crafting-scheduled',
+              { nodeId: data.nodeId },
+              { delay: Math.max(0, data.delay) }
+            );
+            console.log(`[Worker] Scheduled crafting job for ${data.nodeId} in ${data.delay}ms`);
+          }
+          break;
       }
     } catch (err) {
       console.error(`[Worker] Error handling ${channel} event:`, err);
     }
   });
 
-  console.log('Victory event subscriptions active');
+  console.log('Victory and crafting event subscriptions active');
 }
 
 // Graceful shutdown
@@ -202,9 +274,11 @@ async function shutdown(): Promise<void> {
   await upkeepWorker.close();
   await transfersWorker.close();
   await victoryWorker.close();
+  await craftingWorker.close();
   await upkeepQueue.close();
   await transfersQueue.close();
   await victoryQueue.close();
+  await craftingQueue.close();
   await subscriberRedis.quit();
   await redis.quit();
   await prisma.$disconnect();

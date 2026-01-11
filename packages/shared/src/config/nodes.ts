@@ -136,3 +136,15 @@ export function getNodeTypeConfig(type: NodeType): NodeTypeConfig {
 export function getAllNodeTypes(): NodeType[] {
   return Object.values(NodeType);
 }
+
+// Node types that support crafting
+const CRAFTING_NODE_TYPES: NodeType[] = [
+  NodeType.REFINERY,
+  NodeType.MANUFACTURING_PLANT,
+  NodeType.BARRACKS,
+];
+
+// Check if a node type supports crafting
+export function nodeSupportsCrafting(type: NodeType): boolean {
+  return CRAFTING_NODE_TYPES.includes(type);
+}

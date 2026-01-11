@@ -22,6 +22,7 @@ export interface ItemDefinitionInput {
 
 export interface ItemDefinitionListQuery {
   category?: ItemCategory;
+  quality?: BlueprintQuality;
   isTradeable?: boolean;
   search?: string;
   limit?: number;

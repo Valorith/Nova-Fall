@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData, type TransferData } from '../game';
-import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, NODE_CLAIM_COST_BY_TIER, nodeRequiresCore, getNodeProduction, nodeHasProduction, RESOURCES, type MapNode, type ResourceStorage, type ItemStorage } from '@nova-fall/shared';
+import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, NODE_CLAIM_COST_BY_TIER, nodeRequiresCore, getNodeProduction, nodeHasProduction, nodeSupportsCrafting, RESOURCES, getCraftingProgress, type MapNode, type ResourceStorage, type ItemStorage, type CraftingQueueItem, type CraftingQueue } from '@nova-fall/shared';
 import PlayerResourcesPanel, { type UpkeepBreakdownItem, type IncomeBreakdownItem } from '@/components/game/PlayerResourcesPanel.vue';
 import ResourceDisplay from '@/components/game/ResourceDisplay.vue';
 import NodeTooltip from '@/components/game/NodeTooltip.vue';
@@ -13,11 +13,14 @@ import TransferPanel from '@/components/game/TransferPanel.vue';
 import VictoryModal from '@/components/game/VictoryModal.vue';
 import CoreShopPanel from '@/components/game/CoreShopPanel.vue';
 import CoreSlotPanel from '@/components/game/CoreSlotPanel.vue';
+import CraftingPanel from '@/components/game/CraftingPanel.vue';
+import BlueprintLearnModal from '@/components/game/BlueprintLearnModal.vue';
 import type { VictoryEvent } from '@/services/socket';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
 import { useSessionStore } from '@/stores/session';
+import { useItemsStore } from '@/stores/items';
 import { nodesApi, sessionsApi, transfersApi, type TransferResponse } from '@/services/api';
 import { hexToPixel, pixelToHex, hexKey, hexNeighbors, type HexCoord } from '../game/utils/hexGrid';
 
@@ -30,6 +33,7 @@ const router = useRouter();
 const gameStore = useGameStore();
 const authStore = useAuthStore();
 const toastStore = useToastStore();
+const itemsStore = useItemsStore();
 const sessionStore = useSessionStore();
 
 const gameContainer = ref<HTMLDivElement | null>(null);
@@ -42,6 +46,9 @@ const isClaiming = ref(false);
 const isMarketOpen = ref(false);
 const isTransferOpen = ref(false);
 const isShopOpen = ref(false);
+const isCraftingOpen = ref(false);
+const isBlueprintLearnOpen = ref(false);
+const selectedBlueprintItemId = ref<string | null>(null);
 
 // Transfer mode state (for click-to-select-destination flow)
 const isTransferMode = ref(false);
@@ -86,9 +93,10 @@ const primarySelectedNode = computed(() => selectedNodes.value[0] ?? null);
 // Excludes credits since they are global, not stored in nodes
 const selectedNodeStorage = computed<ResourceStorage>(() => {
   if (!primarySelectedNode.value) return {};
-  // Use actual node storage from MapNode, fallback to mock storage for development
+  // Use actual node storage from MapNode, fallback to mock storage only if undefined
+  // Note: Empty storage {} is valid - don't fall back just because storage is empty
   const nodeData = primarySelectedNode.value.storage as ResourceStorage | undefined;
-  const rawStorage = (nodeData && Object.keys(nodeData).length > 0)
+  const rawStorage = nodeData !== undefined
     ? nodeData
     : (nodeStorage.value[primarySelectedNode.value.id] ?? {});
 
@@ -337,13 +345,6 @@ function generateMockMapData(): { nodes: MapNode[]; connections: ConnectionData[
   const cornerHexes = [topLeft, topRight, bottomLeft, bottomRight];
   const cornerHexKeys = new Set<string>(cornerHexes.map(c => hexKey(c.hex)));
 
-  console.log('Corner capitals:', [
-    `Top-left: hex(${topLeft.hex.q},${topLeft.hex.r}) at pixel(${topLeft.pixel.x.toFixed(0)},${topLeft.pixel.y.toFixed(0)})`,
-    `Top-right: hex(${topRight.hex.q},${topRight.hex.r}) at pixel(${topRight.pixel.x.toFixed(0)},${topRight.pixel.y.toFixed(0)})`,
-    `Bottom-left: hex(${bottomLeft.hex.q},${bottomLeft.hex.r}) at pixel(${bottomLeft.pixel.x.toFixed(0)},${bottomLeft.pixel.y.toFixed(0)})`,
-    `Bottom-right: hex(${bottomRight.hex.q},${bottomRight.hex.r}) at pixel(${bottomRight.pixel.x.toFixed(0)},${bottomRight.pixel.y.toFixed(0)})`,
-  ]);
-
   // Phase 3: Shuffle positions, but ensure corners are included as nodes
   const nonCornerPositions = allPositions.filter(h => !cornerHexKeys.has(hexKey(h)));
   // Use the ordered cornerHexes array (topLeft, topRight, bottomLeft, bottomRight)
@@ -361,9 +362,6 @@ function generateMockMapData(): { nodes: MapNode[]; connections: ConnectionData[
   // Take corners + enough shuffled positions to reach nodeCount
   const nodePositions = [...cornerPositions, ...shuffled.slice(0, nodeCount - cornerPositions.length)];
   const nodeHexKeys = new Set<string>(nodePositions.map(h => hexKey(h)));
-  const terrainGaps = new Set<string>(shuffled.slice(nodeCount - cornerPositions.length).map(h => hexKey(h)));
-
-  console.log(`Grid has ${allPositions.length} hexes: ${nodePositions.length} nodes (${cornerPositions.length} capitals), ${terrainGaps.size} terrain`);
 
   // Define 4 players with their HQs at corners
   const players = [
@@ -466,11 +464,6 @@ function generateMockMapData(): { nodes: MapNode[]; connections: ConnectionData[
     nodeByHexKey.set(key, node);
   }
 
-  console.log('Player territories:', players.map(p => {
-    const count = [...claimedByPlayer.values()].filter(c => c.playerId === p.id).length;
-    return `${p.name}: ${count} nodes`;
-  }));
-
   // Generate connections between adjacent nodes only (flat-face connections)
   const connectedPairs = new Set<string>();
   const roadTypes = [RoadType.DIRT, RoadType.PAVED, RoadType.HIGHWAY];
@@ -501,8 +494,6 @@ function generateMockMapData(): { nodes: MapNode[]; connections: ConnectionData[
       });
     }
   }
-
-  console.log(`Generated ${nodes.length} nodes with ${connections.length} connections`);
 
   return { nodes, connections };
 }
@@ -602,26 +593,26 @@ onMounted(async () => {
 
       // Register callback to update player resources when economy tick processes
       gameStore.onEconomyProcessed((result) => {
-        // Update player resources with the new values after economy tick
+        // Update player credits (only credits are stored in player resources)
         const updatedResources = { ...playerResources.value };
         updatedResources.credits = result.creditsAfter;
+        playerResources.value = updatedResources;
 
-        // Add generated resources
-        for (const [resourceType, amount] of Object.entries(result.resourcesGenerated)) {
-          if (resourceType !== 'credits' && amount) {
-            updatedResources[resourceType as keyof typeof updatedResources] =
-              (updatedResources[resourceType as keyof typeof updatedResources] ?? 0) + amount;
+        // Update node storages with produced resources
+        if (result.nodeStorageUpdates) {
+          for (const update of result.nodeStorageUpdates) {
+            const node = gameStore.getNode(update.nodeId);
+            if (node) {
+              const updatedNode = { ...node, storage: update.storage };
+              gameStore.setNode(updatedNode);
+              engine.value?.updateNode(update.nodeId, updatedNode);
+            }
           }
         }
-
-        playerResources.value = updatedResources;
-        console.log('[GameView] Player resources updated from economy tick:', updatedResources);
       });
 
       // Register callback to handle transfer completions
       gameStore.onTransferCompleted((event) => {
-        console.log('[GameView] Transfer completed:', event.transferId, event.status);
-
         // Reload pending transfers list
         loadPendingTransfers();
 
@@ -646,12 +637,27 @@ onMounted(async () => {
 
       // Register callback to handle victory events
       gameStore.onVictory((event) => {
-        console.log('[GameView] Victory event received:', event);
         victoryInfo.value = event;
+      });
+
+      // Register callback to handle crafting completed events
+      gameStore.onCraftingCompleted((event) => {
+        // Update the node's storage and crafting queue
+        const node = gameStore.getNode(event.nodeId);
+        if (node) {
+          const updatedNode = {
+            ...node,
+            storage: event.storage,
+            craftingQueue: event.queue,
+          };
+          gameStore.setNode(updatedNode);
+          engine.value?.updateNode(event.nodeId, updatedNode);
+        }
       });
 
       // Load from API with session scope
       await gameStore.loadMapData(props.sessionId);
+      if (!engine.value) return; // Component unmounted during async operation
       engine.value.loadMapData(gameStore.nodeList, gameStore.connections);
       engine.value.setPlayerNames(extractPlayerNames(gameStore.nodeList));
 
@@ -669,6 +675,7 @@ onMounted(async () => {
       await loadPendingTransfers();
     } catch (err) {
       console.warn('Failed to load from API, falling back to mock data:', err);
+      if (!engine.value) return; // Component unmounted during async operation
       // Fallback to mock data
       const { nodes, connections } = generateMockMapData();
       gameStore.loadNodesBatch(nodes);
@@ -689,6 +696,7 @@ onUnmounted(() => {
   gameStore.offEconomyProcessed();
   gameStore.offTransferCompleted();
   gameStore.offVictory();
+  gameStore.offCraftingCompleted();
 
   // Disconnect from WebSocket
   gameStore.disconnectSocket();
@@ -721,12 +729,20 @@ watch(
   }
 );
 
-// Watch pending transfers to start/stop countdown timer
+// Check if there's an active crafting queue on the selected node
+const hasActiveCrafting = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node || !node.craftingQueue) return false;
+  return node.craftingQueue.length > 0;
+});
+
+// Watch pending transfers and active crafting to start/stop countdown timer
 watch(
-  () => pendingTransfers.value.length,
-  (newCount) => {
-    if (newCount > 0 && !transferTimerInterval) {
-      // Start timer when we have pending transfers
+  () => ({ transfers: pendingTransfers.value.length, crafting: hasActiveCrafting.value }),
+  ({ transfers, crafting }) => {
+    const needsTimer = transfers > 0 || crafting;
+    if (needsTimer && !transferTimerInterval) {
+      // Start timer when we have pending transfers or active crafting
       transferTimerInterval = setInterval(() => {
         transferTimerNow.value = Date.now();
 
@@ -738,8 +754,8 @@ watch(
           loadPendingTransfers();
         }
       }, 1000);
-    } else if (newCount === 0 && transferTimerInterval) {
-      // Stop timer when no pending transfers
+    } else if (!needsTimer && transferTimerInterval) {
+      // Stop timer when no pending transfers and no active crafting
       clearInterval(transferTimerInterval);
       transferTimerInterval = null;
     }
@@ -789,15 +805,16 @@ function getNodeTypeConfig(type: NodeType) {
 // Map icon string keys to emoji characters
 function getNodeIcon(icon: string): string {
   const iconMap: Record<string, string> = {
-    mining: '\u26CF\uFE0F',      // Pick
-    refinery: '\u2699\uFE0F',    // Gear
-    research: '\uD83D\uDD2C',    // Microscope
-    trade: '\uD83D\uDCB0',       // Money bag
-    barracks: '\u2694\uFE0F',    // Crossed swords
+    mining: '\u26CF\uFE0F',       // Pick
+    refinery: '\uD83C\uDFED',     // Factory
+    research: '\uD83D\uDD2C',     // Microscope
+    trade: '\uD83D\uDCB0',        // Money bag
+    barracks: '\u2694\uFE0F',     // Crossed swords
     agricultural: '\uD83C\uDF3E', // Wheat
-    power: '\u26A1',             // Lightning
-    capital: '\u2B50',           // Star
-    crown: '\uD83D\uDC51',       // Crown
+    power: '\u26A1',              // Lightning
+    manufacturing: '\uD83D\uDD27', // Wrench
+    capital: '\uD83C\uDFDB\uFE0F', // Classical building
+    crown: '\uD83D\uDC51',        // Crown
   };
   return iconMap[icon] || '\u2753'; // Question mark
 }
@@ -931,7 +948,12 @@ async function loadPendingTransfers() {
       engine.value.setTransfers(transferData);
     }
   } catch (err) {
-    console.error('Failed to load pending transfers:', err);
+    // Silently ignore 401 errors - these happen during token refresh
+    // The axios interceptor will handle token refresh and retry
+    const axiosErr = err as { response?: { status?: number } };
+    if (axiosErr.response?.status !== 401) {
+      console.error('Failed to load pending transfers:', err);
+    }
   }
 }
 
@@ -1046,6 +1068,13 @@ const selectedNodeHasProduction = computed(() => {
   return nodeHasProduction(node.type);
 });
 
+// Check if selected node supports crafting
+const selectedNodeSupportsCrafting = computed(() => {
+  const node = primarySelectedNode.value;
+  if (!node) return false;
+  return nodeSupportsCrafting(node.type);
+});
+
 // Get production rates for selected node (with tier bonus)
 const selectedNodeProduction = computed(() => {
   const node = primarySelectedNode.value;
@@ -1151,6 +1180,19 @@ async function handleDevResourceUpdate(resources: ResourceStorage) {
     console.error('Failed to update resources on server:', err);
     toastStore.error('Failed to save resources to server');
   }
+}
+
+// Dev: Handle item added to node storage
+function handleDevItemAdded(storage: ItemStorage) {
+  const node = primarySelectedNode.value;
+  if (!node) return;
+
+  // Update the node's storage in the store and engine
+  const updatedNode = { ...node, storage };
+  gameStore.setNode(updatedNode);
+  engine.value?.updateNode(node.id, updatedNode);
+
+  toastStore.success('Item added to node storage');
 }
 
 // Dev: Claim node for free (bypasses cost)
@@ -1259,12 +1301,56 @@ async function handleMarketTransaction() {
   }
 }
 
-// Handle transfer created - show success toast and clean up
-async function handleTransferCreated() {
+// Handle transfer created - show success toast, update storage, and reload transfers
+async function handleTransferCreated(transfer: TransferResponse) {
   toastStore.success('Resource transfer initiated');
+
+  // Update source node storage by subtracting transferred resources
+  if (transferSourceNode.value) {
+    const currentStorage = { ...(transferSourceNode.value.storage as ItemStorage) };
+    for (const [itemId, amount] of Object.entries(transfer.resources)) {
+      if (amount && amount > 0) {
+        currentStorage[itemId] = Math.max(0, (currentStorage[itemId] ?? 0) - amount);
+        if (currentStorage[itemId] === 0) {
+          delete currentStorage[itemId];
+        }
+      }
+    }
+    // Update the node in the store and in our local ref
+    const updatedNode = { ...transferSourceNode.value, storage: currentStorage };
+    gameStore.setNode(updatedNode);
+    transferSourceNode.value = updatedNode;
+    engine.value?.updateNode(updatedNode.id, updatedNode);
+  }
+
   // Reload pending transfers to update the node panels
   await loadPendingTransfers();
   // Keep panel open for additional transfers, but user can close it manually
+}
+
+// Handle transfer cancelled - update source storage with returned resources
+async function handleTransferCancelled(transfer: TransferResponse) {
+  // The source node gets its resources back
+  const sourceNode = gameStore.getNode(transfer.sourceNodeId);
+  if (sourceNode) {
+    const currentStorage = { ...(sourceNode.storage as ItemStorage) };
+    for (const [itemId, amount] of Object.entries(transfer.resources)) {
+      if (amount && amount > 0) {
+        currentStorage[itemId] = (currentStorage[itemId] ?? 0) + amount;
+      }
+    }
+    const updatedNode = { ...sourceNode, storage: currentStorage };
+    gameStore.setNode(updatedNode);
+    engine.value?.updateNode(updatedNode.id, updatedNode);
+
+    // Also update transferSourceNode if it's the same node
+    if (transferSourceNode.value?.id === transfer.sourceNodeId) {
+      transferSourceNode.value = updatedNode;
+    }
+  }
+
+  // Reload pending transfers
+  await loadPendingTransfers();
 }
 
 // Handle core purchase at HQ
@@ -1303,6 +1389,58 @@ function handleCoreDestroy(storage: ItemStorage) {
     engine.value?.updateNode(node.id, updatedNode);
   }
   toastStore.success('Core destroyed.');
+}
+
+// Handle crafting storage update (when materials are consumed or refunded)
+// Also accepts optional queue to update both atomically and avoid race conditions
+function handleCraftingStorageUpdate(storage: ItemStorage, queue?: CraftingQueue) {
+  const node = primarySelectedNode.value;
+  if (node) {
+    const updatedNode = {
+      ...node,
+      storage,
+      ...(queue !== undefined && { craftingQueue: queue }),
+    };
+    gameStore.setNode(updatedNode);
+    engine.value?.updateNode(node.id, updatedNode);
+  }
+}
+
+// Handle crafting queue update (when craft is started or cancelled)
+// Note: When both storage and queue change, use handleCraftingStorageUpdate with both params
+function handleCraftingQueueUpdate(queue: CraftingQueue) {
+  const node = primarySelectedNode.value;
+  if (node) {
+    // Read fresh from store to avoid overwriting concurrent updates
+    const freshNode = gameStore.getNode(node.id);
+    if (freshNode) {
+      const updatedNode = { ...freshNode, craftingQueue: queue };
+      gameStore.setNode(updatedNode);
+      engine.value?.updateNode(node.id, updatedNode);
+    }
+  }
+}
+
+// Get crafting run progress for sidebar display (uses reactive timer)
+function getCraftingRunProgress(item: CraftingQueueItem): number {
+  return getCraftingProgress(item, transferTimerNow.value);
+}
+
+// Handle blueprint item clicked in ResourceDisplay
+function handleBlueprintClicked(blueprintItemId: string) {
+  selectedBlueprintItemId.value = blueprintItemId;
+  isBlueprintLearnOpen.value = true;
+}
+
+// Handle blueprint learned - update node storage
+function handleBlueprintLearned(storage: Record<string, number>) {
+  const node = primarySelectedNode.value;
+  if (node) {
+    const updatedNode = { ...node, storage };
+    gameStore.setNode(updatedNode);
+    engine.value?.updateNode(node.id, updatedNode);
+  }
+  toastStore.success('Blueprint learned! Check your crafting menu.');
 }
 </script>
 
@@ -1375,8 +1513,11 @@ function handleCoreDestroy(storage: ItemStorage) {
           :resources="playerResources"
           :can-claim-node="canClaimNodeFree"
           :selected-node-name="primarySelectedNode?.name ?? ''"
+          :selected-node-id="primarySelectedNode?.id ?? null"
+          :is-node-owned="isSelectedNodeOwned"
           @update:resources="handleDevResourceUpdate"
           @claim-free="handleClaimNodeFree"
+          @item-added="handleDevItemAdded"
         />
       </div>
 
@@ -1647,6 +1788,46 @@ function handleCoreDestroy(storage: ItemStorage) {
               @destroy="handleCoreDestroy"
             />
 
+            <!-- Crafting Button (for nodes that support crafting) -->
+            <div v-if="selectedNodeSupportsCrafting && isSelectedNodeOwned && isSelectedNodeActive && !useMockData">
+              <button
+                class="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                @click="isCraftingOpen = true"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+                Open Crafting
+              </button>
+
+              <!-- Active Crafting Progress -->
+              <div
+                v-if="primarySelectedNode.craftingQueue && primarySelectedNode.craftingQueue.length > 0 && primarySelectedNode.craftingQueue[0]"
+                class="mt-3 bg-indigo-900/20 border border-indigo-500/30 rounded-lg p-3"
+              >
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs text-indigo-300 font-medium">Crafting</span>
+                  <span class="text-xs text-indigo-200">
+                    {{ primarySelectedNode.craftingQueue[0]?.completedRuns ?? 0 }}/{{ primarySelectedNode.craftingQueue[0]?.quantity ?? 0 }}
+                  </span>
+                </div>
+                <div class="h-2 bg-gray-700 rounded-full overflow-hidden mb-1">
+                  <div
+                    class="h-full bg-indigo-500 transition-all duration-300"
+                    :style="{ width: `${primarySelectedNode.craftingQueue[0] ? getCraftingRunProgress(primarySelectedNode.craftingQueue[0]) : 0}%` }"
+                  ></div>
+                </div>
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-gray-400">
+                    Crafting {{ primarySelectedNode.craftingQueue[0]?.outputItemId ? itemsStore.getItemDisplay(primarySelectedNode.craftingQueue[0].outputItemId).name : 'Unknown' }}
+                  </span>
+                  <span class="text-indigo-300 font-mono">
+                    {{ primarySelectedNode.craftingQueue[0] ? getCraftingRunProgress(primarySelectedNode.craftingQueue[0]) : 0 }}%
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <!-- Resource Storage -->
             <div>
               <p class="text-xs text-gray-500 uppercase tracking-wide mb-2">Resource Storage</p>
@@ -1655,6 +1836,7 @@ function handleCoreDestroy(storage: ItemStorage) {
                   :resources="selectedNodeStorage"
                   :max-capacity="selectedNodeCapacity"
                   :show-zero="false"
+                  @blueprint-clicked="handleBlueprintClicked"
                 />
               </div>
             </div>
@@ -1685,7 +1867,7 @@ function handleCoreDestroy(storage: ItemStorage) {
                       :key="type"
                       class="text-xs px-1.5 py-0.5 bg-indigo-800/50 text-indigo-200 rounded"
                     >
-                      {{ amount }} {{ type }}
+                      {{ amount }} {{ itemsStore.getItemName(type as string) }}
                     </span>
                   </div>
                 </div>
@@ -1712,7 +1894,7 @@ function handleCoreDestroy(storage: ItemStorage) {
                       :key="type"
                       class="text-xs px-1.5 py-0.5 bg-emerald-800/50 text-emerald-200 rounded"
                     >
-                      {{ amount }} {{ type }}
+                      {{ amount }} {{ itemsStore.getItemName(type as string) }}
                     </span>
                   </div>
                 </div>
@@ -1814,6 +1996,20 @@ function handleCoreDestroy(storage: ItemStorage) {
       @transaction="handleMarketTransaction"
     />
 
+    <!-- Crafting Panel -->
+    <CraftingPanel
+      v-if="primarySelectedNode && selectedNodeSupportsCrafting"
+      :node-id="primarySelectedNode.id"
+      :node-type="primarySelectedNode.type"
+      :node-tier="primarySelectedNode.tier"
+      :storage="selectedNodeStorage"
+      :external-queue="primarySelectedNode.craftingQueue ?? []"
+      :is-open="isCraftingOpen"
+      @close="isCraftingOpen = false"
+      @storage-updated="handleCraftingStorageUpdate"
+      @queue-updated="handleCraftingQueueUpdate"
+    />
+
     <!-- Transfer Panel -->
     <Teleport to="body">
       <div
@@ -1826,7 +2022,8 @@ function handleCoreDestroy(storage: ItemStorage) {
           :dest-node="transferDestNode"
           :node-storage="transferSourceStorage"
           @close="isTransferOpen = false; transferSourceNode = null; transferDestNode = null"
-          @transfer-created="handleTransferCreated"
+          @transfer-created="(transfer) => handleTransferCreated(transfer)"
+          @transfer-cancelled="(transfer) => handleTransferCancelled(transfer)"
         />
       </div>
     </Teleport>
@@ -1880,6 +2077,16 @@ function handleCoreDestroy(storage: ItemStorage) {
         </div>
       </Transition>
     </Teleport>
+
+    <!-- Blueprint Learn Modal -->
+    <BlueprintLearnModal
+      v-if="primarySelectedNode && selectedBlueprintItemId"
+      :node-id="primarySelectedNode.id"
+      :blueprint-item-id="selectedBlueprintItemId"
+      :is-open="isBlueprintLearnOpen"
+      @close="isBlueprintLearnOpen = false; selectedBlueprintItemId = null"
+      @learned="handleBlueprintLearned"
+    />
   </div>
 </template>
 

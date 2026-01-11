@@ -3,11 +3,9 @@ import { redis } from '../../lib/redis.js';
 import { publishNodeClaimed, publishCrownChanged } from '../../lib/events.js';
 import {
   NODE_CLAIM_COST_BY_TIER,
-  NODE_CORES,
-  type NodeCoreId,
   type ResourceStorage,
   type ItemStorage,
-  canInstallCore,
+  type CraftingQueue,
   nodeRequiresCore,
 } from '@nova-fall/shared';
 import type { NodeStatus, NodeType } from '@prisma/client';
@@ -69,6 +67,10 @@ export async function getNodes(query: NodeListQuery): Promise<PaginatedResponse<
   ]);
 
   const data: MapNodeResponse[] = nodes.map((node) => {
+    // Type assertion for craftingQueue field (added to schema)
+    type NodeWithQueue = typeof node & { craftingQueue?: unknown };
+    const nodeWithQueue = node as NodeWithQueue;
+
     const result: MapNodeResponse = {
       id: node.id,
       name: node.name,
@@ -81,6 +83,7 @@ export async function getNodes(query: NodeListQuery): Promise<PaginatedResponse<
       status: node.status,
       storage: node.storage as Record<string, number>,
       installedCoreId: node.installedCoreId,
+      craftingQueue: (nodeWithQueue.craftingQueue as unknown as CraftingQueue) || [],
     };
     if (node.owner?.displayName) {
       result.ownerName = node.owner.displayName;
@@ -144,6 +147,10 @@ export async function getAllNodes(sessionId?: string): Promise<MapNodeResponse[]
   }
 
   return nodes.map((node) => {
+    // Type assertion for craftingQueue field (added to schema)
+    type NodeWithQueue = typeof node & { craftingQueue?: unknown };
+    const nodeWithQueue = node as NodeWithQueue;
+
     const result: MapNodeResponse = {
       id: node.id,
       name: node.name,
@@ -156,6 +163,7 @@ export async function getAllNodes(sessionId?: string): Promise<MapNodeResponse[]
       status: node.status,
       storage: node.storage as Record<string, number>,
       installedCoreId: node.installedCoreId,
+      craftingQueue: (nodeWithQueue.craftingQueue as unknown as CraftingQueue) || [],
     };
     if (node.owner?.displayName) {
       result.ownerName = node.owner.displayName;
@@ -622,10 +630,17 @@ export async function purchaseCore(
   gameSessionId: string,
   sessionPlayerId: string
 ): Promise<CorePurchaseResult> {
-  // Validate core type
-  const coreDef = NODE_CORES[coreId as NodeCoreId];
-  if (!coreDef) {
-    return { success: false, error: 'Invalid core type' };
+  // Look up core from ItemDefinition database
+  const coreDef = await prisma.itemDefinition.findFirst({
+    where: {
+      itemId: coreId,
+      category: 'NODE_CORE',
+      coreCost: { not: null },
+    },
+  });
+
+  if (!coreDef || coreDef.coreCost === null) {
+    return { success: false, error: 'Invalid core type or core not purchasable' };
   }
 
   // Get session player to check HQ and credits
@@ -650,8 +665,8 @@ export async function purchaseCore(
   const playerResources = sessionPlayer.resources as ResourceStorage;
   const credits = playerResources.credits ?? 0;
 
-  if (credits < coreDef.cost) {
-    return { success: false, error: `Not enough credits. Need ${coreDef.cost}, have ${credits}` };
+  if (credits < coreDef.coreCost) {
+    return { success: false, error: `Not enough credits. Need ${coreDef.coreCost}, have ${credits}` };
   }
 
   // Get HQ node to add core to storage
@@ -665,7 +680,7 @@ export async function purchaseCore(
   }
 
   // Deduct credits and add core to HQ storage
-  const updatedCredits = credits - coreDef.cost;
+  const updatedCredits = credits - coreDef.coreCost;
   const hqStorage = hqNode.storage as ItemStorage;
   const currentCoreCount = hqStorage[coreId] ?? 0;
   const updatedStorage: ItemStorage = {
@@ -701,8 +716,14 @@ export async function installCore(
   playerId: string,
   gameSessionId: string
 ): Promise<CoreInstallResult> {
-  // Validate core type
-  const coreDef = NODE_CORES[coreId as NodeCoreId];
+  // Look up core from ItemDefinition database
+  const coreDef = await prisma.itemDefinition.findFirst({
+    where: {
+      itemId: coreId,
+      category: 'NODE_CORE',
+    },
+  });
+
   if (!coreDef) {
     return { success: false, error: 'Invalid core type' };
   }
@@ -734,10 +755,10 @@ export async function installCore(
   }
 
   // Check if this core type can be installed in this node type
-  if (!canInstallCore(coreId as NodeCoreId, node.type as unknown as import('@nova-fall/shared').NodeType)) {
+  if (coreDef.targetNodeType && coreDef.targetNodeType !== node.type) {
     return {
       success: false,
-      error: `${coreDef.name} can only be installed in ${coreDef.targetNode} nodes`,
+      error: `${coreDef.name} can only be installed in ${coreDef.targetNodeType.replace(/_/g, ' ')} nodes`,
     };
   }
 

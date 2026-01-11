@@ -189,6 +189,36 @@ export async function nodeRoutes(app: FastifyInstance) {
 
   // ==================== NODE CORE MANAGEMENT ====================
 
+  // GET /nodes/cores - Get all available cores from item definitions
+  app.get('/nodes/cores', {
+    preHandler: [requireAuth],
+  }, async () => {
+    // Fetch NODE_CORE items that have a cost set (purchasable cores only)
+    const cores = await prisma.itemDefinition.findMany({
+      where: {
+        category: 'NODE_CORE',
+        coreCost: { not: null },
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    return {
+      cores: cores.map((core) => ({
+        itemId: core.itemId,
+        name: core.name,
+        description: core.description,
+        icon: core.icon,
+        color: core.color,
+        targetNodeType: core.targetNodeType,
+        cost: core.coreCost ?? 100,
+        efficiency: core.efficiency,
+        quality: core.quality,
+      })),
+    };
+  });
+
   // POST /nodes/:id/cores/purchase - Purchase a core at HQ
   // Requires active game session, must be at HQ
   app.post('/nodes/:id/cores/purchase', {
@@ -283,5 +313,65 @@ export async function nodeRoutes(app: FastifyInstance) {
     }
 
     return { success: true, storage: result.storage };
+  });
+
+  // DEV ONLY: Add items to a node's storage
+  app.post<{
+    Params: { id: string };
+    Body: { itemId: string; quantity: number };
+  }>('/nodes/:id/dev/add-item', {
+    preHandler: [requireAuth, requireActiveSession],
+  }, async (request) => {
+    const { id } = request.params;
+    const { itemId, quantity } = request.body;
+    const req = request as AuthenticatedRequest;
+
+    if (!req.playerId || !req.gameSessionId) {
+      throw AppError.badRequest('Session context required');
+    }
+
+    if (!itemId || typeof quantity !== 'number' || quantity <= 0) {
+      throw AppError.badRequest('Invalid itemId or quantity');
+    }
+
+    // Verify node exists and belongs to the player
+    const node = await prisma.node.findFirst({
+      where: {
+        id,
+        gameSessionId: req.gameSessionId,
+        ownerId: req.playerId,
+      },
+    });
+
+    if (!node) {
+      throw AppError.notFound('Node not found or not owned by player');
+    }
+
+    // Verify item exists in database
+    const item = await prisma.itemDefinition.findUnique({
+      where: { itemId },
+    });
+
+    if (!item) {
+      throw AppError.notFound('Item not found in database');
+    }
+
+    // Update storage
+    const currentStorage = (node.storage as Record<string, number>) || {};
+    const newStorage = {
+      ...currentStorage,
+      [itemId]: (currentStorage[itemId] || 0) + quantity,
+    };
+
+    const updatedNode = await prisma.node.update({
+      where: { id },
+      data: { storage: newStorage },
+    });
+
+    return {
+      success: true,
+      storage: updatedNode.storage,
+      added: { itemId, quantity },
+    };
   });
 }

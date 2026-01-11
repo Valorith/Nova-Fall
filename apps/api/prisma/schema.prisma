@@ -111,6 +111,7 @@ model Node {
 
   // State
   storage         Json         @default("{}")  // Resources/items stored here
+  craftingQueue   Json         @default("[]")  // CraftingQueue array for active/queued crafts
   installedCoreId String?      // Node core installed (activates production)
   upkeepPaid      DateTime?    // When upkeep was last successfully paid
   upkeepDue     DateTime?    // When next upkeep payment is due
@@ -706,6 +707,18 @@ model GameSessionPlayer {
   @@index([gameSessionId])
   @@index([playerId])
   @@index([isBot])
+}
+
+// ==================== GAME SETTINGS ====================
+
+model GameSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique  // Setting key (e.g., "nodeIcons", "gameSpeed")
+  value     Json               // JSON value for flexibility
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
 }
 
 // ==================== ENUMS ====================

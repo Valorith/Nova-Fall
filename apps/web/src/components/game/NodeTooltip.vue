@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import type { MapNode } from '@nova-fall/shared';
-import { NODE_TYPE_CONFIGS, NODE_CLAIM_COST_BY_TIER, NodeStatus, NodeType, UpkeepStatus, getStorageItems, getNodeProduction, nodeHasProduction, nodeRequiresCore, RESOURCES } from '@nova-fall/shared';
+import { NODE_TYPE_CONFIGS, NODE_CLAIM_COST_BY_TIER, NodeStatus, NodeType, UpkeepStatus, getNodeProduction, nodeHasProduction, nodeRequiresCore } from '@nova-fall/shared';
+import { useItemsStore } from '@/stores/items';
 
 const props = defineProps<{
   node: MapNode | null;
@@ -35,17 +36,18 @@ const nodeConfig = computed(() => {
 // Get icon emoji for node type
 function getNodeIcon(icon: string): string {
   const iconMap: Record<string, string> = {
-    mining: '\u26CF\uFE0F',      // Pick
-    refinery: '\u2699\uFE0F',    // Gear
-    research: '\uD83D\uDD2C',    // Microscope
-    trade: '\uD83D\uDCB0',       // Money bag
+    mining: '\u26CF\uFE0F',       // Pick
+    refinery: '\uD83C\uDFED',     // Factory
+    research: '\uD83D\uDD2C',     // Microscope
+    trade: '\uD83D\uDCB0',        // Money bag
     barracks: '\u2694\uFE0F',     // Crossed swords
     agricultural: '\uD83C\uDF3E', // Wheat
-    power: '\u26A1',             // Lightning
-    capital: '\u2B50',           // Star
-    crown: '\uD83D\uDC51',       // Crown
+    power: '\u26A1',              // Lightning
+    manufacturing: '\uD83D\uDD27', // Wrench
+    capital: '\uD83C\uDFDB\uFE0F', // Classical building
+    crown: '\uD83D\uDC51',        // Crown
   };
-  return iconMap[icon] || '\uD83D\uDFE2'; // Default green circle
+  return iconMap[icon] || '\u2753'; // Default question mark
 }
 
 // Get status display info
@@ -77,10 +79,12 @@ const canBeClaimed = computed(() => {
   return props.node?.status === NodeStatus.NEUTRAL && !props.node?.ownerId;
 });
 
+const itemsStore = useItemsStore();
+
 // Get node storage items (resources, cores, crafted items)
 const nodeStorageItems = computed(() => {
   if (!props.node?.storage) return [];
-  return getStorageItems(props.node.storage);
+  return itemsStore.getStorageItems(props.node.storage);
 });
 
 // Check if node has any items in storage
@@ -115,15 +119,16 @@ const hasProduction = computed(() => {
 
 // Format production entries for display
 const productionEntries = computed(() => {
-  const entries: { resourceType: string; amount: number; icon: string; name: string }[] = [];
+  const entries: { resourceType: string; amount: number; icon: string | null; name: string; isIconUrl: boolean }[] = [];
   for (const [resourceType, amount] of Object.entries(productionRates.value)) {
     if (amount) {
-      const resource = RESOURCES[resourceType as keyof typeof RESOURCES];
+      const display = itemsStore.getItemDisplay(resourceType);
       entries.push({
         resourceType,
         amount,
-        icon: resource?.icon ?? '📦',
-        name: resource?.name ?? resourceType,
+        icon: display.icon,
+        name: display.name,
+        isIconUrl: itemsStore.isIconUrl(display.icon),
       });
     }
   }
@@ -378,7 +383,12 @@ onUnmounted(() => {
                 :class="{ 'node-tooltip__production-item--inactive': !isNodeActive }"
                 :title="`${entry.name}: +${entry.amount}/hr`"
               >
-                <span class="node-tooltip__production-item-icon">{{ entry.icon }}</span>
+                <span class="node-tooltip__production-item-icon">
+                  <template v-if="entry.isIconUrl">
+                    <img :src="entry.icon!" :alt="entry.name" class="w-3 h-3 inline" />
+                  </template>
+                  <template v-else>{{ entry.icon ?? '📦' }}</template>
+                </span>
                 <span class="node-tooltip__production-item-amount">+{{ entry.amount }}/hr</span>
               </div>
             </div>
@@ -398,9 +408,14 @@ onUnmounted(() => {
                 v-for="item in nodeStorageItems"
                 :key="item.itemId"
                 class="node-tooltip__resource"
-                :title="item.definition?.name ?? item.itemId"
+                :title="item.display.name"
               >
-                <span class="node-tooltip__resource-icon">{{ item.definition?.icon ?? '📦' }}</span>
+                <span class="node-tooltip__resource-icon">
+                  <template v-if="itemsStore.isIconUrl(item.display.icon)">
+                    <img :src="item.display.icon!" :alt="item.display.name" class="w-3 h-3 inline" />
+                  </template>
+                  <template v-else>{{ item.display.icon ?? '📦' }}</template>
+                </span>
                 <span class="node-tooltip__resource-amount">{{ item.amount.toLocaleString() }}</span>
               </div>
             </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { getStorageItems, getTotalItemCount, type ItemStorage } from '@nova-fall/shared';
+import type { ItemStorage } from '@nova-fall/shared';
+import { useItemsStore } from '@/stores/items';
 import Tooltip from '@/components/ui/Tooltip.vue';
 
 const props = defineProps<{
@@ -10,9 +11,22 @@ const props = defineProps<{
   maxCapacity?: number;
 }>();
 
-// Get items to display using the flexible item system
+const emit = defineEmits<{
+  'blueprint-clicked': [itemId: string];
+}>();
+
+const itemsStore = useItemsStore();
+
+// Handle item click - emit event if it's a blueprint
+function handleItemClick(item: { itemId: string; isBlueprint: boolean }) {
+  if (item.isBlueprint) {
+    emit('blueprint-clicked', item.itemId);
+  }
+}
+
+// Get items to display using the database-backed item system
 const displayItems = computed(() => {
-  const items = getStorageItems(props.resources);
+  const items = itemsStore.getStorageItems(props.resources);
 
   // Filter out zeros unless showZero is true
   if (!props.showZero) {
@@ -35,13 +49,30 @@ function formatAmount(amount: number): string {
 
 // Calculate total storage used
 const totalUsed = computed(() => {
-  return getTotalItemCount(props.resources);
+  return Object.values(props.resources).reduce<number>((sum, amount) => sum + (amount ?? 0), 0);
 });
 
 const storagePercent = computed(() => {
   if (!props.maxCapacity) return 0;
   return Math.min(100, (totalUsed.value / props.maxCapacity) * 100);
 });
+
+// Get text color class based on item quality
+function getQualityColorClass(quality: string): string {
+  switch (quality) {
+    case 'LEGENDARY':
+      return 'text-orange-400';
+    case 'EPIC':
+      return 'text-purple-400';
+    case 'RARE':
+      return 'text-yellow-400';
+    case 'UNCOMMON':
+      return 'text-blue-400';
+    case 'COMMON':
+    default:
+      return 'text-gray-400';
+  }
+}
 </script>
 
 <template>
@@ -77,21 +108,31 @@ const storagePercent = computed(() => {
       <Tooltip
         v-for="item in displayItems"
         :key="item.itemId"
-        :text="item.definition?.description ?? 'Unknown item'"
+        :text="item.display.description ?? 'Unknown item'"
         position="left"
       >
         <div
           :class="[
             'resource-item flex items-center gap-1.5 rounded px-2 py-1',
-            compact ? 'bg-gray-800/50' : 'bg-gray-800/30'
+            compact ? 'bg-gray-800/50' : 'bg-gray-800/30',
+            item.isBlueprint ? 'cursor-pointer hover:bg-gray-700/50 transition-colors border border-blue-500/50 hover:border-blue-400' : ''
           ]"
+          @click="handleItemClick(item)"
         >
-          <span class="text-base">{{ item.definition?.icon ?? '📦' }}</span>
+          <!-- Icon: image or emoji -->
+          <template v-if="itemsStore.isIconUrl(item.display.icon)">
+            <img :src="item.display.icon!" :alt="item.display.name" class="w-5 h-5 object-contain" />
+          </template>
+          <span v-else class="text-base">{{ item.display.icon ?? '📦' }}</span>
           <span :class="compact ? 'text-xs' : 'text-sm'" class="text-gray-300">
             {{ formatAmount(item.amount) }}
           </span>
-          <span v-if="!compact" class="text-xs text-gray-500 truncate">
-            {{ item.definition?.name ?? item.itemId }}
+          <span v-if="!compact" class="text-xs truncate" :class="getQualityColorClass(item.display.quality)">
+            {{ item.display.name }}
+          </span>
+          <!-- Blueprint indicator -->
+          <span v-if="item.isBlueprint && !compact" class="ml-auto text-xs text-blue-400">
+            📖
           </span>
         </div>
       </Tooltip>
@@ -100,7 +141,7 @@ const storagePercent = computed(() => {
 </template>
 
 <style scoped>
-.resource-item {
+.resource-item:not(.cursor-pointer) {
   cursor: default;
 }
 </style>

@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 2.5 - Node Activation & Production |
 | **Overall Progress**   | Phases 0-2 complete, Phase 2.5 in progress |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 36                         |
+| **Total Sessions**     | 37                         |
 
 ---
 
@@ -2456,7 +2456,7 @@ export function getStorageItems(storage: ItemStorage): Array<{
 
 1. Complete Section 2.5.4 verification tasks (manual testing)
 2. Begin Section 2.5.5: Crafting System
-3. Design recipe system for refinement/manufacturing
+3. Design blueprint system for refinement/manufacturing
 
 ---
 
@@ -2508,7 +2508,7 @@ export function getStorageItems(storage: ItemStorage): Array<{
 ### Next Session Plan
 
 1. Begin Section 2.5.5: Crafting System
-2. Define recipe system for refinement/manufacturing
+2. Define blueprint system for refinement/manufacturing
 3. Implement crafting queue and processing
 
 ---
@@ -2584,8 +2584,91 @@ const qualityTierMap = {
 ### Next Session Plan
 
 1. Begin Section 2.5.5: Crafting System (gameplay)
-2. Implement recipe system and crafting queue
+2. Implement blueprint system and crafting queue
 3. Create crafting UI for players
+
+---
+
+## Session 37 - 2026-01-10
+
+**Duration:** ~2 hours
+**Phase:** Phase 2.5 - Node Activation & Production
+**Focus:** Complete Section 2.5.5 & 2.5.6 - Crafting System & UI
+
+### Completed Tasks
+
+**Section 2.5.5 - Crafting System:**
+- [x] Implemented crafting queue system with per-run processing
+- [x] Created `CraftingQueueItem` type with run tracking (completedRuns, timePerRun)
+- [x] Added crafting queue JSON field to Node model in Prisma schema
+- [x] Created migration: `20260110060000_add_crafting_queue`
+- [x] Implemented crafting API endpoints (blueprints, start craft, cancel craft, get queue)
+- [x] Created crafting service with start, cancel, and completion logic
+- [x] Implemented instant crafting completion via delayed BullMQ jobs
+- [x] Added Redis pub/sub for scheduling crafting jobs from API to worker
+- [x] Worker processes crafts at exact completion time (no polling delay)
+
+**Section 2.5.6 - Crafting UI:**
+- [x] Created `CraftingPanel.vue` component with full crafting interface
+- [x] Left section: Blueprint list filtered by node type/category
+- [x] Middle section: Material requirements with inventory counts
+- [x] Right section: Quantity selector, craft button, output preview, ETA
+- [x] Crafting queue display with real-time progress bar
+- [x] Cancel button for queued/active crafts
+- [x] Integrated with Refinery, Manufacturing Plant, and Barracks nodes
+
+### Bug Fixes
+
+- **Progress bar not updating:** Extended timer watcher to include active crafting, using reactive `transferTimerNow` value
+- **Crafting hanging at "Completing...":** Added `queue` field to WebSocket events and registered callback in GameView
+- **30-second delay between runs:** Implemented delayed BullMQ jobs that fire at exact completion time
+- **exactOptionalPropertyTypes errors:** Fixed spread operator usage for optional fields in worker events
+
+### Technical Implementation
+
+**Instant Crafting Completion Flow:**
+1. API calls `scheduleCraftingJob()` after starting a craft
+2. API publishes to Redis `crafting:schedule` channel with nodeId and delay
+3. Worker subscribes to channel and creates delayed BullMQ job
+4. Job fires at exact `completesAt` time, processes completion
+5. Worker schedules next run's job immediately after processing
+6. WebSocket event updates client UI in real-time
+
+**Key Files Created:**
+- `apps/api/src/modules/crafting/service.ts` - Crafting business logic
+- `apps/api/src/modules/crafting/routes.ts` - API endpoints
+- `apps/worker/src/jobs/crafting.ts` - Worker job processor
+- `apps/web/src/components/game/CraftingPanel.vue` - UI component
+- `packages/shared/src/types/crafting.ts` - Type definitions and helpers
+
+**Key Files Modified:**
+- `apps/api/src/lib/redis.ts` - Added `scheduleCraftingJob()` function
+- `apps/worker/src/index.ts` - Added crafting:schedule subscription
+- `apps/worker/src/lib/events.ts` - Added queue to CraftingCompletedEvent
+- `apps/web/src/views/GameView.vue` - Timer, crafting callbacks, panel integration
+- `apps/web/src/services/socket.ts` - CraftingQueueItemEvent type
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Per-run crafting system | Each run produces 1 item, allows precise timing and progress display |
+| Delayed BullMQ jobs for completion | Instant completion without polling delay (was 30s) |
+| Redis pub/sub for job scheduling | Cross-service communication without direct coupling |
+| 5-second polling as backup | Safety net for missed scheduled jobs |
+
+### Notes
+
+- Section 2.5.5 and 2.5.6 complete
+- Crafting system is highly responsive with instant run completion
+- Progress bars update continuously using shared timer
+- Ready for Section 2.5.7: Unit Training Framework
+
+### Next Session Plan
+
+1. Begin Section 2.5.7: Unit Training Framework
+2. Define basic infantry unit type
+3. Implement Barracks training using crafting system
 
 ---
 
@@ -2756,4 +2839,4 @@ const qualityTierMap = {
 
 ---
 
-_Last Updated: 2026-01-08 (Session 34 - Section 2.5.4 Node Core System complete)_
+_Last Updated: 2026-01-10 (Session 37 - Section 2.5.5/2.5.6 Crafting System complete)_

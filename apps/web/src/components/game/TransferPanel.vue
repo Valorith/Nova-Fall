@@ -2,8 +2,8 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { transfersApi, type TransferResponse, type CreateTransferRequest } from '@/services/api';
 import { useGameStore } from '@/stores/game';
+import { useItemsStore } from '@/stores/items';
 import type { MapNode, ItemStorage } from '@nova-fall/shared';
-import { getItemDefinition } from '@nova-fall/shared';
 
 const props = defineProps<{
   sourceNode: MapNode;
@@ -13,10 +13,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  transferCreated: [];
+  transferCreated: [transfer: TransferResponse];
+  transferCancelled: [transfer: TransferResponse];
 }>();
 
 const gameStore = useGameStore();
+const itemsStore = useItemsStore();
 
 // State
 const isLoading = ref(false);
@@ -26,20 +28,19 @@ const error = ref<string | null>(null);
 const success = ref<string | null>(null);
 
 const transferableResources = computed(() => {
-  const items: { type: string; name: string; available: number; icon: string }[] = [];
+  const items: { type: string; name: string; available: number; icon: string | null; isIconUrl: boolean }[] = [];
   const storage = props.nodeStorage as ItemStorage;
 
   for (const [type, amount] of Object.entries(storage)) {
     if (type === 'credits' || !amount || amount <= 0) continue;
-    const def = getItemDefinition(type);
-    if (def) {
-      items.push({
-        type,
-        name: def.name,
-        available: amount,
-        icon: def.icon,
-      });
-    }
+    const display = itemsStore.getItemDisplay(type);
+    items.push({
+      type,
+      name: display.name,
+      available: amount,
+      icon: display.icon,
+      isIconUrl: itemsStore.isIconUrl(display.icon),
+    });
   }
 
   return items;
@@ -50,14 +51,16 @@ const hasAnyTransfer = computed(() => {
 });
 
 const transferPreview = computed(() => {
-  const items: { type: string; name: string; amount: number }[] = [];
+  const items: { type: string; name: string; amount: number; icon: string | null; isIconUrl: boolean }[] = [];
   for (const [type, amount] of Object.entries(transferAmounts.value)) {
     if (amount > 0) {
-      const def = getItemDefinition(type);
+      const display = itemsStore.getItemDisplay(type);
       items.push({
         type,
-        name: def?.name ?? type,
+        name: display.name,
         amount,
+        icon: display.icon,
+        isIconUrl: itemsStore.isIconUrl(display.icon),
       });
     }
   }
@@ -128,7 +131,8 @@ async function createTransfer() {
     // Reload transfers
     await loadTransfers();
 
-    emit('transferCreated');
+    // Emit with the created transfer so parent can update storage
+    emit('transferCreated', response.data.transfer);
 
     // Clear success after 3 seconds
     setTimeout(() => {
@@ -148,9 +152,12 @@ async function cancelTransfer(transferId: string) {
   error.value = null;
 
   try {
-    await transfersApi.cancel(transferId);
+    const response = await transfersApi.cancel(transferId);
     await loadTransfers();
     success.value = 'Transfer cancelled, resources returned';
+
+    // Emit with the cancelled transfer so parent can update storage
+    emit('transferCancelled', response.data.transfer);
 
     setTimeout(() => {
       success.value = null;
@@ -217,7 +224,7 @@ watch([() => props.sourceNode.id, () => props.destNode.id], () => {
           </div>
           <div class="transfer-panel__transfer-resources">
             <span v-for="(amount, type) in transfer.resources" :key="type" class="transfer-panel__transfer-resource">
-              {{ amount }} {{ type }}
+              {{ amount }} {{ itemsStore.getItemName(type as string) }}
             </span>
           </div>
           <div class="transfer-panel__transfer-time">
@@ -265,7 +272,11 @@ watch([() => props.sourceNode.id, () => props.destNode.id], () => {
           class="transfer-panel__resource-row"
         >
           <span class="transfer-panel__resource-name">
-            {{ resource.icon }} {{ resource.name }}
+            <template v-if="resource.isIconUrl">
+              <img :src="resource.icon!" :alt="resource.name" class="inline w-4 h-4 mr-1 align-middle" />
+            </template>
+            <template v-else>{{ resource.icon ?? '📦' }}</template>
+            {{ resource.name }}
           </span>
           <span class="transfer-panel__resource-available">
             ({{ resource.available }} available)
@@ -292,6 +303,10 @@ watch([() => props.sourceNode.id, () => props.destNode.id], () => {
         <div class="transfer-panel__preview-title">Transfer Summary:</div>
         <div class="transfer-panel__preview-items">
           <span v-for="item in transferPreview" :key="item.type" class="transfer-panel__preview-item">
+            <template v-if="item.isIconUrl">
+              <img :src="item.icon!" :alt="item.name" class="inline w-4 h-4 mr-1 align-middle" />
+            </template>
+            <template v-else>{{ item.icon ?? '📦' }}</template>
             {{ item.amount }} {{ item.name }}
           </span>
         </div>

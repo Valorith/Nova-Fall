@@ -5,7 +5,7 @@ import { publishUpkeepTick } from '../lib/events.js';
 // Redis key for storing next upkeep time
 export const NEXT_UPKEEP_KEY = 'game:nextUpkeepAt';
 import { NodeType } from '@nova-fall/shared';
-import { getRegion, nodeRequiresCore, HOURLY_PRODUCTION, getEfficiencyMultiplier, type ResourceStorage, type ResourceType } from '@nova-fall/shared';
+import { getRegion, nodeRequiresCore, HOURLY_PRODUCTION, type ResourceStorage, type ResourceType } from '@nova-fall/shared';
 import {
   calculateNodeUpkeep,
   calculateDistanceFromHQ,
@@ -18,6 +18,11 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 
 // Note: HOURLY_PRODUCTION is now imported from @nova-fall/shared
 
+interface NodeStorageUpdate {
+  nodeId: string;
+  storage: ResourceStorage;
+}
+
 interface PlayerEconomyResult {
   playerId: string;
   sessionId: string;
@@ -28,6 +33,7 @@ interface PlayerEconomyResult {
   upkeepPaid: boolean;
   nodesProcessed: number;
   resourcesGenerated: ResourceStorage;
+  nodeStorageUpdates: NodeStorageUpdate[];
 }
 
 interface EconomyEvent {
@@ -99,6 +105,7 @@ export async function processUpkeep(): Promise<void> {
         type: true,
         tier: true,
         regionId: true,
+        storage: true,
         installedCoreId: true,
         upkeepPaid: true,
         upkeepDue: true,
@@ -175,6 +182,7 @@ export async function processUpkeep(): Promise<void> {
       let totalUpkeep = 0;
       let totalIncome = 0;
       const resourcesGenerated: ResourceStorage = {};
+      const nodeStorageUpdates: NodeStorageUpdate[] = [];
 
       for (const node of playerNodes) {
         const distance = calculateDistanceFromHQ(node.id, hqNodeId, adjacencyMap);
@@ -202,25 +210,50 @@ export async function processUpkeep(): Promise<void> {
           const production = HOURLY_PRODUCTION[node.type] ?? {};
           const tierMultiplier = 1 + (node.tier - 1) * 0.25; // 25% bonus per tier
 
-          // Get core efficiency multiplier (default to 1 if no core or not found)
+          // Get core efficiency (default to 1 if no core or not found)
           const coreEfficiency = node.installedCoreId
             ? coreEfficiencyMap.get(node.installedCoreId) ?? 1
             : 1;
-          const efficiencyMultiplier = getEfficiencyMultiplier(coreEfficiency);
+          // Efficiency bonus chance: 10% per point above 1 (efficiency 2 = 10%, 3 = 20%, etc.)
+          const efficiencyBonusChance = (coreEfficiency - 1) * 0.1;
+
+          // Get current node storage
+          const currentStorage = (node.storage as ResourceStorage) ?? {};
+          const updatedNodeStorage = { ...currentStorage };
+          let nodeHasProduction = false;
 
           for (const [resourceType, baseAmount] of Object.entries(production)) {
             if (!baseAmount) continue;
-            // Apply both tier and efficiency multipliers
-            const amount = Math.floor(baseAmount * tierMultiplier * efficiencyMultiplier);
+            // Apply tier multiplier to base production
+            let amount = Math.floor(baseAmount * tierMultiplier);
 
-            // Track credits separately as income
-            if (resourceType === 'credits') {
-              totalIncome += amount;
+            // Efficiency gives a chance for +1 bonus resource per resource type
+            if (efficiencyBonusChance > 0 && Math.random() < efficiencyBonusChance) {
+              amount += 1;
             }
 
-            // Add to total generated
-            resourcesGenerated[resourceType as ResourceType] =
-              (resourcesGenerated[resourceType as ResourceType] ?? 0) + amount;
+            // Credits go to player resources (global currency)
+            if (resourceType === 'credits') {
+              totalIncome += amount;
+              resourcesGenerated[resourceType as ResourceType] =
+                (resourcesGenerated[resourceType as ResourceType] ?? 0) + amount;
+            } else {
+              // Physical resources go to node storage
+              updatedNodeStorage[resourceType as ResourceType] =
+                (updatedNodeStorage[resourceType as ResourceType] ?? 0) + amount;
+              nodeHasProduction = true;
+              // Track for summary
+              resourcesGenerated[resourceType as ResourceType] =
+                (resourcesGenerated[resourceType as ResourceType] ?? 0) + amount;
+            }
+          }
+
+          // Track node storage update if any physical resources were added
+          if (nodeHasProduction) {
+            nodeStorageUpdates.push({
+              nodeId: node.id,
+              storage: updatedNodeStorage,
+            });
           }
         }
       }
@@ -230,20 +263,21 @@ export async function processUpkeep(): Promise<void> {
       const upkeepPaid = creditsBefore + totalIncome >= totalUpkeep;
       const creditsAfter = Math.max(0, creditsBefore + netCreditChange);
 
-      // Update session player resources (credits adjusted + other resources added)
+      // Update session player resources (only credits, not physical resources)
       const updatedResources: ResourceStorage = { ...playerResources, credits: creditsAfter };
-
-      // Add non-credit resources to player inventory
-      for (const [resourceType, amount] of Object.entries(resourcesGenerated)) {
-        if (resourceType === 'credits' || !amount) continue;
-        updatedResources[resourceType as ResourceType] =
-          (updatedResources[resourceType as ResourceType] ?? 0) + amount;
-      }
 
       await prisma.gameSessionPlayer.update({
         where: { id: sessionPlayer.id },
         data: { resources: updatedResources },
       });
+
+      // Update node storages with produced resources
+      for (const update of nodeStorageUpdates) {
+        await prisma.node.update({
+          where: { id: update.nodeId },
+          data: { storage: update.storage },
+        });
+      }
 
       // Update node upkeep status - OPTIMIZED: batch by status type
       const nextDue = new Date(now.getTime() + ONE_HOUR_MS);
@@ -308,6 +342,7 @@ export async function processUpkeep(): Promise<void> {
         upkeepPaid,
         nodesProcessed: playerNodes.length,
         resourcesGenerated,
+        nodeStorageUpdates,
       });
     }
 

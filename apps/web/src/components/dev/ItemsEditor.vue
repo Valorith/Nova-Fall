@@ -23,6 +23,7 @@ import {
 
 // State
 const items = ref<DbItemDefinition[]>([]);
+const allItemsCache = ref<DbItemDefinition[]>([]); // Cache for item lookups
 const total = ref(0);
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -34,6 +35,7 @@ const saving = ref(false);
 // Filters
 const searchQuery = ref('');
 const filterCategory = ref<DbItemCategory | ''>('');
+const filterQuality = ref<BlueprintQuality | ''>('');
 const filterTradeable = ref<'true' | 'false' | ''>('');
 
 // Form state
@@ -61,6 +63,10 @@ const blueprints = ref<Blueprint[]>([]);
 const blueprintSearchQuery = ref('');
 const showBlueprintDropdown = ref(false);
 const loadingBlueprints = ref(false);
+
+// Selected item's linked blueprint (for view mode)
+const selectedItemBlueprint = ref<Blueprint | null>(null);
+const loadingSelectedBlueprint = ref(false);
 
 // Icon upload state
 const uploadingIcon = ref(false);
@@ -90,7 +96,18 @@ const productionNodeTypes = [
   NodeType.MANUFACTURING_PLANT,
 ];
 
-// Fetch items
+// Fetch all items for cache (used for lookups)
+async function fetchAllItemsCache() {
+  if (allItemsCache.value.length > 0) return; // Already fetched
+  try {
+    const response = await itemsApi.getAll({ limit: 1000 });
+    allItemsCache.value = response.data.items;
+  } catch (err) {
+    console.error('Failed to load items cache:', err);
+  }
+}
+
+// Fetch items (filtered for display)
 async function fetchItems() {
   loading.value = true;
   error.value = null;
@@ -101,11 +118,17 @@ async function fetchItems() {
     };
     if (searchQuery.value) query.search = searchQuery.value;
     if (filterCategory.value) query.category = filterCategory.value;
+    if (filterQuality.value) query.quality = filterQuality.value;
     if (filterTradeable.value) query.isTradeable = filterTradeable.value === 'true';
 
     const response = await itemsApi.getAll(query);
     items.value = response.data.items;
     total.value = response.data.total;
+
+    // Also update cache if no filters applied
+    if (!searchQuery.value && !filterCategory.value && !filterQuality.value && !filterTradeable.value) {
+      allItemsCache.value = response.data.items;
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load items';
     console.error('Failed to load items:', err);
@@ -115,7 +138,15 @@ async function fetchItems() {
 }
 
 // Watch filters and search
-watch([searchQuery, filterCategory, filterTradeable], fetchItems);
+watch([searchQuery, filterCategory, filterQuality, filterTradeable], fetchItems);
+
+// Reset filters to default
+function resetFilters() {
+  searchQuery.value = '';
+  filterCategory.value = '';
+  filterQuality.value = '';
+  filterTradeable.value = '';
+}
 
 // Select item for editing
 function selectItem(item: DbItemDefinition) {
@@ -409,9 +440,44 @@ watch(() => form.value.category, (category) => {
   }
 });
 
+// Fetch linked blueprint for selected item (view mode)
+async function fetchSelectedItemBlueprint() {
+  if (!selectedItem.value?.linkedBlueprintId) {
+    selectedItemBlueprint.value = null;
+    return;
+  }
+
+  loadingSelectedBlueprint.value = true;
+  try {
+    const response = await blueprintsApi.getById(selectedItem.value.linkedBlueprintId);
+    selectedItemBlueprint.value = response.data;
+  } catch (err) {
+    console.error('Failed to load linked blueprint:', err);
+    selectedItemBlueprint.value = null;
+  } finally {
+    loadingSelectedBlueprint.value = false;
+  }
+}
+
+// Watch selected item to fetch linked blueprint when viewing BLUEPRINT items
+watch(selectedItem, (item) => {
+  if (item?.category === DbItemCategory.BLUEPRINT && item.linkedBlueprintId) {
+    fetchSelectedItemBlueprint();
+  } else {
+    selectedItemBlueprint.value = null;
+  }
+});
+
+// Get output item info from cache (falls back to filtered list)
+function getOutputItemInfo(itemId: string): DbItemDefinition | undefined {
+  return allItemsCache.value.find((item) => item.itemId === itemId)
+    || items.value.find((item) => item.itemId === itemId);
+}
+
 // Initialize
 onMounted(() => {
   fetchItems();
+  fetchAllItemsCache();
 });
 </script>
 
@@ -438,16 +504,36 @@ onMounted(() => {
       <div class="list-panel">
         <!-- Filters -->
         <div class="filters">
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search items..."
-            class="search-input"
-          />
+          <div class="filter-row">
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Search items..."
+              class="search-input"
+            />
+            <button
+              type="button"
+              class="btn-reset"
+              title="Reset filters"
+              @click="resetFilters"
+            >
+              Reset
+            </button>
+          </div>
           <select v-model="filterCategory" class="filter-select">
             <option value="">All Categories</option>
             <option v-for="cat in categories" :key="cat" :value="cat">
               {{ ITEM_CATEGORY_NAMES[cat] }}
+            </option>
+          </select>
+          <select
+            v-model="filterQuality"
+            class="filter-select quality-filter"
+            :style="filterQuality ? { borderColor: getQualityColor(filterQuality), borderWidth: '2px' } : {}"
+          >
+            <option value="">All Qualities</option>
+            <option v-for="q in qualities" :key="q" :value="q">
+              {{ BLUEPRINT_QUALITY_NAMES[q] }}
             </option>
           </select>
           <select v-model="filterTradeable" class="filter-select">
@@ -573,6 +659,42 @@ onMounted(() => {
                     (+{{ (selectedItem.efficiency - 1) * 10 }}% bonus)
                   </span>
                 </span>
+              </div>
+            </template>
+
+            <!-- Blueprint output info -->
+            <template v-if="selectedItem.category === 'BLUEPRINT'">
+              <div class="detail-row">
+                <label>Linked Blueprint</label>
+                <span v-if="loadingSelectedBlueprint" class="loading-text">Loading...</span>
+                <span v-else-if="selectedItemBlueprint" :style="{ color: getQualityColor(selectedItemBlueprint.quality) }">
+                  {{ selectedItemBlueprint.name }}
+                </span>
+                <span v-else class="no-link">No linked blueprint</span>
+              </div>
+              <div v-if="selectedItemBlueprint && selectedItemBlueprint.outputs.length > 0" class="detail-row">
+                <label>Produces</label>
+                <div class="output-items">
+                  <div
+                    v-for="output in selectedItemBlueprint.outputs"
+                    :key="output.itemId"
+                    class="output-item"
+                  >
+                    <span class="output-icon">
+                      <img
+                        v-if="getOutputItemInfo(output.itemId)?.icon?.startsWith('/')"
+                        :src="getIconUrl(getOutputItemInfo(output.itemId)?.icon) || ''"
+                        alt=""
+                        class="output-icon-img"
+                      />
+                      <span v-else>{{ getOutputItemInfo(output.itemId)?.icon || '📦' }}</span>
+                    </span>
+                    <span class="output-name" :style="{ color: getQualityColor(getOutputItemInfo(output.itemId)?.quality || 'COMMON') }">
+                      {{ getOutputItemInfo(output.itemId)?.name || output.itemId }}
+                    </span>
+                    <span class="output-qty">x{{ output.quantity }}</span>
+                  </div>
+                </div>
               </div>
             </template>
 
@@ -941,6 +1063,32 @@ onMounted(() => {
   padding: 12px;
   background: #1a1f2e;
   border-bottom: 1px solid #2a3040;
+}
+
+.filter-row {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-row .search-input {
+  flex: 1;
+}
+
+.btn-reset {
+  padding: 8px 12px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+  color: #9ca3af;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn-reset:hover {
+  background: #4b5563;
+  color: #e5e5e5;
 }
 
 .search-input,
@@ -1602,5 +1750,61 @@ onMounted(() => {
 
 .efficiency-select {
   min-width: 180px;
+}
+
+/* Blueprint output display */
+.loading-text {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.no-link {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.output-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.output-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #1a1f2e;
+  border-radius: 8px;
+  border: 1px solid #2a3040;
+}
+
+.output-icon {
+  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.output-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.output-name {
+  flex: 1;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.output-qty {
+  font-size: 13px;
+  color: #9ca3af;
+  font-weight: 600;
 }
 </style>

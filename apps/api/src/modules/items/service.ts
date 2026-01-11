@@ -5,12 +5,16 @@ import type { Prisma } from '@prisma/client';
 export const itemDefinitionService = {
   // Get all item definitions with optional filtering
   async getAll(query: ItemDefinitionListQuery = {}) {
-    const { category, isTradeable, search, limit = 100, offset = 0 } = query;
+    const { category, quality, isTradeable, search, limit = 100, offset = 0 } = query;
 
     const where: Prisma.ItemDefinitionWhereInput = {};
 
     if (category) {
       where.category = category;
+    }
+
+    if (quality) {
+      where.quality = quality;
     }
 
     if (isTradeable !== undefined) {

@@ -14,6 +14,8 @@ import { transferRoutes } from './modules/transfers/index.js';
 import { blueprintRoutes } from './modules/blueprints/index.js';
 import { uploadRoutes } from './modules/uploads/index.js';
 import { itemRoutes } from './modules/items/index.js';
+import { craftingRoutes } from './modules/crafting/index.js';
+import { settingsRoutes } from './modules/settings/index.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -51,6 +53,8 @@ export async function buildApp() {
   await app.register(blueprintRoutes);
   await app.register(uploadRoutes);
   await app.register(itemRoutes);
+  await app.register(craftingRoutes);
+  await app.register(settingsRoutes);
 
   // API version endpoint
   app.get('/api/v1', async () => {

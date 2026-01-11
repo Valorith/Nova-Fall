@@ -1,5 +1,6 @@
 import type { NodeType, NodeStatus, RoadType, UpkeepStatus } from './enums.js';
 import type { ResourceType as RT, ResourceStorage } from '../config/resources.js';
+import type { CraftingQueue } from './crafting.js';
 
 // Re-export ResourceType from config for backwards compatibility
 export type { ResourceType, ResourceStorage } from '../config/resources.js';
@@ -28,6 +29,7 @@ export interface MapNode {
   claimedAt?: string | null; // When the node was claimed (used for crown countdown)
   storage?: NodeResources; // Resources stored in the node
   installedCoreId?: string | null; // Installed node core (activates production)
+  craftingQueue?: CraftingQueue; // Active and pending crafting jobs
 }
 
 // Upkeep breakdown for display

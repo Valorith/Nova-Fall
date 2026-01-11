@@ -2,15 +2,17 @@
 import { ref } from 'vue';
 import BlueprintEditor from '@/components/dev/BlueprintEditor.vue';
 import ItemsEditor from '@/components/dev/ItemsEditor.vue';
+import SettingsEditor from '@/components/dev/SettingsEditor.vue';
 
 // Dev panel tabs
-type DevTab = 'blueprints' | 'items' | 'debug';
+type DevTab = 'blueprints' | 'items' | 'settings' | 'debug';
 
 const activeTab = ref<DevTab>('blueprints');
 
 const tabs: { id: DevTab; label: string; icon: string }[] = [
   { id: 'blueprints', label: 'Blueprints', icon: 'B' },
   { id: 'items', label: 'Items', icon: 'I' },
+  { id: 'settings', label: 'Settings', icon: 'S' },
   { id: 'debug', label: 'Debug', icon: 'D' },
 ];
 </script>
@@ -49,6 +51,8 @@ const tabs: { id: DevTab; label: string; icon: string }[] = [
       <BlueprintEditor v-if="activeTab === 'blueprints'" />
 
       <ItemsEditor v-else-if="activeTab === 'items'" />
+
+      <SettingsEditor v-else-if="activeTab === 'settings'" />
 
       <div v-else-if="activeTab === 'debug'" class="placeholder-panel">
         <h2>Debug Tools</h2>

@@ -37,7 +37,9 @@
       "Bash(npx tsx:*)",
       "Bash(npx tsup)",
       "Skill(update)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(pnpm build:shared:*)",
+      "Bash(PGPASSWORD=fMNmlTLNyHJncZzAAXAXwqEsqHzPnGKN psql:*)"
     ]
   }
 }

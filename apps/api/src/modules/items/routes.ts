@@ -3,7 +3,7 @@ import { verifyAccessToken } from '../../lib/jwt.js';
 import { AppError } from '../../plugins/error-handler.js';
 import { itemDefinitionService } from './service.js';
 import type { ItemDefinitionInput, ItemDefinitionListQuery } from './types.js';
-import type { ItemCategory } from '@prisma/client';
+import type { ItemCategory, BlueprintQuality } from '@prisma/client';
 
 interface AuthenticatedRequest extends FastifyRequest {
   userId: string;
@@ -33,6 +33,7 @@ export async function itemRoutes(app: FastifyInstance) {
   }, async (request) => {
     const query = request.query as {
       category?: string;
+      quality?: string;
       isTradeable?: string;
       search?: string;
       limit?: string;
@@ -43,6 +44,9 @@ export async function itemRoutes(app: FastifyInstance) {
 
     if (query.category) {
       listQuery.category = query.category as ItemCategory;
+    }
+    if (query.quality) {
+      listQuery.quality = query.quality as BlueprintQuality;
     }
     if (query.isTradeable !== undefined) {
       listQuery.isTradeable = query.isTradeable === 'true';

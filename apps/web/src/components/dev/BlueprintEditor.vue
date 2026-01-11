@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import {
   blueprintsApi,
   uploadsApi,
@@ -64,7 +64,8 @@ const availableItems = computed<SelectableItem[]>(() => {
       name: item.name,
       icon: item.icon || '📦',
       category: item.category.toLowerCase(),
-      color: item.color || '#e5e5e5',
+      // Use quality-based color instead of stored color
+      color: BLUEPRINT_QUALITY_COLORS[item.quality as BlueprintQuality] || '#FFFFFF',
     })).sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -78,7 +79,7 @@ const availableItems = computed<SelectableItem[]>(() => {
       name: resource.name,
       icon: resource.icon,
       category: 'resource',
-      color: '#e5e5e5',
+      color: '#FFFFFF',
     });
   }
 
@@ -89,7 +90,7 @@ const availableItems = computed<SelectableItem[]>(() => {
       name: core.name,
       icon: core.icon,
       category: 'core',
-      color: '#e5e5e5',
+      color: '#FFFFFF',
     });
   }
 
@@ -148,6 +149,17 @@ const inputSearchQuery = ref('');
 const outputSearchQuery = ref('');
 const showInputDropdown = ref(false);
 const showOutputDropdown = ref(false);
+const inputDropdownIndex = ref(0);
+const outputDropdownIndex = ref(0);
+
+// Refs for quantity inputs (to focus after adding item)
+const inputQtyRefs = ref<(HTMLInputElement | null)[]>([]);
+const outputQtyRefs = ref<(HTMLInputElement | null)[]>([]);
+
+// Context menu state
+const showContextMenu = ref(false);
+const contextMenuPosition = ref({ x: 0, y: 0 });
+const contextMenuBlueprint = ref<Blueprint | null>(null);
 
 // Icon upload state
 const uploadingIcon = ref(false);
@@ -213,6 +225,22 @@ async function fetchBlueprints() {
 
 // Watch filters and search
 watch([searchQuery, filterCategory, filterQuality, filterLearned], fetchBlueprints);
+
+// Reset filters to default
+function resetFilters() {
+  searchQuery.value = '';
+  filterCategory.value = '';
+  filterQuality.value = '';
+  filterLearned.value = '';
+}
+
+// Reset dropdown index when search query changes
+watch(inputSearchQuery, () => {
+  inputDropdownIndex.value = 0;
+});
+watch(outputSearchQuery, () => {
+  outputDropdownIndex.value = 0;
+});
 
 // Select blueprint for editing
 function selectBlueprint(blueprint: Blueprint) {
@@ -360,7 +388,7 @@ const qualityTierMap: Record<BlueprintQuality, number> = {
   [BlueprintQuality.UNCOMMON]: 1,
   [BlueprintQuality.RARE]: 1,
   [BlueprintQuality.EPIC]: 2,
-  [BlueprintQuality.LEGENDARY]: 3,
+  [BlueprintQuality.LEGENDARY]: 2,
 };
 
 // Helper to infer output item name from blueprint name
@@ -422,11 +450,28 @@ async function createItems() {
     return { exists: !!existing, itemId: existing?.itemId || null };
   };
 
+  // First, fetch all existing blueprint variants with the same name to build quality -> blueprintId mapping
+  let blueprintsByQuality: Map<BlueprintQuality, string> = new Map();
+  try {
+    const existingBlueprintsResponse = await blueprintsApi.getAll({ search: blueprintName, limit: 100 });
+    const matchingBlueprints = existingBlueprintsResponse.data.blueprints.filter(
+      (bp: Blueprint) => bp.name === blueprintName
+    );
+    for (const bp of matchingBlueprints) {
+      blueprintsByQuality.set(bp.quality, bp.id);
+    }
+  } catch (err) {
+    errors.push(`Failed to fetch existing blueprints: ${err instanceof Error ? err.message : 'Unknown error'}`);
+  }
+
   // Create all quality variants
   for (const quality of allQualities) {
     const qualitySuffix = quality.toLowerCase();
     const qualityName = BLUEPRINT_QUALITY_NAMES[quality] || quality;
     const requiredTier = qualityTierMap[quality];
+
+    // Get the blueprint ID for this specific quality
+    const qualityBlueprintId = blueprintsByQuality.get(quality) || null;
 
     // 1. Create Blueprint Item (teaches the recipe)
     const blueprintItemId = `${blueprintBaseName}_${qualitySuffix}`;
@@ -446,7 +491,7 @@ async function createItems() {
           icon: blueprintIcon || null,
           color: BLUEPRINT_QUALITY_COLORS[quality] || '#888888',
           stackSize: 100,
-          linkedBlueprintId: blueprintId || null,
+          linkedBlueprintId: qualityBlueprintId,
           ...(targetNodeType && { targetNodeType }),
         });
         createdBlueprints.push(`${qualityName} Blueprint`);
@@ -489,8 +534,8 @@ async function createItems() {
           icon: blueprintIcon || null,
           color: BLUEPRINT_QUALITY_COLORS[quality] || '#888888',
           stackSize: 100,
-          // Link output item to the blueprint so the game knows what creates this item
-          linkedBlueprintId: blueprintId || null,
+          // Link output item to the blueprint of the same quality
+          linkedBlueprintId: qualityBlueprintId,
           ...(efficiency !== undefined && { efficiency }),
           ...(targetNodeType && { targetNodeType }),
         });
@@ -516,7 +561,7 @@ async function createItems() {
   // 3. Update ALL blueprints with the same name to reference their matching quality output items
   if (createdOutputItemIds.length > 0) {
     try {
-      // Fetch all blueprints with the same name to find all quality variants
+      // Re-fetch blueprints to get latest data
       const allBlueprintsResponse = await blueprintsApi.getAll({ search: blueprintName, limit: 100 });
       const matchingBlueprints = allBlueprintsResponse.data.blueprints.filter(
         (bp: Blueprint) => bp.name === blueprintName
@@ -578,11 +623,25 @@ async function createItems() {
 // Material management with item selector
 function addInputItem(item: SelectableItem) {
   // Check if already exists
-  const existing = form.value.inputs.find((i) => i.itemId === item.id);
-  if (existing) {
-    existing.quantity += 1;
+  const existingIndex = form.value.inputs.findIndex((i) => i.itemId === item.id);
+  if (existingIndex >= 0) {
+    const existing = form.value.inputs[existingIndex];
+    if (existing) {
+      existing.quantity += 1;
+    }
+    // Focus the existing item's quantity input
+    nextTick(() => {
+      inputQtyRefs.value[existingIndex]?.focus();
+      inputQtyRefs.value[existingIndex]?.select();
+    });
   } else {
     form.value.inputs.push({ itemId: item.id, quantity: 1 });
+    // Focus the new item's quantity input (last in list)
+    nextTick(() => {
+      const newIndex = form.value.inputs.length - 1;
+      inputQtyRefs.value[newIndex]?.focus();
+      inputQtyRefs.value[newIndex]?.select();
+    });
   }
   inputSearchQuery.value = '';
   showInputDropdown.value = false;
@@ -594,11 +653,25 @@ function removeInput(index: number) {
 
 function addOutputItem(item: SelectableItem) {
   // Check if already exists
-  const existing = form.value.outputs.find((o) => o.itemId === item.id);
-  if (existing) {
-    existing.quantity += 1;
+  const existingIndex = form.value.outputs.findIndex((o) => o.itemId === item.id);
+  if (existingIndex >= 0) {
+    const existing = form.value.outputs[existingIndex];
+    if (existing) {
+      existing.quantity += 1;
+    }
+    // Focus the existing item's quantity input
+    nextTick(() => {
+      outputQtyRefs.value[existingIndex]?.focus();
+      outputQtyRefs.value[existingIndex]?.select();
+    });
   } else {
     form.value.outputs.push({ itemId: item.id, quantity: 1 });
+    // Focus the new item's quantity input (last in list)
+    nextTick(() => {
+      const newIndex = form.value.outputs.length - 1;
+      outputQtyRefs.value[newIndex]?.focus();
+      outputQtyRefs.value[newIndex]?.select();
+    });
   }
   outputSearchQuery.value = '';
   showOutputDropdown.value = false;
@@ -606,6 +679,92 @@ function addOutputItem(item: SelectableItem) {
 
 function removeOutput(index: number) {
   form.value.outputs.splice(index, 1);
+}
+
+// Keyboard navigation for input item dropdown
+function handleInputKeydown(event: KeyboardEvent) {
+  const items = filteredInputItems.value.slice(0, 10);
+  if (!showInputDropdown.value || items.length === 0) {
+    // If dropdown not showing but has query, show it on arrow down
+    if (event.key === 'ArrowDown' && inputSearchQuery.value) {
+      showInputDropdown.value = true;
+      inputDropdownIndex.value = 0;
+      event.preventDefault();
+    }
+    return;
+  }
+
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault();
+      inputDropdownIndex.value = (inputDropdownIndex.value + 1) % items.length;
+      break;
+    case 'ArrowUp':
+      event.preventDefault();
+      inputDropdownIndex.value = (inputDropdownIndex.value - 1 + items.length) % items.length;
+      break;
+    case 'Tab':
+      event.preventDefault();
+      if (event.shiftKey) {
+        inputDropdownIndex.value = (inputDropdownIndex.value - 1 + items.length) % items.length;
+      } else {
+        inputDropdownIndex.value = (inputDropdownIndex.value + 1) % items.length;
+      }
+      break;
+    case 'Enter':
+      event.preventDefault();
+      const selectedItem = items[inputDropdownIndex.value];
+      if (selectedItem) {
+        addInputItem(selectedItem);
+      }
+      break;
+    case 'Escape':
+      showInputDropdown.value = false;
+      break;
+  }
+}
+
+// Keyboard navigation for output item dropdown
+function handleOutputKeydown(event: KeyboardEvent) {
+  const items = filteredOutputItems.value.slice(0, 10);
+  if (!showOutputDropdown.value || items.length === 0) {
+    // If dropdown not showing but has query, show it on arrow down
+    if (event.key === 'ArrowDown' && outputSearchQuery.value) {
+      showOutputDropdown.value = true;
+      outputDropdownIndex.value = 0;
+      event.preventDefault();
+    }
+    return;
+  }
+
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault();
+      outputDropdownIndex.value = (outputDropdownIndex.value + 1) % items.length;
+      break;
+    case 'ArrowUp':
+      event.preventDefault();
+      outputDropdownIndex.value = (outputDropdownIndex.value - 1 + items.length) % items.length;
+      break;
+    case 'Tab':
+      event.preventDefault();
+      if (event.shiftKey) {
+        outputDropdownIndex.value = (outputDropdownIndex.value - 1 + items.length) % items.length;
+      } else {
+        outputDropdownIndex.value = (outputDropdownIndex.value + 1) % items.length;
+      }
+      break;
+    case 'Enter':
+      event.preventDefault();
+      const selectedItem = items[outputDropdownIndex.value];
+      if (selectedItem) {
+        addOutputItem(selectedItem);
+      }
+      break;
+    case 'Escape':
+      showOutputDropdown.value = false;
+      break;
+  }
 }
 
 // Toggle node type
@@ -630,6 +789,106 @@ function handleClickOutside(event: MouseEvent) {
     showInputDropdown.value = false;
     showOutputDropdown.value = false;
   }
+  // Close context menu when clicking outside
+  if (!target.closest('.context-menu')) {
+    showContextMenu.value = false;
+  }
+}
+
+// Context menu handlers
+function handleBlueprintContextMenu(event: MouseEvent, blueprint: Blueprint) {
+  event.preventDefault();
+  contextMenuBlueprint.value = blueprint;
+  contextMenuPosition.value = { x: event.clientX, y: event.clientY };
+  showContextMenu.value = true;
+}
+
+function closeContextMenu() {
+  showContextMenu.value = false;
+  contextMenuBlueprint.value = null;
+}
+
+// Create missing quality variants of a blueprint
+async function createVariants() {
+  if (!contextMenuBlueprint.value) return;
+
+  const baseBp = contextMenuBlueprint.value;
+  closeContextMenu();
+
+  creatingItems.value = true;
+  createItemError.value = null;
+
+  const allQualities = Object.values(BlueprintQuality);
+  const created: string[] = [];
+  const skipped: string[] = [];
+  const errors: string[] = [];
+
+  try {
+    // Fetch all existing blueprints with the same name to find existing qualities
+    const existingResponse = await blueprintsApi.getAll({ search: baseBp.name, limit: 100 });
+    const existingBlueprints = existingResponse.data.blueprints.filter(
+      (bp: Blueprint) => bp.name === baseBp.name
+    );
+    const existingQualities = new Set(existingBlueprints.map((bp: Blueprint) => bp.quality));
+
+    // Create missing quality variants
+    for (const quality of allQualities) {
+      if (existingQualities.has(quality)) {
+        skipped.push(BLUEPRINT_QUALITY_NAMES[quality]);
+        continue;
+      }
+
+      try {
+        await blueprintsApi.create({
+          name: baseBp.name,
+          description: baseBp.description || null,
+          category: baseBp.category,
+          quality: quality,
+          learned: baseBp.learned,
+          craftTime: baseBp.craftTime,
+          nodeTypes: baseBp.nodeTypes,
+          nodeTierRequired: qualityTierMap[quality], // Use quality-based tier
+          inputs: baseBp.inputs.map((i) => ({ ...i })),
+          outputs: [], // Empty outputs until items are created
+          icon: baseBp.icon || null,
+        });
+        created.push(BLUEPRINT_QUALITY_NAMES[quality]);
+      } catch (err: unknown) {
+        if (typeof err === 'object' && err !== null && 'response' in err) {
+          const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
+          if (axiosErr.response?.status === 409 || axiosErr.response?.data?.error?.includes('already exists')) {
+            skipped.push(BLUEPRINT_QUALITY_NAMES[quality]);
+          } else {
+            errors.push(`${BLUEPRINT_QUALITY_NAMES[quality]}: ${axiosErr.response?.data?.error || 'Unknown error'}`);
+          }
+        } else {
+          errors.push(`${BLUEPRINT_QUALITY_NAMES[quality]}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+      }
+    }
+  } catch (err) {
+    errors.push(`Failed to fetch existing blueprints: ${err instanceof Error ? err.message : 'Unknown error'}`);
+  }
+
+  creatingItems.value = false;
+
+  // Refresh blueprints list
+  await fetchBlueprints();
+
+  // Build result message
+  const messages: string[] = [];
+  if (created.length > 0) {
+    messages.push(`Created: ${created.join(', ')}`);
+  }
+  if (skipped.length > 0) {
+    messages.push(`Already exist: ${skipped.join(', ')}`);
+  }
+  if (errors.length > 0) {
+    messages.push(`Errors: ${errors.join('; ')}`);
+    createItemError.value = errors.join('; ');
+  }
+
+  alert(messages.join('\n') || 'No variants to create');
 }
 
 // Icon upload functions
@@ -741,12 +1000,22 @@ onMounted(() => {
       <div class="list-panel">
         <!-- Filters -->
         <div class="filters">
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search blueprints..."
-            class="search-input"
-          />
+          <div class="filter-row">
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="Search blueprints..."
+              class="search-input"
+            />
+            <button
+              type="button"
+              class="btn-reset"
+              title="Reset filters"
+              @click="resetFilters"
+            >
+              Reset
+            </button>
+          </div>
           <select v-model="filterCategory" class="filter-select">
             <option value="">All Categories</option>
             <option v-for="cat in categories" :key="cat" :value="cat">
@@ -778,13 +1047,10 @@ onMounted(() => {
             class="blueprint-item"
             :class="{ selected: selectedBlueprint?.id === bp.id }"
             @click="selectBlueprint(bp)"
+            @contextmenu="handleBlueprintContextMenu($event, bp)"
           >
             <div class="item-header">
-              <span
-                class="quality-indicator"
-                :style="{ backgroundColor: getQualityColor(bp.quality) }"
-              ></span>
-              <span class="item-name">{{ bp.name }}</span>
+              <span class="item-name" :style="{ color: getQualityColor(bp.quality) }">{{ bp.name }}</span>
               <span v-if="bp.inputs.length === 0 || bp.outputs.length === 0" class="disabled-badge">Disabled</span>
               <span v-if="bp.learned" class="learned-badge">Learned</span>
             </div>
@@ -864,7 +1130,7 @@ onMounted(() => {
                   <span v-else>{{ getItemInfo(input.itemId)?.icon || '?' }}</span>
                 </span>
                 <span class="material-qty">{{ input.quantity }}x</span>
-                <span class="material-name" :style="{ color: getItemInfo(input.itemId)?.color || '#e5e5e5' }">{{ getItemInfo(input.itemId)?.name || input.itemId }}</span>
+                <span class="material-name" :style="{ color: getItemInfo(input.itemId)?.color || '#FFFFFF' }">{{ getItemInfo(input.itemId)?.name || input.itemId }}</span>
               </div>
             </div>
 
@@ -879,7 +1145,7 @@ onMounted(() => {
                   <span v-else>{{ getItemInfo(output.itemId)?.icon || '?' }}</span>
                 </span>
                 <span class="material-qty">{{ output.quantity }}x</span>
-                <span class="material-name" :style="{ color: getItemInfo(output.itemId)?.color || '#e5e5e5' }">{{ getItemInfo(output.itemId)?.name || output.itemId }}</span>
+                <span class="material-name" :style="{ color: getItemInfo(output.itemId)?.color || '#FFFFFF' }">{{ getItemInfo(output.itemId)?.name || output.itemId }}</span>
               </div>
             </div>
           </div>
@@ -965,7 +1231,18 @@ onMounted(() => {
 
               <div class="form-group">
                 <label>Required Node Tier *</label>
-                <input v-model.number="form.nodeTierRequired" type="number" min="1" max="5" class="form-input" />
+                <div class="tier-toggle-group">
+                  <button
+                    v-for="tier in [1, 2, 3, 4, 5]"
+                    :key="tier"
+                    type="button"
+                    class="tier-toggle"
+                    :class="{ selected: form.nodeTierRequired === tier }"
+                    @click="form.nodeTierRequired = tier"
+                  >
+                    T{{ tier }}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1004,14 +1281,16 @@ onMounted(() => {
                   <img v-if="getItemInfo(input.itemId)?.icon?.startsWith('/')" :src="getItemIconUrl(getItemInfo(input.itemId)?.icon) || ''" alt="" class="material-icon-img" />
                   <span v-else>{{ getItemInfo(input.itemId)?.icon || '?' }}</span>
                 </span>
-                <span class="material-name" :style="{ color: getItemInfo(input.itemId)?.color || '#e5e5e5' }">{{ getItemInfo(input.itemId)?.name || input.itemId }}</span>
+                <span class="material-name" :style="{ color: getItemInfo(input.itemId)?.color || '#FFFFFF' }">{{ getItemInfo(input.itemId)?.name || input.itemId }}</span>
                 <div class="quantity-control">
                   <button type="button" class="qty-btn" @click="input.quantity = Math.max(1, input.quantity - 1)">-</button>
                   <input
+                    :ref="(el) => inputQtyRefs[i] = el as HTMLInputElement"
                     v-model.number="input.quantity"
                     type="number"
                     min="1"
                     class="qty-input"
+                    @keydown.enter="save"
                   />
                   <button type="button" class="qty-btn" @click="input.quantity++">+</button>
                 </div>
@@ -1028,13 +1307,16 @@ onMounted(() => {
                   placeholder="Search items to add..."
                   class="item-search"
                   @focus="showInputDropdown = true"
+                  @keydown="handleInputKeydown"
                 />
                 <div v-if="showInputDropdown && inputSearchQuery" class="item-dropdown">
                   <div
-                    v-for="item in filteredInputItems.slice(0, 10)"
+                    v-for="(item, index) in filteredInputItems.slice(0, 10)"
                     :key="item.id"
                     class="item-option"
+                    :class="{ highlighted: index === inputDropdownIndex }"
                     @click="addInputItem(item)"
+                    @mouseenter="inputDropdownIndex = index"
                   >
                     <span class="item-icon">
                       <img v-if="item.icon.startsWith('/')" :src="getItemIconUrl(item.icon) || ''" alt="" class="item-icon-img" />
@@ -1065,14 +1347,16 @@ onMounted(() => {
                   <img v-if="getItemInfo(output.itemId)?.icon?.startsWith('/')" :src="getItemIconUrl(getItemInfo(output.itemId)?.icon) || ''" alt="" class="material-icon-img" />
                   <span v-else>{{ getItemInfo(output.itemId)?.icon || '?' }}</span>
                 </span>
-                <span class="material-name" :style="{ color: getItemInfo(output.itemId)?.color || '#e5e5e5' }">{{ getItemInfo(output.itemId)?.name || output.itemId }}</span>
+                <span class="material-name" :style="{ color: getItemInfo(output.itemId)?.color || '#FFFFFF' }">{{ getItemInfo(output.itemId)?.name || output.itemId }}</span>
                 <div class="quantity-control">
                   <button type="button" class="qty-btn" @click="output.quantity = Math.max(1, output.quantity - 1)">-</button>
                   <input
+                    :ref="(el) => outputQtyRefs[i] = el as HTMLInputElement"
                     v-model.number="output.quantity"
                     type="number"
                     min="1"
                     class="qty-input"
+                    @keydown.enter="save"
                   />
                   <button type="button" class="qty-btn" @click="output.quantity++">+</button>
                 </div>
@@ -1089,13 +1373,16 @@ onMounted(() => {
                   placeholder="Search items to add..."
                   class="item-search"
                   @focus="showOutputDropdown = true"
+                  @keydown="handleOutputKeydown"
                 />
                 <div v-if="showOutputDropdown && outputSearchQuery" class="item-dropdown">
                   <div
-                    v-for="item in filteredOutputItems.slice(0, 10)"
+                    v-for="(item, index) in filteredOutputItems.slice(0, 10)"
                     :key="item.id"
                     class="item-option"
+                    :class="{ highlighted: index === outputDropdownIndex }"
                     @click="addOutputItem(item)"
+                    @mouseenter="outputDropdownIndex = index"
                   >
                     <span class="item-icon">
                       <img v-if="item.icon.startsWith('/')" :src="getItemIconUrl(item.icon) || ''" alt="" class="item-icon-img" />
@@ -1200,6 +1487,32 @@ onMounted(() => {
       v-model="form.icon"
       v-model:show="showIconPicker"
     />
+
+    <!-- Context Menu -->
+    <Teleport to="body">
+      <div
+        v-if="showContextMenu"
+        class="context-menu"
+        :style="{ left: contextMenuPosition.x + 'px', top: contextMenuPosition.y + 'px' }"
+      >
+        <div class="context-menu-header">
+          <span
+            class="quality-indicator"
+            :style="{ backgroundColor: getQualityColor(contextMenuBlueprint?.quality || BlueprintQuality.COMMON) }"
+          ></span>
+          <span class="context-menu-title">{{ contextMenuBlueprint?.name }}</span>
+        </div>
+        <div class="context-menu-item" @click="createVariants">
+          <span class="context-menu-icon">📋</span>
+          <span>Create Variants</span>
+        </div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" @click="closeContextMenu">
+          <span class="context-menu-icon">✕</span>
+          <span>Cancel</span>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -1267,6 +1580,32 @@ onMounted(() => {
   padding: 12px;
   background: #1a1f2e;
   border-bottom: 1px solid #2a3040;
+}
+
+.filter-row {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-row .search-input {
+  flex: 1;
+}
+
+.btn-reset {
+  padding: 8px 12px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+  color: #9ca3af;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn-reset:hover {
+  background: #4b5563;
+  color: #e5e5e5;
 }
 
 .search-input,
@@ -1656,6 +1995,35 @@ onMounted(() => {
   display: none;
 }
 
+/* Tier toggle buttons */
+.tier-toggle-group {
+  display: flex;
+  gap: 6px;
+}
+
+.tier-toggle {
+  padding: 8px 14px;
+  background: #1a1f2e;
+  border: 1px solid #2a3040;
+  border-radius: 6px;
+  color: #9ca3af;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tier-toggle:hover {
+  background: #232938;
+  color: #e5e5e5;
+}
+
+.tier-toggle.selected {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #3b82f6;
+  color: #60a5fa;
+}
+
 /* Materials editor */
 .materials-editor {
   margin-bottom: 20px;
@@ -1735,6 +2103,13 @@ onMounted(() => {
   color: #e5e5e5;
   font-size: 14px;
   text-align: center;
+  -moz-appearance: textfield;
+}
+
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .qty-input:focus {
@@ -1809,7 +2184,8 @@ onMounted(() => {
   transition: background 0.15s;
 }
 
-.item-option:hover {
+.item-option:hover,
+.item-option.highlighted {
   background: #2a3550;
 }
 
@@ -2014,5 +2390,71 @@ onMounted(() => {
 
 .icon-url-input .form-input {
   font-size: 13px;
+}
+</style>
+
+<!-- Non-scoped styles for Teleported context menu -->
+<style>
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 200px;
+  background: #1a1f2e;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.context-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #151a24;
+  border-bottom: 1px solid #2a3040;
+}
+
+.context-menu-header .quality-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.context-menu-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e5e5e5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  color: #e5e5e5;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+
+.context-menu-item:hover {
+  background: #2a3550;
+}
+
+.context-menu-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: #2a3040;
+  margin: 4px 0;
 }
 </style>

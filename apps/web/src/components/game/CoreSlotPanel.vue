@@ -1,13 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import {
-  NODE_CORES,
-  getCoreForNodeType,
-  type NodeCoreId,
-  type ItemStorage,
-  NodeType,
-} from '@nova-fall/shared';
+import type { ItemStorage } from '@nova-fall/shared';
 import { useAuthStore } from '@/stores/auth';
+import { useItemsStore, type ItemDisplayInfo } from '@/stores/items';
 
 const props = defineProps<{
   nodeId: string;
@@ -18,47 +13,98 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'install', coreId: NodeCoreId, storage: ItemStorage): void;
+  (e: 'install', coreId: string, storage: ItemStorage): void;
   (e: 'destroy', storage: ItemStorage): void;
 }>();
 
 const authStore = useAuthStore();
+const itemsStore = useItemsStore();
 const loading = ref(false);
 const error = ref<string | null>(null);
 const showDestroyConfirm = ref(false);
 
-// Get the core type required for this node
-const requiredCoreId = computed(() => {
-  return getCoreForNodeType(props.nodeType as NodeType);
+// Get all cores that can be installed in this node type (from database)
+const validCoresForNodeType = computed(() => {
+  const allCores = itemsStore.getItemsByCategory('NODE_CORE');
+  return allCores.filter(core => core.targetNodeType === props.nodeType);
 });
 
-// Get the installed core definition
+// Find a valid core in storage that can be installed
+const availableCoreInStorage = computed<{ coreId: string; count: number; display: ItemDisplayInfo } | null>(() => {
+  for (const core of validCoresForNodeType.value) {
+    const count = props.storage[core.itemId] ?? 0;
+    if (count > 0) {
+      return {
+        coreId: core.itemId,
+        count,
+        display: itemsStore.getItemDisplay(core.itemId),
+      };
+    }
+  }
+  return null;
+});
+
+// Get the installed core display info
 const installedCore = computed(() => {
   if (!props.installedCoreId) return null;
-  return NODE_CORES[props.installedCoreId as NodeCoreId];
+  return itemsStore.getItemDisplay(props.installedCoreId);
 });
 
-// Check if node has matching core in storage
+// Get the installed core's efficiency
+const installedCoreEfficiency = computed(() => {
+  if (!props.installedCoreId) return 1;
+  const item = itemsStore.getItem(props.installedCoreId);
+  return item?.efficiency ?? 1;
+});
+
+// Calculate efficiency bonus percentage (10% per point above 1)
+const efficiencyBonus = computed(() => {
+  const bonus = (installedCoreEfficiency.value - 1) * 10;
+  return bonus > 0 ? `+${bonus}%` : '';
+});
+
+// Check if node has any matching core in storage
 const hasMatchingCoreInStorage = computed(() => {
-  if (!requiredCoreId.value) return false;
-  return (props.storage[requiredCoreId.value] ?? 0) > 0;
+  return availableCoreInStorage.value !== null;
 });
 
 // Count of matching cores in storage
 const coresInStorage = computed(() => {
-  if (!requiredCoreId.value) return 0;
-  return props.storage[requiredCoreId.value] ?? 0;
+  return availableCoreInStorage.value?.count ?? 0;
 });
 
-// Required core definition
+// Required core info (first valid core type for display)
 const requiredCore = computed(() => {
-  if (!requiredCoreId.value) return null;
-  return NODE_CORES[requiredCoreId.value];
+  const firstValidCore = validCoresForNodeType.value[0];
+  if (!firstValidCore) return null;
+  return itemsStore.getItemDisplay(firstValidCore.itemId);
+});
+
+// Get text color class based on item quality
+function getQualityColorClass(quality: string): string {
+  switch (quality) {
+    case 'LEGENDARY':
+      return 'text-orange-400';
+    case 'EPIC':
+      return 'text-purple-400';
+    case 'RARE':
+      return 'text-yellow-400';
+    case 'UNCOMMON':
+      return 'text-blue-400';
+    case 'COMMON':
+    default:
+      return 'text-gray-300';
+  }
+}
+
+// Core ID to install (from available in storage)
+const coreIdToInstall = computed(() => {
+  return availableCoreInStorage.value?.coreId ?? null;
 });
 
 // Handle install
 async function handleInstall() {
-  if (loading.value || !requiredCoreId.value) return;
+  if (loading.value || !coreIdToInstall.value) return;
 
   loading.value = true;
   error.value = null;
@@ -70,7 +116,7 @@ async function handleInstall() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authStore.accessToken}`,
       },
-      body: JSON.stringify({ coreId: requiredCoreId.value }),
+      body: JSON.stringify({ coreId: coreIdToInstall.value }),
     });
 
     const data = await response.json();
@@ -79,7 +125,7 @@ async function handleInstall() {
       throw new Error(data.error?.message || data.message || 'Failed to install core');
     }
 
-    emit('install', requiredCoreId.value, data.storage as ItemStorage);
+    emit('install', coreIdToInstall.value, data.storage as ItemStorage);
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Install failed';
     setTimeout(() => error.value = null, 3000);
@@ -151,14 +197,24 @@ async function handleDestroy() {
       <!-- Installed Core -->
       <div v-if="installedCore" class="flex items-center gap-3">
         <div
-          class="w-12 h-12 flex items-center justify-center rounded-lg text-2xl"
+          class="w-12 h-12 flex items-center justify-center rounded-lg text-2xl overflow-hidden"
           :style="{ backgroundColor: installedCore.color + '20', color: installedCore.color }"
         >
-          {{ installedCore.icon }}
+          <img
+            v-if="itemsStore.isIconUrl(installedCore.icon)"
+            :src="installedCore.icon!"
+            :alt="installedCore.name"
+            class="w-10 h-10 object-contain"
+          />
+          <span v-else>{{ installedCore.icon ?? '⚙️' }}</span>
         </div>
         <div class="flex-1">
-          <p class="font-medium text-white">{{ installedCore.name }}</p>
+          <p class="font-medium" :class="getQualityColorClass(installedCore.quality)">{{ installedCore.name }}</p>
           <p class="text-xs text-green-400">Producing resources</p>
+          <p class="text-xs text-gray-400">
+            Efficiency: {{ installedCoreEfficiency }}
+            <span v-if="efficiencyBonus" class="text-green-400">({{ efficiencyBonus }})</span>
+          </p>
         </div>
         <button
           v-if="isOwned && !showDestroyConfirm"
@@ -177,7 +233,7 @@ async function handleDestroy() {
         <div class="flex-1">
           <p class="font-medium text-gray-400">No Core Installed</p>
           <p class="text-xs text-gray-500">
-            Requires: <span class="text-gray-300">{{ requiredCore?.name ?? 'Unknown' }}</span>
+            Requires: <span class="text-gray-300">{{ requiredCore?.name ?? 'A core for this node type' }}</span>
           </p>
         </div>
       </div>
@@ -206,10 +262,13 @@ async function handleDestroy() {
       </div>
 
       <!-- Install Option (only if owned, no core installed, and has matching core in storage) -->
-      <div v-if="isOwned && !installedCoreId && hasMatchingCoreInStorage && !showDestroyConfirm" class="mt-3 pt-3 border-t border-gray-700">
+      <div v-if="isOwned && !installedCoreId && hasMatchingCoreInStorage && availableCoreInStorage && !showDestroyConfirm" class="mt-3 pt-3 border-t border-gray-700">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2 text-sm">
-            <span :style="{ color: requiredCore?.color }">{{ requiredCore?.icon }}</span>
+            <template v-if="itemsStore.isIconUrl(availableCoreInStorage.display.icon)">
+              <img :src="availableCoreInStorage.display.icon!" :alt="availableCoreInStorage.display.name" class="w-4 h-4" />
+            </template>
+            <span v-else :style="{ color: availableCoreInStorage.display.color }">{{ availableCoreInStorage.display.icon ?? '⚙️' }}</span>
             <span class="text-gray-300">{{ coresInStorage }} in storage</span>
           </div>
           <button
@@ -225,7 +284,7 @@ async function handleDestroy() {
       <!-- No Core Available Message -->
       <div v-if="isOwned && !installedCoreId && !hasMatchingCoreInStorage && !showDestroyConfirm" class="mt-3 pt-3 border-t border-gray-700">
         <p class="text-xs text-gray-500">
-          Transfer a <span class="text-gray-300">{{ requiredCore?.name }}</span> to this node to activate it.
+          Transfer a <span class="text-gray-300">{{ requiredCore?.name ?? 'matching core' }}</span> to this node to activate it.
         </p>
       </div>
     </div>
