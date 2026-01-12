@@ -1,6 +1,6 @@
 ---
 name: update
-description: End-of-session documentation updater. Updates DEVELOPMENT-PLAN.md checkboxes, adds PROGRESS.md session entries, updates GAME-DESIGN-DOCUMENT.md if design changed, syncs CLAUDE.md status, and keeps mac-claude.md in parity. Use when finishing a coding session or when the user says "update docs" or "end session".
+description: End-of-session documentation updater. Updates DEVELOPMENT-PLAN.md checkboxes, adds PROGRESS.md session entries, updates GAME-DESIGN-DOCUMENT.md if design changed, syncs CLAUDE.md status, and keeps OS-specific versions (CLAUDE-Windows.md, mac-claude.md) in parity. Use when finishing a coding session or when the user says "update docs" or "end session".
 ---
 
 # Update Skill
@@ -73,7 +73,7 @@ Add a new session entry with:
 
 ### Step 5: Update CLAUDE.md Current Status
 
-Update the "Current Status" section in `CLAUDE.md` with:
+Update the "Current Status" section in `CLAUDE.md` (project root) with:
 - Current Phase
 - Phase Progress
 - Current Task (next priority)
@@ -83,24 +83,66 @@ Update the "Current Status" section in `CLAUDE.md` with:
 
 Also add any new entries to the Key Decisions Log if decisions were made.
 
-### Step 6: Sync mac-claude.md
+### Step 6: Sync OS-Specific CLAUDE Files
 
-The file `docs/mac-claude.md` is a macOS-specific version of CLAUDE.md used when developing on a MacBook. It should stay in parity with the main CLAUDE.md except for platform-specific sections.
+The project maintains two OS-specific versions of CLAUDE.md in the `docs/` folder:
+- `docs/CLAUDE-Windows.md` - For Windows/WSL development
+- `docs/mac-claude.md` - For macOS development
 
-**Sections to keep in sync:**
-- Current Status table (must match CLAUDE.md exactly)
-- Key Decisions Log (must match CLAUDE.md exactly)
-- Any other non-platform-specific content that was updated
+Both files should stay in parity with the main `CLAUDE.md` except for platform-specific sections.
 
-**Sections that differ intentionally (do NOT sync):**
-- Development Rules section (macOS vs WSL/Windows warnings)
-- Prohibited Actions list (mac version doesn't have WSL warning)
-- The mac-specific decision entry about "Switched to macOS development"
+#### Sections to keep in sync (MUST match CLAUDE.md exactly):
+- Current Status table
+- Key Decisions Log (all entries)
+- Project Overview
+- Critical Files table
+- Quick Commands table
+- Technical Standards (entire section)
+- Code Style
+- File Organization
+- Commit Convention
+- Testing Requirements
+- Database Changes
+- Database Safety section
+- Checklist Discipline
+- Session Start/End Protocol
+- Progress Verification Checkpoints
+- Game Specifications Quick Reference
+- Asking for Clarification
+- Phase Completion Checklist
+- Emergency Procedures
+- Remember section
 
-After updating CLAUDE.md, read `docs/mac-claude.md` and update:
-1. The Current Status table to match CLAUDE.md
-2. Any new Key Decisions entries (except platform-specific ones)
-3. The footer version number and sync date
+#### Windows-specific sections (docs/CLAUDE-Windows.md):
+These sections are UNIQUE to Windows and should NOT be overwritten:
+- "WSL vs Windows Environment (CRITICAL)" section under Development Rules
+- Prohibited Actions item #11: "Run `pnpm install` or delete `node_modules` from WSL"
+- Any PowerShell-specific recovery instructions
+
+#### macOS-specific sections (docs/mac-claude.md):
+These sections are UNIQUE to macOS and should NOT be overwritten:
+- "Development Environment (macOS)" section under Development Rules
+- "Available Commands" table showing all pnpm commands work normally
+- "Initial Setup" bash commands section
+- Prohibited Actions list (10 items, no WSL warning)
+
+#### Sync Process:
+1. Read `docs/CLAUDE-Windows.md` and update:
+   - Current Status table to match CLAUDE.md
+   - Key Decisions Log to match CLAUDE.md (all entries)
+   - Footer version number and date
+   - Any other synced sections that changed
+
+2. Read `docs/mac-claude.md` and update:
+   - Current Status table to match CLAUDE.md
+   - Key Decisions Log to match CLAUDE.md (all entries)
+   - Footer version number and date
+   - Any other synced sections that changed
+
+**Version numbering convention:**
+- Main CLAUDE.md: `X.Y.Z`
+- CLAUDE-Windows.md: `X.Y.Z` (matches main version)
+- mac-claude.md: `X.Y.Z (macOS)` (matches main version with platform suffix)
 
 ### Step 7: Summary Report
 
@@ -117,6 +159,7 @@ After all updates are complete, provide a summary to the user:
 - GAME-DESIGN-DOCUMENT.md: [Changes made or "No changes needed"]
 - PROGRESS.md: [Session entry added]
 - CLAUDE.md: [Status updated, N decisions logged]
+- CLAUDE-Windows.md: [Synced with CLAUDE.md]
 - mac-claude.md: [Synced with CLAUDE.md]
 
 ### Current State:
@@ -133,3 +176,4 @@ After all updates are complete, provide a summary to the user:
 - Be thorough with PROGRESS.md - this is the historical record
 - Never mark a task complete if it wasn't fully finished and verified
 - If uncertain about whether something should be logged, include it
+- **Platform awareness:** When syncing OS-specific files, preserve their unique platform sections while updating shared content

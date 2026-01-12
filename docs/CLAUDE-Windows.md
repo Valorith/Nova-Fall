@@ -27,42 +27,49 @@ Before starting ANY work session, you MUST read these files:
 
 ## Development Rules
 
-### Development Environment (macOS)
+### ⚠️ WSL vs Windows Environment (CRITICAL - READ FIRST) ⚠️
 
-This project runs on macOS. Claude Code runs in the same environment as the dev server - no platform conflicts.
+**This project runs on Windows PowerShell. Claude Code runs in WSL. These have INCOMPATIBLE binaries.**
 
-#### Available Commands
+Node packages contain platform-specific binaries (esbuild, tsx, prisma, etc.) that differ between Windows and Linux. The `node_modules` folder was installed from Windows and contains Windows binaries. **Any modification to node_modules from WSL will corrupt the project.**
 
-All pnpm/npm commands work normally:
+#### ❌ NEVER do these from WSL (Claude Code):
 
-| Command | What it does |
-|---------|--------------|
-| `pnpm install` | Install/update dependencies |
-| `pnpm dev` | Start development servers |
-| `pnpm build` | Build all packages |
-| `pnpm typecheck` | Run TypeScript compiler |
-| `pnpm lint` / `pnpm lint:fix` | Run ESLint |
-| `pnpm test` | Run tests |
-| `pnpm db:generate` | Regenerate Prisma client |
-| `pnpm db:migrate` | Apply database migrations |
-| `pnpm db:seed` | Seed the database |
-| `pnpm db:reseed-map` | Reseed map nodes only |
+| Command | Why it breaks things |
+|---------|---------------------|
+| `pnpm install` | Installs Linux binaries, breaks Windows |
+| `npm install` | Same problem |
+| `rm -rf node_modules` | Forces reinstall with wrong platform |
+| `rm -rf` on any `node_modules` subfolder | Same problem |
+| Any command that adds/removes packages | Corrupts binary compatibility |
 
-#### Initial Setup (if needed)
+#### ✅ SAFE to do from WSL (Claude Code):
 
-```bash
-# Install dependencies
+- `pnpm typecheck` - Just runs TypeScript compiler
+- `pnpm lint` / `pnpm lint:fix` - Just runs ESLint
+- `pnpm build` - Compiles code (no binary changes)
+- `pnpm db:generate` - Generates Prisma client (usually safe)
+- `pnpm db:seed` - Seeds database (runs tsx, may fail but won't corrupt)
+- `npx prisma migrate` - Database migrations
+- Reading/writing source files
+- Git operations
+
+#### 🔧 If node_modules gets corrupted:
+
+**STOP. Do not try to fix it from WSL.** Tell the user to run in **PowerShell**:
+
+```powershell
+# Run this in PowerShell, NOT WSL
+Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
 pnpm install
-
-# Generate Prisma client
 pnpm db:generate
-
-# Apply migrations
-pnpm db:migrate
-
-# Seed database
-pnpm db:seed
 ```
+
+#### 🚨 Before running ANY npm/pnpm command, ask yourself:
+
+1. Does this command modify `node_modules`? → **DON'T RUN IT**
+2. Does this command install/update packages? → **DON'T RUN IT**
+3. Is this just running existing code/tools? → Probably safe
 
 ---
 
@@ -268,10 +275,10 @@ Examples:
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
 | **Current Phase**  | Phase 4 - Combat System                   |
-| **Phase Progress** | Section 4.2 complete, arena/unit scaling  |
-| **Current Task**   | Run migration, Section 4.3 Features       |
+| **Phase Progress** | Section 4.2 complete, dev tools improved  |
+| **Current Task**   | Section 4.3 Full Combat Features          |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 46 - 2026-01-11                   |
+| **Last Session**   | Session 45 - 2026-01-11                   |
 | **Last Updated**   | 2026-01-11                                |
 
 ---
@@ -357,9 +364,6 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-10 | Buildings have shield stat                | Same combat stats as units: health, shield, damage, etc. | User      |
 | 2026-01-11 | New blueprints require learning by default | More control over game progression                     | User        |
 | 2026-01-11 | Reuse unitStats field for buildings       | Same structure, avoids schema change                   | Claude      |
-| 2026-01-11 | Arena tile size 8m (was 2m)               | Larger arena feels better, 480m x 480m total           | User        |
-| 2026-01-11 | Unit tileSize configurable (1-10)         | Different unit types can have different footprints     | User        |
-| 2026-01-11 | Switched to macOS development             | Traveling with MacBook Pro                             | User        |
 
 ---
 
@@ -412,6 +416,7 @@ INITIATION → PREPARATION (20-28h) → LOCKED (1h) → COMBAT (30m) → COOLDOW
 8. ❌ Use external services beyond Railway
 9. ❌ Add authentication providers beyond Discord/Google
 10. ❌ Change game balance values without approval
+11. ❌ **Run `pnpm install` or delete `node_modules` from WSL** (breaks Windows dev server)
 
 ---
 
@@ -496,5 +501,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-_Last Updated: 2026-01-11 (Session 46 - synced with Windows)_
-_Version: 2.0.3 (macOS)_
+_Last Updated: 2026-01-10 (Session 38)_
+_Version: 1.0.1_
