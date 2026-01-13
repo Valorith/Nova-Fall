@@ -1,6 +1,7 @@
 import type { UnitDefinition } from '@prisma/client';
 
 export type UnitCategory = 'infantry' | 'combat_vehicle' | 'support_vehicle';
+export type AttackType = 'instant_laser' | 'laser_burst' | 'bullet' | 'missile';
 
 export interface UnitDefinitionInput {
   name: string;
@@ -14,7 +15,14 @@ export interface UnitDefinitionInput {
   speed?: number;
   range?: number;
   attackSpeed?: number;
+  // Attack type configuration
+  attackType?: AttackType;
+  laserColor?: string | null;
+  projectileSpeed?: number;
+  burstCount?: number;
+  burstInterval?: number;
   category?: UnitCategory;
+  aiPresetId?: string | null;
 }
 
 export interface UnitDefinitionListQuery {

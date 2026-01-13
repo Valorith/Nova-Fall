@@ -10,6 +10,8 @@ export type BuildingCategory = 'turret' | 'wall' | 'structure' | 'utility';
 /**
  * Building definition as stored in the database
  */
+export type AttackType = 'instant_laser' | 'laser_burst' | 'bullet' | 'missile';
+
 export interface DbBuildingDefinition {
   id: string;
   name: string;
@@ -30,8 +32,18 @@ export interface DbBuildingDefinition {
   range: number; // Attack range in tiles
   attackSpeed: number; // Attacks per second
 
+  // Attack type configuration
+  attackType: AttackType;
+  laserColor: string | null; // Hex color like "#ff0000", null = default red
+  projectileSpeed: number; // Units per second for non-instant attacks
+  burstCount: number; // For laser_burst: number of shots
+  burstInterval: number; // Seconds between burst shots
+
   // Category
   category: BuildingCategory;
+
+  // AI Behavior
+  aiPresetId: string | null; // Reference to AI preset for behavior tree
 
   // Relations (item count for display)
   items?: { id: string; itemId: string; name: string; quality: BlueprintQuality }[];
@@ -55,5 +67,12 @@ export interface DbBuildingDefinitionInput {
   damage?: number;
   range?: number;
   attackSpeed?: number;
+  // Attack type configuration
+  attackType?: AttackType;
+  laserColor?: string | null;
+  projectileSpeed?: number;
+  burstCount?: number;
+  burstInterval?: number;
   category?: BuildingCategory;
+  aiPresetId?: string | null;
 }

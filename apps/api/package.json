@@ -20,6 +20,7 @@
     "db:seed-resources": "tsx prisma/seed-resources.ts",
     "db:seed-units": "tsx prisma/seed-units.ts",
     "db:seed-buildings": "tsx prisma/seed-buildings.ts",
+    "db:seed-ai-presets": "tsx prisma/seed-ai-presets.ts",
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
     "clean": "rm -rf dist"

@@ -1937,12 +1937,17 @@ The following combat prerequisites were completed in Phase 2.5:
   - [ ] Order queue (shift-click waypoints)
   - [ ] Order completion → AI behavior reverts
 
-- [ ] **Tower targeting and firing**
+- [~] **Tower targeting and firing** (turret rotation/laser working, needs auto-targeting)
   - [ ] Tower placement from defense state
   - [ ] Auto-target nearest enemy in range
   - [ ] Priority override (player selects target)
   - [ ] Target cooldown to prevent flicker
-  - [ ] Range circle visualization
+  - [x] Range circle visualization
+  - [x] Turret yaw rotation (horizontal aiming)
+  - [x] Turret pitch rotation (barrel tilts to aim at ground)
+  - [x] Laser beam visual effect with glow
+  - [x] Force attack via Ctrl+Click/Right-Click
+  - [ ] Add `barrelOffsetY` field to BuildingDefinition schema for per-turret barrel offset configuration
 
 - [ ] **Projectile system**
   - [ ] Create ProjectileManager class

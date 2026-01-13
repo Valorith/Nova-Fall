@@ -23,6 +23,12 @@ Before starting ANY work session, you MUST read these files:
 | 3        | `docs/GAME-DESIGN-DOCUMENT.md` | Full game design reference          |
 | 4        | `docs/PROGRESS.md`             | Session-by-session progress log     |
 
+### Active Feature Plans
+
+| File                                   | Purpose                                    | Status      |
+| -------------------------------------- | ------------------------------------------ | ----------- |
+| `docs/TURRET-ATTACK-SYSTEM-PLAN.md`    | Turret rotation, lasers, force attack, UI  | In Progress |
+
 ---
 
 ## Development Rules
@@ -268,11 +274,11 @@ Examples:
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
 | **Current Phase**  | Phase 4 - Combat System                   |
-| **Phase Progress** | Section 4.2 complete, arena/unit scaling  |
-| **Current Task**   | Run migration, Section 4.3 Features       |
+| **Phase Progress** | Turret attack system complete (yaw, pitch, laser) |
+| **Current Task**   | Add barrelOffsetY config field, then continue 4.3 |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 46 - 2026-01-11                   |
-| **Last Updated**   | 2026-01-11                                |
+| **Last Session**   | Session 50 - 2026-01-12                   |
+| **Last Updated**   | 2026-01-12                                |
 
 ---
 
@@ -360,6 +366,7 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-11 | Arena tile size 8m (was 2m)               | Larger arena feels better, 480m x 480m total           | User        |
 | 2026-01-11 | Unit tileSize configurable (1-10)         | Different unit types can have different footprints     | User        |
 | 2026-01-11 | Switched to macOS development             | Traveling with MacBook Pro                             | User        |
+| 2026-01-12 | barrelOffsetY config per building         | Allows per-turret barrel position tuning without code changes | User   |
 
 ---
 
@@ -496,5 +503,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-_Last Updated: 2026-01-11 (Session 46 - synced with Windows)_
-_Version: 2.0.3 (macOS)_
+_Last Updated: 2026-01-12 (Session 50)_
+_Version: 2.0.5 (macOS)_

@@ -78,7 +78,16 @@ export const unitDefinitionService = {
     if (data.speed !== undefined) createData.speed = data.speed;
     if (data.range !== undefined) createData.range = data.range;
     if (data.attackSpeed !== undefined) createData.attackSpeed = data.attackSpeed;
+    // Attack type configuration
+    if (data.attackType !== undefined) createData.attackType = data.attackType;
+    if (data.laserColor !== undefined) createData.laserColor = data.laserColor;
+    if (data.projectileSpeed !== undefined) createData.projectileSpeed = data.projectileSpeed;
+    if (data.burstCount !== undefined) createData.burstCount = data.burstCount;
+    if (data.burstInterval !== undefined) createData.burstInterval = data.burstInterval;
     if (data.category !== undefined) createData.category = data.category;
+    if (data.aiPresetId) {
+      createData.aiPreset = { connect: { id: data.aiPresetId } };
+    }
 
     return prisma.unitDefinition.create({ data: createData });
   },
@@ -98,7 +107,20 @@ export const unitDefinitionService = {
     if (data.speed !== undefined) updateData.speed = data.speed;
     if (data.range !== undefined) updateData.range = data.range;
     if (data.attackSpeed !== undefined) updateData.attackSpeed = data.attackSpeed;
+    // Attack type configuration
+    if (data.attackType !== undefined) updateData.attackType = data.attackType;
+    if (data.laserColor !== undefined) updateData.laserColor = data.laserColor;
+    if (data.projectileSpeed !== undefined) updateData.projectileSpeed = data.projectileSpeed;
+    if (data.burstCount !== undefined) updateData.burstCount = data.burstCount;
+    if (data.burstInterval !== undefined) updateData.burstInterval = data.burstInterval;
     if (data.category !== undefined) updateData.category = data.category;
+    if (data.aiPresetId !== undefined) {
+      if (data.aiPresetId === null) {
+        updateData.aiPreset = { disconnect: true };
+      } else {
+        updateData.aiPreset = { connect: { id: data.aiPresetId } };
+      }
+    }
 
     return prisma.unitDefinition.update({
       where: { id },
@@ -150,6 +172,12 @@ export const unitDefinitionService = {
         speed: original.speed,
         range: original.range,
         attackSpeed: original.attackSpeed,
+        // Attack type configuration
+        attackType: original.attackType,
+        laserColor: original.laserColor,
+        projectileSpeed: original.projectileSpeed,
+        burstCount: original.burstCount,
+        burstInterval: original.burstInterval,
         category: original.category,
       },
     });

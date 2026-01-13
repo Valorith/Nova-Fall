@@ -10,7 +10,7 @@
  * <CombatView v-show="inCombat" ref="combatView" />
  */
 
-import { ref, onMounted, defineExpose } from 'vue';
+import { ref, onMounted, onUnmounted, defineExpose } from 'vue';
 import { useCombatEngine } from '../../composables/useCombatEngine';
 import CombatDevPanel from './CombatDevPanel.vue';
 import type { CombatResult } from '@nova-fall/shared';
@@ -59,15 +59,59 @@ const showDevPanel = ref(true); // Show by default in dev mode
 const devPanelRef = ref<InstanceType<typeof CombatDevPanel> | null>(null);
 const isPlacementMode = ref(false);
 
+// Ctrl key state for force attack cursor
+const isCtrlHeld = ref(false);
+
+// Track if an attackable building is selected (has range > 0)
+const hasAttackableSelection = ref(false);
+
 // Handle placement mode change from dev panel
 const handlePlacementModeChange = (active: boolean) => {
   isPlacementMode.value = active;
 };
 
+// Handle attackable selection change from dev panel
+const handleAttackableSelectionChange = (hasSelection: boolean) => {
+  hasAttackableSelection.value = hasSelection;
+};
+
+// Handle right-click (Ctrl+Click on macOS) for force attack
+const handleRightClick = (event: MouseEvent) => {
+  if (devPanelRef.value && hasAttackableSelection.value) {
+    devPanelRef.value.handleForceAttack(event);
+  }
+};
+
 // Handle canvas click - forward to dev panel if in placement mode
 const handleCanvasClick = (event: MouseEvent) => {
+  // Placement mode takes priority
   if (isPlacementMode.value && devPanelRef.value) {
     devPanelRef.value.handleArenaClick(event);
+    return;
+  }
+
+  // Check for Ctrl+Click force attack
+  if (event.ctrlKey && devPanelRef.value) {
+    devPanelRef.value.handleForceAttack(event);
+    return;
+  }
+
+  // Regular click - try to select a building
+  if (devPanelRef.value) {
+    devPanelRef.value.handleSelectionClick(event);
+  }
+};
+
+// Track Ctrl key for force attack mode
+const handleKeyDown = (event: KeyboardEvent) => {
+  if (event.key === 'Control') {
+    isCtrlHeld.value = true;
+  }
+};
+
+const handleKeyUp = (event: KeyboardEvent) => {
+  if (event.key === 'Control') {
+    isCtrlHeld.value = false;
   }
 };
 
@@ -76,6 +120,13 @@ onMounted(() => {
   if (canvasRef.value) {
     initEngine(canvasRef.value);
   }
+  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('keyup', handleKeyUp);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown);
+  window.removeEventListener('keyup', handleKeyUp);
 });
 
 // Expose methods for parent component
@@ -108,8 +159,12 @@ const handleRotateRight = () => rotateCamera('right');
     <canvas
       ref="canvasRef"
       class="combat-canvas"
-      :class="{ 'placement-mode': isPlacementMode }"
+      :class="{
+        'placement-mode': isPlacementMode,
+        'force-attack-mode': isCtrlHeld && !isPlacementMode && hasAttackableSelection
+      }"
       @click="handleCanvasClick"
+      @contextmenu.prevent="handleRightClick"
     />
 
     <!-- Loading Overlay -->
@@ -147,13 +202,13 @@ const handleRotateRight = () => rotateCamera('right');
 
       <!-- Camera Controls -->
       <div class="camera-controls">
-        <button class="btn-icon" @click="handleRotateLeft" title="Rotate Left (Q)">
+        <button class="btn-icon" title="Rotate Left (Q)" @click="handleRotateLeft">
           &#8634;
         </button>
-        <button class="btn-icon" @click="resetCamera" title="Reset Camera">
+        <button class="btn-icon" title="Reset Camera" @click="resetCamera">
           &#8962;
         </button>
-        <button class="btn-icon" @click="handleRotateRight" title="Rotate Right (E)">
+        <button class="btn-icon" title="Rotate Right (E)" @click="handleRotateRight">
           &#8635;
         </button>
       </div>
@@ -172,6 +227,7 @@ const handleRotateRight = () => rotateCamera('right');
       :visible="showDevPanel"
       @close="showDevPanel = false"
       @placement-mode-change="handlePlacementModeChange"
+      @attackable-selection-change="handleAttackableSelectionChange"
     />
   </div>
 </template>
@@ -194,6 +250,10 @@ const handleRotateRight = () => rotateCamera('right');
 
 .combat-canvas.placement-mode {
   cursor: crosshair;
+}
+
+.combat-canvas.force-attack-mode {
+  cursor: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="none" stroke="%23ff3333" stroke-width="2"/><line x1="16" y1="2" x2="16" y2="10" stroke="%23ff3333" stroke-width="2"/><line x1="16" y1="22" x2="16" y2="30" stroke="%23ff3333" stroke-width="2"/><line x1="2" y1="16" x2="10" y2="16" stroke="%23ff3333" stroke-width="2"/><line x1="22" y1="16" x2="30" y2="16" stroke="%23ff3333" stroke-width="2"/><circle cx="16" cy="16" r="2" fill="%23ff3333"/></svg>') 16 16, crosshair;
 }
 
 /* Loading Overlay */

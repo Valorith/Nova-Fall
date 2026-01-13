@@ -1,12 +1,13 @@
 import { prisma } from '../../lib/prisma.js';
 import { redis, scheduleCraftingJob } from '../../lib/redis.js';
+import type {
+  NodeType} from '@nova-fall/shared';
 import {
   type Blueprint,
   type BlueprintMaterial,
   type CraftingQueue,
   type CraftingQueueItem,
   type ItemStorage,
-  NodeType,
   applyEfficiencyToCraftingTime,
   nodeRequiresCore,
 } from '@nova-fall/shared';
@@ -496,7 +497,7 @@ export async function isBlueprintLearned(
 
   // Get the primary output item name (first output in the list)
   let outputItemName = blueprint.name; // Fallback to blueprint name
-  const outputs = blueprint.outputs as Array<{ itemId: string; quantity: number }> | null;
+  const outputs = blueprint.outputs as { itemId: string; quantity: number }[] | null;
   if (outputs && outputs.length > 0 && outputs[0]) {
     const outputItem = await prisma.itemDefinition.findUnique({
       where: { itemId: outputs[0].itemId },

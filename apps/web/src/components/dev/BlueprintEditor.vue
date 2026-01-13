@@ -451,7 +451,7 @@ async function createItems() {
   };
 
   // First, fetch all existing blueprint variants with the same name to build quality -> blueprintId mapping
-  let blueprintsByQuality: Map<BlueprintQuality, string> = new Map();
+  let blueprintsByQuality = new Map<BlueprintQuality, string>();
   try {
     const existingBlueprintsResponse = await blueprintsApi.getAll({ search: blueprintName, limit: 100 });
     const matchingBlueprints = existingBlueprintsResponse.data.blueprints.filter(
@@ -1165,18 +1165,18 @@ onMounted(() => {
 
           <div class="detail-actions">
             <button class="btn btn-primary" @click="startEdit">Edit</button>
-            <button class="btn btn-secondary" @click="duplicateBlueprint" :disabled="saving">
+            <button class="btn btn-secondary" :disabled="saving" @click="duplicateBlueprint">
               Duplicate
             </button>
-            <button class="btn btn-danger" @click="deleteBlueprint" :disabled="saving">
+            <button class="btn btn-danger" :disabled="saving" @click="deleteBlueprint">
               Delete
             </button>
             <div class="form-actions-spacer"></div>
             <button
               class="btn btn-create-items"
-              @click="createItems"
               :disabled="creatingItems"
               title="Create all 5 quality variants of blueprint items and output items"
+              @click="createItems"
             >
               {{ creatingItems ? 'Creating...' : 'Create Items' }}
             </button>
@@ -1472,18 +1472,18 @@ onMounted(() => {
           </div>
 
           <div class="form-actions">
-            <button class="btn btn-primary" @click="save" :disabled="saving">
+            <button class="btn btn-primary" :disabled="saving" @click="save">
               {{ saving ? 'Saving...' : (isCreating ? 'Create' : 'Save') }}
             </button>
-            <button class="btn btn-secondary" @click="cancel" :disabled="saving">
+            <button class="btn btn-secondary" :disabled="saving" @click="cancel">
               Cancel
             </button>
             <div class="form-actions-spacer"></div>
             <button
               class="btn btn-create-items"
-              @click="createItems"
               :disabled="saving || creatingItems"
               title="Create all 5 quality variants of blueprint items and output items"
+              @click="createItems"
             >
               {{ creatingItems ? 'Creating...' : 'Create Items' }}
             </button>

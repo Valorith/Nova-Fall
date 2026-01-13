@@ -71,8 +71,8 @@ const handleReturnToLobby = () => {
 
         <!-- Action Button -->
         <button
-          @click="handleReturnToLobby"
           class="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg transition-colors"
+          @click="handleReturnToLobby"
         >
           Return to Lobby
         </button>

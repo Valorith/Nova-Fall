@@ -23,6 +23,12 @@ Before starting ANY work session, you MUST read these files:
 | 3        | `docs/GAME-DESIGN-DOCUMENT.md` | Full game design reference          |
 | 4        | `docs/PROGRESS.md`             | Session-by-session progress log     |
 
+### Active Feature Plans
+
+| File                                   | Purpose                                    | Status      |
+| -------------------------------------- | ------------------------------------------ | ----------- |
+| `docs/TURRET-ATTACK-SYSTEM-PLAN.md`    | Turret rotation, lasers, force attack, UI  | In Progress |
+
 ---
 
 ## Development Rules
@@ -275,11 +281,11 @@ Examples:
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
 | **Current Phase**  | Phase 4 - Combat System                   |
-| **Phase Progress** | Section 4.2 complete, dev tools improved  |
-| **Current Task**   | Section 4.3 Full Combat Features          |
+| **Phase Progress** | Turret attack system complete (yaw, pitch, laser) |
+| **Current Task**   | Add barrelOffsetY config field, then continue 4.3 |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 45 - 2026-01-11                   |
-| **Last Updated**   | 2026-01-11                                |
+| **Last Session**   | Session 50 - 2026-01-12                   |
+| **Last Updated**   | 2026-01-12                                |
 
 ---
 
@@ -364,6 +370,10 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-10 | Buildings have shield stat                | Same combat stats as units: health, shield, damage, etc. | User      |
 | 2026-01-11 | New blueprints require learning by default | More control over game progression                     | User        |
 | 2026-01-11 | Reuse unitStats field for buildings       | Same structure, avoids schema change                   | Claude      |
+| 2026-01-11 | Arena tile size 8m (was 2m)               | Larger arena feels better, 480m x 480m total           | User        |
+| 2026-01-11 | Unit tileSize configurable (1-10)         | Different unit types can have different footprints     | User        |
+| 2026-01-11 | Switched to macOS development             | Traveling with MacBook Pro                             | User        |
+| 2026-01-12 | barrelOffsetY per-turret configuration    | Avoid manual tuning for each turret model              | User        |
 
 ---
 
@@ -501,5 +511,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-_Last Updated: 2026-01-10 (Session 38)_
-_Version: 1.0.1_
+_Last Updated: 2026-01-12 (Session 50)_
+_Version: 2.0.5_

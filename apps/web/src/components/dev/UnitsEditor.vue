@@ -5,6 +5,12 @@ import type { DbUnitDefinition, UnitCategory, DbItemDefinition, BlueprintQuality
 import { BLUEPRINT_QUALITY_COLORS } from '@nova-fall/shared';
 import ModelPreview from './ModelPreview.vue';
 import ModelSelectorModal from './ModelSelectorModal.vue';
+import AIPresetSelector from '../ai-editor/AIPresetSelector.vue';
+
+// Emit for communicating with parent (DevView)
+const emit = defineEmits<{
+  (e: 'navigate-to-ai-editor', presetId: string): void;
+}>();
 
 // Ref for click-outside detection
 const linkItemSectionRef = ref<HTMLElement | null>(null);
@@ -115,6 +121,7 @@ const form = ref({
   range: 1,
   attackSpeed: 1.0,
   category: 'infantry' as UnitCategory,
+  aiPresetId: null as string | null,
 });
 
 // Available categories
@@ -188,6 +195,7 @@ function startEdit() {
     range: selectedUnit.value.range,
     attackSpeed: selectedUnit.value.attackSpeed,
     category: selectedUnit.value.category as UnitCategory,
+    aiPresetId: selectedUnit.value.aiPresetId,
   };
   isEditing.value = true;
   isCreating.value = false;
@@ -210,6 +218,7 @@ function startCreate() {
     range: 1,
     attackSpeed: 1.0,
     category: 'infantry',
+    aiPresetId: null,
   };
   isEditing.value = false;
   isCreating.value = true;
@@ -234,6 +243,7 @@ async function save() {
       range: form.value.range,
       attackSpeed: form.value.attackSpeed,
       category: form.value.category,
+      aiPresetId: form.value.aiPresetId,
     };
 
     if (isCreating.value) {
@@ -382,6 +392,11 @@ watch(selectedUnit, (unit) => {
 function handleModelSelect(path: string) {
   form.value.modelPath = path;
   showModelSelector.value = false;
+}
+
+// Handle AI preset edit navigation
+function handleAIPresetEdit(presetId: string) {
+  emit('navigate-to-ai-editor', presetId);
 }
 
 onMounted(fetchUnits);
@@ -612,6 +627,17 @@ onMounted(fetchUnits);
               <span v-if="selectedUnit.modelPath" class="model-path-hint">{{ selectedUnit.modelPath }}</span>
             </div>
 
+            <!-- AI Behavior -->
+            <div class="ai-preset-section">
+              <label>AI Behavior</label>
+              <AIPresetSelector
+                :model-value="selectedUnit.aiPresetId"
+                category="unit"
+                disabled
+                @edit="handleAIPresetEdit"
+              />
+            </div>
+
             <!-- Size -->
             <div class="stat-item" style="margin: 12px 0;">
               <span class="stat-label">Tile Size</span>
@@ -699,6 +725,16 @@ onMounted(fetchUnits);
                   {{ categoryNames[cat] }}
                 </option>
               </select>
+            </div>
+
+            <div class="form-group">
+              <label>AI Behavior</label>
+              <AIPresetSelector
+                v-model="form.aiPresetId"
+                category="unit"
+                @edit="handleAIPresetEdit"
+              />
+              <span class="hint">Select an AI preset to control unit behavior in combat</span>
             </div>
 
             <div class="form-group">
@@ -1567,5 +1603,18 @@ onMounted(fetchUnits);
 
 .btn-link-item:hover {
   background: #2563eb;
+}
+
+/* AI Preset Section */
+.ai-preset-section {
+  margin-bottom: 20px;
+}
+
+.ai-preset-section > label {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 8px;
+  text-transform: uppercase;
 }
 </style>

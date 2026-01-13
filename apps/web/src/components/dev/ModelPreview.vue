@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import type {
+  AbstractMesh} from '@babylonjs/core';
 import {
   Engine,
   Scene,
@@ -7,8 +9,7 @@ import {
   HemisphericLight,
   Vector3,
   Color4,
-  SceneLoader,
-  AbstractMesh,
+  SceneLoader
 } from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
 

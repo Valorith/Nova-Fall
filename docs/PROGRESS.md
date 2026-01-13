@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 4 - Combat System    |
 | **Overall Progress**   | Phases 0-3 complete        |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 46                         |
+| **Total Sessions**     | 50                         |
 
 ---
 
@@ -3186,6 +3186,312 @@ ARENA_METERS = 480; // 480m x 480m arena
 
 ---
 
+## Session 47 - 2026-01-12
+
+**Duration:** ~30 minutes
+**Phase:** Phase 4 - Combat System
+**Focus:** Performance optimization - Economy tick N+1 query fix
+
+### Completed Tasks
+
+**Economy Tick Performance Optimization:**
+- [x] Identified N+1 query patterns in `apps/worker/src/jobs/upkeep.ts`
+- [x] Fixed session player resource updates (was 4 individual queries, now batched)
+- [x] Fixed node storage updates (was ~50-60 individual queries, now batched)
+- [x] Fixed upkeep status updates (was per-player queries, now merged across all players)
+- [x] Wrapped all updates in single `$transaction` with `Promise.all`
+
+### Technical Details
+
+**Before (N+1 pattern):**
+- 4 individual `gameSessionPlayer.update` calls (one per player)
+- ~50-60 individual `node.update` calls (one per production node)
+- Multiple `updateMany` calls per player for upkeep status
+- Total: ~60-70 queries, 4577ms for 4 players
+
+**After (batched):**
+- Single transaction containing:
+  - All player resource updates in parallel
+  - All node storage updates in parallel
+  - Merged upkeep status updates (one `updateMany` per status type across ALL players)
+- Expected: ~8-10 queries, ~500ms for 4 players
+
+**Files Modified:**
+- `apps/worker/src/jobs/upkeep.ts` - Refactored to collect all updates first, then execute in single batch transaction
+
+### Performance Impact
+
+| Metric | Before | After (Expected) |
+|--------|--------|------------------|
+| Economy tick (4 players) | 4577ms | ~500ms |
+| Individual queries | ~60-70 | ~8-10 |
+| Scaling impact | 1.1s/player | ~0.1s/player |
+
+### Notes
+
+- This was a spot-check optimization, not part of the development plan checklist
+- The fix follows the pattern already used in `processFailureConsequences()` and `transfers.ts`
+- At target scale (50-200 players), this optimization prevents economy tick from becoming a bottleneck
+
+### Next Session Plan
+
+1. Continue Section 4.3: Full Combat Features
+2. Complete Section 4.2 verification tasks
+3. Implement A* pathfinding for manual orders
+
+---
+
+## Session 48 - 2026-01-12
+
+**Duration:** ~1.5 hours
+**Phase:** Phase 4 - Combat System
+**Focus:** AI Behavior Tree Sprint 6 completion + code review/hardening
+
+### Completed Tasks
+
+**Sprint 6 (Runtime & Test Mode) - Performance Optimization:**
+- [x] Completed tick-level caching in CombatSimulator
+- [x] Updated tick() method to call buildTickCache() at start and clear at end
+- [x] Updated processAttackerUnits() to use cache instead of creating new arrays
+- [x] Updated processDefenderUnits() to use cache
+- [x] Updated processTurrets() to use cache
+- [x] Updated checkWinConditions() to use cache
+
+**Code Review & Bug Fixes:**
+- [x] Reviewed all AI Editor sprint code for bugs
+- [x] Fixed 5 bugs across multiple files:
+  1. Memory leak in AIPresetSelector.vue (missing removeEventListener)
+  2. Missing aiPresetId field in units module types
+  3. Missing aiPresetId handling in units service create/update
+  4. attack_target action didn't handle 'core' target
+  5. target_in_range condition didn't handle 'core' target
+  6. target_health condition didn't handle 'core' target
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `packages/game-logic/src/combat/simulator.ts` | Added tick cache initialization/cleanup |
+| `apps/web/src/components/ai-editor/AIPresetSelector.vue` | Added onUnmounted to remove event listener |
+| `apps/api/src/modules/units/types.ts` | Added aiPresetId field to UnitDefinitionInput |
+| `apps/api/src/modules/units/service.ts` | Added aiPresetId handling in create/update |
+| `packages/game-logic/src/ai/actions.ts` | Fixed attack_target to handle 'core' |
+| `packages/game-logic/src/ai/conditions.ts` | Fixed target_in_range and target_health for 'core' |
+
+### Technical Details
+
+**Tick Cache Optimization:**
+- Before: 6+ Array.from().filter() calls per tick creating new arrays
+- After: 1 cache build at tick start, reused throughout, cleared at end
+- Impact: Significant reduction in GC pressure during combat ticks
+
+**Core Target Bug Pattern:**
+- When targetId === 'core', findEnemy() returns null
+- Conditions and actions would fail silently
+- Fixed by adding special case handling before findEnemy() calls
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Deferred full testing to later | Combat mode not fully built out yet for E2E testing |
+| Code review approach | Manual review + hardening since runtime testing not possible |
+
+### Notes
+
+- All changes passed TypeScript typecheck
+- Combat initiation flow, tick loop, and viewer UI still needed before full testing
+- Sprint 6 core implementation complete, testing blocked on combat infrastructure
+
+### Next Session Plan
+
+1. Continue Section 4.3: Full Combat Features
+2. Build combat initiation flow
+3. Implement combat tick loop in worker
+
+---
+
+## Session 49 - 2026-01-12
+
+**Duration:** ~1 hour
+**Phase:** Phase 4 - Combat System
+**Focus:** AI Editor bug fixes - auto-arrange and template validation
+
+### Completed Tasks
+
+**AI Editor Auto-Arrange & Position Persistence:**
+- [x] Fixed node mixing bug when switching between presets (nodes from previous preset remained)
+- [x] Added `await nextTick()` between clearing and setting nodes in `loadTreeIntoCanvas`
+- [x] Made `loadTreeIntoCanvas` async to properly sequence node operations
+- [x] Updated `selectPreset` and `cancelEdit` to await async load
+
+**AI Editor Template Validation Fixes:**
+- [x] Added `conditionId`/`actionId` extraction from params when loading from DB
+- [x] Added `conditionId`/`actionId` persistence to params when saving to DB
+- [x] Updated both `saveTreePositionsWithNodes` and `buildTreeData` functions
+- [x] Fixed all 5 AI templates in seed file with proper condition/action IDs:
+  - Aggressive Attacker: `has_target`, `target_in_range`, `attack_target`, `set_target`, `move_to_target`
+  - Defensive Holder: `enemy_count`, `hold_position`, `attack_nearest`
+  - Support Healer: `ally_low_health`, `enemy_count`, `protect_ally`, `attack_nearest`
+  - Priority Turret: `enemy_count`, `hold_position`, `attack_priority`
+  - Area Denial: `cooldown_ready`, `enemy_count`, `hold_position`, `attack_nearest`
+- [x] Modified seed script to delete existing templates before reseeding
+- [x] Successfully reseeded database with fixed templates
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `apps/web/src/components/dev/AIEditor.vue` | Fixed node mixing, added conditionId/actionId persistence |
+| `apps/api/prisma/seed-ai-presets.ts` | Added conditionId/actionId to all template nodes, allow reseed |
+
+### Technical Details
+
+**Node Mixing Bug Fix:**
+- Problem: When switching presets, `setNodes([])` and `setNodes(newNodes)` happened synchronously
+- Vue Flow didn't process the clear before new nodes were set, causing mixing
+- Solution: Added `await nextTick()` between clear and set operations
+
+**Validation ID Persistence:**
+- Validation checks `node.data.conditionId`/`actionId` at top level
+- When saving to DB, these were only in `data.params`
+- When loading from DB, they weren't extracted back to top level
+- Solution: Store in params for DB, extract to top level on load
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Store conditionId/actionId in params for DB | Params is the only node data field that persists to DB |
+| Extract to top level on load | Validation expects them at node.data.conditionId/actionId |
+| Allow template reseed by deleting first | Easier to update templates during development |
+
+### Notes
+
+- Browser session expired during testing, but code changes verified
+- All 5 templates now have proper condition/action type IDs
+- User should verify by logging in and checking templates show "Valid" status
+
+### Next Session Plan
+
+1. Continue Section 4.3: Full Combat Features
+2. Build combat initiation flow
+3. Implement combat tick loop in worker
+
+---
+
+## Session 50 - 2026-01-12
+
+**Duration:** ~2 hours
+**Phase:** Phase 4 - Combat System
+**Focus:** Turret laser beam origin alignment with barrel tip
+
+### Completed Tasks
+
+**Turret Attack System - Laser Origin Fix:**
+- [x] Fixed laser beam origin to align precisely with barrel tip
+- [x] Implemented barrel offset calculation from model geometry (bounding box analysis)
+- [x] Added `barrelLocalOffset` and `scaleFactor` fields to buildingData
+- [x] Tuned Y offset to -0.22 for proper barrel centerline alignment
+- [x] Confirmed turret yaw (horizontal) and pitch (vertical) rotation working correctly
+- [x] Laser beam capsule with glow effect rendering properly
+- [x] Force attack (Ctrl+Click / Right-Click) working with range validation
+
+### Technical Details
+
+**Barrel Offset Calculation:**
+- Initial approach: Calculate from bounding box of turret head meshes
+- Problem: Auto-detection didn't account for model pivot point placement
+- Solution: Used fixed Y offset (-0.22) tuned through testing
+- Future: Add `barrelOffsetY` field to BuildingDefinition for per-turret configuration
+
+**Key Code Changes:**
+- `CombatEngine.ts`: Added barrelLocalOffset/scaleFactor to buildingData
+- `CombatEngine.ts`: Modified findTurretParts to calculate barrel offset from max Z mesh
+- `CombatEngine.ts`: Updated executeAttack to use pre-calculated scaled offset with rotation
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Fixed Y offset (-0.22) for barrel alignment | Auto-detection from bounding boxes didn't work reliably |
+| Add barrelOffsetY to BuildingDefinition (future) | Allows per-turret configuration without code changes |
+
+### Issues Encountered
+
+- **Laser origin above barrel:** Bounding box center Y was higher than actual barrel centerline
+- **Multiple iteration cycles:** Tried various auto-detection approaches before settling on fixed offset
+- **Solution:** Tuned offset empirically, planned configurable field for future
+
+### Next Session Plan
+
+1. Implement `barrelOffsetY` field in BuildingDefinition schema
+2. Add barrelOffsetY to Buildings Editor UI
+3. Continue with auto-targeting system (Tower targeting and firing)
+
+---
+
+## Session 46 - 2026-01-11
+
+**Duration:** ~2 hours
+**Phase:** Phase 4 - Combat System
+**Focus:** Combat engine improvements - building models, camera, UX
+
+### Completed Tasks
+
+**Item/Blueprint Editor Improvements:**
+- [x] Auto-save item changes via debounced watcher (30 second delay)
+- [x] Card layout instead of table for item/unit lists
+- [x] Model preview thumbnails in card display
+- [x] Better UX for selecting meshes from large pack files
+
+**Combat View - Building Models:**
+- [x] Fixed pack file mesh loading (pattern matching parent/grandparent names)
+- [x] Buildings now scale to respect tile dimensions from settings
+- [x] Fixed "Clear All" to properly dispose entire mesh hierarchies (TransformNode)
+- [x] Mesh centering when reparenting from pack files
+
+**Combat View - Camera:**
+- [x] Reduced minimum zoom from 30 to 5 for close-up views
+
+### Technical Details
+
+**Pack File Mesh Loading:**
+- GLB pack files have meshes named like "Object_X" with turret IDs in parent/grandparent nodes
+- Added pattern matching logic similar to ModelPreview.vue
+- Handles both T-series (`T-A01_123`) and other naming conventions
+
+**Building Model Scaling:**
+- Models scale to fill their tile footprint (TILE_SIZE = 2 meters)
+- 1x1 tile = 2m x 2m, 2x2 tiles = 4m x 4m
+- Removed minimum height constraint that was incorrectly scaling models UP
+- Pack file meshes centered before scaling to handle scattered world positions
+
+**Mesh Hierarchy Disposal:**
+- Changed `devBuildingMeshes` from `Map<string, Mesh>` to `Map<string, TransformNode>`
+- Added recursive `disposeBuildingNode()` function
+- Properly disposes all descendants including rotating turret parts
+
+**Files Modified:**
+- `apps/web/src/components/dev/UnitsEditor.vue` - Auto-save, card display
+- `apps/web/src/components/dev/BuildingsEditor.vue` - Same changes
+- `apps/web/src/components/dev/ModelSelectorModal.vue` - Horizontal mesh picker
+- `apps/web/src/game/combat/CombatEngine.ts` - Building model loading, scaling, disposal, camera zoom
+
+### Notes
+
+- Combat dev panel now much more usable for placing buildings
+- Building models properly scale to their configured tile footprint
+- Camera can zoom in close enough to inspect unit/building models in detail
+
+### Next Session Plan
+
+1. Continue Section 4.3: Full Combat Features
+2. Implement A* pathfinding for manual orders
+3. Tower targeting and firing
+
+---
+
 ## Session 40 - 2026-01-11
 
 **Duration:** ~2 hours
@@ -3537,4 +3843,4 @@ ARENA_METERS = 480; // 480m x 480m arena
 
 ---
 
-_Last Updated: 2026-01-11 (Session 40 - Phase 2.5 complete, Phase 3 started)_
+_Last Updated: 2026-01-12 (Session 50 - Turret laser beam origin alignment)_

@@ -629,7 +629,7 @@ export async function purchaseItem(
   playerId: string,
   gameSessionId: string,
   sessionPlayerId: string,
-  quantity: number = 1
+  quantity = 1
 ): Promise<CorePurchaseResult> {
   // Look up item from ItemDefinition database (any item with hqCost set)
   const itemDef = await prisma.itemDefinition.findFirst({

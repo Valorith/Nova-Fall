@@ -8,3 +8,6 @@ export * from './economy';
 
 // Combat calculations
 export * from './combat';
+
+// AI Behavior Tree
+export * from './ai';

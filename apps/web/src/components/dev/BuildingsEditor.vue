@@ -5,6 +5,12 @@ import type { DbBuildingDefinition, BuildingCategory, DbItemDefinition, Blueprin
 import { BLUEPRINT_QUALITY_COLORS } from '@nova-fall/shared';
 import ModelPreview from './ModelPreview.vue';
 import ModelSelectorModal from './ModelSelectorModal.vue';
+import AIPresetSelector from '../ai-editor/AIPresetSelector.vue';
+
+// Emit for communicating with parent (DevView)
+const emit = defineEmits<{
+  (e: 'navigate-to-ai-editor', presetId: string): void;
+}>();
 
 // Ref for click-outside detection
 const linkItemSectionRef = ref<HTMLElement | null>(null);
@@ -113,6 +119,7 @@ const form = ref({
   range: 0,
   attackSpeed: 0,
   category: 'structure' as BuildingCategory,
+  aiPresetId: null as string | null,
 });
 
 // Available categories
@@ -187,6 +194,7 @@ function startEdit() {
     range: selectedBuilding.value.range,
     attackSpeed: selectedBuilding.value.attackSpeed,
     category: selectedBuilding.value.category as BuildingCategory,
+    aiPresetId: selectedBuilding.value.aiPresetId,
   };
   isEditing.value = true;
   isCreating.value = false;
@@ -208,6 +216,7 @@ function startCreate() {
     range: 0,
     attackSpeed: 0,
     category: 'structure',
+    aiPresetId: null,
   };
   isEditing.value = false;
   isCreating.value = true;
@@ -231,6 +240,7 @@ async function save() {
       range: form.value.range,
       attackSpeed: form.value.attackSpeed,
       category: form.value.category,
+      aiPresetId: form.value.aiPresetId,
     };
 
     if (isCreating.value) {
@@ -385,6 +395,11 @@ watch(selectedBuilding, (building) => {
 function handleModelSelect(path: string) {
   form.value.modelPath = path;
   showModelSelector.value = false;
+}
+
+// Handle AI preset edit navigation
+function handleAIPresetEdit(presetId: string) {
+  emit('navigate-to-ai-editor', presetId);
 }
 
 onMounted(fetchBuildings);
@@ -621,6 +636,17 @@ onMounted(fetchBuildings);
               <span v-if="selectedBuilding.modelPath" class="model-path-hint">{{ selectedBuilding.modelPath }}</span>
             </div>
 
+            <!-- AI Behavior -->
+            <div class="ai-preset-section">
+              <label>AI Behavior</label>
+              <AIPresetSelector
+                :model-value="selectedBuilding.aiPresetId"
+                category="building"
+                disabled
+                @edit="handleAIPresetEdit"
+              />
+            </div>
+
             <!-- Defense Stats -->
             <div class="section-header">Defense Stats</div>
             <div class="stats-grid defense-stats">
@@ -704,6 +730,16 @@ onMounted(fetchBuildings);
                   </option>
                 </select>
               </div>
+            </div>
+
+            <div class="form-group">
+              <label>AI Behavior</label>
+              <AIPresetSelector
+                v-model="form.aiPresetId"
+                category="building"
+                @edit="handleAIPresetEdit"
+              />
+              <span class="hint">Select an AI preset to control building behavior in combat (turrets, etc.)</span>
             </div>
 
             <div class="form-row">
@@ -1601,5 +1637,18 @@ onMounted(fetchBuildings);
 
 .btn-link-item:hover {
   background: #2563eb;
+}
+
+/* AI Preset Section */
+.ai-preset-section {
+  margin-bottom: 20px;
+}
+
+.ai-preset-section > label {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 8px;
+  text-transform: uppercase;
 }
 </style>

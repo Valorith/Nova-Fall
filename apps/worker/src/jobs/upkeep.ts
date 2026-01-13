@@ -4,7 +4,7 @@ import { publishUpkeepTick } from '../lib/events.js';
 
 // Redis key for storing next upkeep time
 export const NEXT_UPKEEP_KEY = 'game:nextUpkeepAt';
-import { NodeType } from '@nova-fall/shared';
+import type { NodeType } from '@nova-fall/shared';
 import { getRegion, nodeRequiresCore, HOURLY_PRODUCTION, type ResourceStorage, type ResourceType } from '@nova-fall/shared';
 import {
   calculateNodeUpkeep,
@@ -161,6 +161,16 @@ export async function processUpkeep(): Promise<void> {
     const results: PlayerEconomyResult[] = [];
     const now = new Date();
 
+    // OPTIMIZED: Collect all updates to batch at the end
+    const allNodeStorageUpdates: NodeStorageUpdate[] = [];
+    const playerResourceUpdates: { id: string; resources: ResourceStorage }[] = [];
+    const nodeUpkeepUpdates: {
+      paidNodeIds: string[];
+      hqNodeId: string | null;
+      unpaidStatusGroups: Map<string, string[]>;
+      nextDue: Date;
+    }[] = [];
+
     for (const sessionPlayer of sessionPlayers) {
       const playerNodes = nodesBySessionPlayer.get(sessionPlayer.id) ?? [];
       if (playerNodes.length === 0) continue;
@@ -263,49 +273,26 @@ export async function processUpkeep(): Promise<void> {
       const upkeepPaid = creditsBefore + totalIncome >= totalUpkeep;
       const creditsAfter = Math.max(0, creditsBefore + netCreditChange);
 
-      // Update session player resources (only credits, not physical resources)
+      // Collect session player resource update (batched later)
       const updatedResources: ResourceStorage = { ...playerResources, credits: creditsAfter };
+      playerResourceUpdates.push({ id: sessionPlayer.id, resources: updatedResources });
 
-      await prisma.gameSessionPlayer.update({
-        where: { id: sessionPlayer.id },
-        data: { resources: updatedResources },
-      });
+      // Collect node storage updates (batched later)
+      allNodeStorageUpdates.push(...nodeStorageUpdates);
 
-      // Update node storages with produced resources
-      for (const update of nodeStorageUpdates) {
-        await prisma.node.update({
-          where: { id: update.nodeId },
-          data: { storage: update.storage },
-        });
-      }
-
-      // Update node upkeep status - OPTIMIZED: batch by status type
+      // Collect node upkeep status updates (batched later)
       const nextDue = new Date(now.getTime() + ONE_HOUR_MS);
 
       if (upkeepPaid) {
-        // All nodes paid - use single updateMany
-        await prisma.node.updateMany({
-          where: { id: { in: ownedNodeIds } },
-          data: {
-            upkeepPaid: now,
-            upkeepDue: nextDue,
-            upkeepStatus: 'PAID',
-          },
+        // All nodes paid
+        nodeUpkeepUpdates.push({
+          paidNodeIds: ownedNodeIds,
+          hqNodeId: null,
+          unpaidStatusGroups: new Map(),
+          nextDue,
         });
       } else {
-        // HQ still gets marked paid
-        if (hqNodeId) {
-          await prisma.node.update({
-            where: { id: hqNodeId },
-            data: {
-              upkeepPaid: now,
-              upkeepDue: nextDue,
-              upkeepStatus: 'PAID',
-            },
-          });
-        }
-
-        // Group unpaid nodes by their new status to reduce queries
+        // Group unpaid nodes by their new status
         const statusGroups = new Map<string, string[]>();
 
         for (const node of playerNodes) {
@@ -320,16 +307,12 @@ export async function processUpkeep(): Promise<void> {
           statusGroups.set(newStatus, existing);
         }
 
-        // Update each status group with single updateMany
-        for (const [status, nodeIds] of statusGroups) {
-          await prisma.node.updateMany({
-            where: { id: { in: nodeIds } },
-            data: {
-              upkeepDue: nextDue,
-              upkeepStatus: status as 'WARNING' | 'DECAY' | 'COLLAPSE',
-            },
-          });
-        }
+        nodeUpkeepUpdates.push({
+          paidNodeIds: [],
+          hqNodeId,
+          unpaidStatusGroups: statusGroups,
+          nextDue,
+        });
       }
 
       results.push({
@@ -345,6 +328,94 @@ export async function processUpkeep(): Promise<void> {
         nodeStorageUpdates,
       });
     }
+
+    // BATCH EXECUTION: Execute all collected updates in minimal queries
+    await prisma.$transaction(async (tx) => {
+      // 1. Batch update all player resources
+      const playerUpdatePromises = playerResourceUpdates.map((update) =>
+        tx.gameSessionPlayer.update({
+          where: { id: update.id },
+          data: { resources: update.resources },
+        })
+      );
+
+      // 2. Batch update all node storages
+      const nodeStoragePromises = allNodeStorageUpdates.map((update) =>
+        tx.node.update({
+          where: { id: update.nodeId },
+          data: { storage: update.storage },
+        })
+      );
+
+      // 3. Batch update all node upkeep statuses
+      const upkeepPromises: Promise<unknown>[] = [];
+
+      // Collect all paid node IDs and all HQ node IDs for bulk updates
+      const allPaidNodeIds: string[] = [];
+      const allHqNodeIds: string[] = [];
+      const globalStatusGroups = new Map<string, string[]>();
+      let commonNextDue: Date | null = null;
+
+      for (const update of nodeUpkeepUpdates) {
+        commonNextDue = update.nextDue; // All should have same nextDue
+        allPaidNodeIds.push(...update.paidNodeIds);
+        if (update.hqNodeId) {
+          allHqNodeIds.push(update.hqNodeId);
+        }
+        // Merge unpaid status groups
+        for (const [status, nodeIds] of update.unpaidStatusGroups) {
+          const existing = globalStatusGroups.get(status) ?? [];
+          existing.push(...nodeIds);
+          globalStatusGroups.set(status, existing);
+        }
+      }
+
+      // Single updateMany for all paid nodes
+      if (allPaidNodeIds.length > 0 && commonNextDue) {
+        upkeepPromises.push(
+          tx.node.updateMany({
+            where: { id: { in: allPaidNodeIds } },
+            data: {
+              upkeepPaid: now,
+              upkeepDue: commonNextDue,
+              upkeepStatus: 'PAID',
+            },
+          })
+        );
+      }
+
+      // Single updateMany for all HQ nodes (when player didn't pay full upkeep)
+      if (allHqNodeIds.length > 0 && commonNextDue) {
+        upkeepPromises.push(
+          tx.node.updateMany({
+            where: { id: { in: allHqNodeIds } },
+            data: {
+              upkeepPaid: now,
+              upkeepDue: commonNextDue,
+              upkeepStatus: 'PAID',
+            },
+          })
+        );
+      }
+
+      // One updateMany per status type for unpaid nodes
+      for (const [status, nodeIds] of globalStatusGroups) {
+        if (nodeIds.length > 0 && commonNextDue) {
+          upkeepPromises.push(
+            tx.node.updateMany({
+              where: { id: { in: nodeIds } },
+              data: {
+                upkeepDue: commonNextDue,
+                upkeepStatus: status as 'WARNING' | 'DECAY' | 'COLLAPSE',
+              },
+            })
+          );
+        }
+      }
+
+      // Execute all updates in parallel within the transaction
+      await Promise.all([...playerUpdatePromises, ...nodeStoragePromises, ...upkeepPromises]);
+    });
 
     // Process failure consequences (decay/collapse/abandonment)
     await processFailureConsequences();

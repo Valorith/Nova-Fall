@@ -321,6 +321,45 @@ export function useCombatEngine() {
     return engine.value?.inspectModelPack(modelPath) ?? [];
   };
 
+  // ========================================
+  // Selection & Force Attack
+  // ========================================
+
+  /**
+   * Select a building by ID
+   */
+  const selectBuilding = (buildingId: string): void => {
+    engine.value?.selectBuilding(buildingId);
+  };
+
+  /**
+   * Deselect the currently selected building
+   */
+  const deselectBuilding = (): void => {
+    engine.value?.deselectBuilding();
+  };
+
+  /**
+   * Clear all selection
+   */
+  const deselectAll = (): void => {
+    engine.value?.deselectAll();
+  };
+
+  /**
+   * Get the currently selected building ID
+   */
+  const getSelectedBuildingId = (): string | null => {
+    return engine.value?.getSelectedBuildingId() ?? null;
+  };
+
+  /**
+   * Force attack ground at position
+   */
+  const forceAttackGround = (buildingId: string, position: ArenaPosition): boolean => {
+    return engine.value?.forceAttackGround(buildingId, position) ?? false;
+  };
+
   /**
    * Cleanup on unmount
    */
@@ -376,5 +415,12 @@ export function useCombatEngine() {
     devClearAll,
     getDevEntityCount,
     inspectModelPack,
+
+    // Selection & Force Attack
+    selectBuilding,
+    deselectBuilding,
+    deselectAll,
+    getSelectedBuildingId,
+    forceAttackGround,
   };
 }

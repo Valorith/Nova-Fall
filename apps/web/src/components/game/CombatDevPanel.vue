@@ -18,6 +18,7 @@ defineProps<{
 const emit = defineEmits<{
   close: [];
   placementModeChange: [active: boolean];
+  attackableSelectionChange: [hasSelection: boolean];
 }>();
 
 // Get combat engine methods
@@ -30,6 +31,10 @@ const {
   devPlaceBuilding,
   devClearAll,
   getDevEntityCount,
+  selectBuilding,
+  deselectBuilding,
+  getSelectedBuildingId,
+  forceAttackGround,
 } = useCombatEngine();
 
 // State
@@ -45,6 +50,13 @@ const selectedItem = ref<{
   item: DbUnitDefinition | DbBuildingDefinition;
 } | null>(null);
 const placementMode = ref(false);
+
+// Track placed buildings and their positions for click-to-select
+// Maps grid position "x,z" to building info (ID and definition)
+const placedBuildings = ref<Map<string, { id: string; def: DbBuildingDefinition }>>(new Map());
+
+// Currently selected placed building (for force attack)
+const selectedPlacedBuildingId = ref<string | null>(null);
 
 // Panel visibility
 const isCollapsed = ref(false);
@@ -110,11 +122,82 @@ function handleArenaClick(event: MouseEvent) {
   if (selectedItem.value.type === 'unit') {
     devSpawnUnit(selectedItem.value.item as DbUnitDefinition, position, selectedTeam.value);
   } else {
-    devPlaceBuilding(selectedItem.value.item as DbBuildingDefinition, position, selectedTeam.value);
+    const buildingDef = selectedItem.value.item as DbBuildingDefinition;
+    const buildingId = devPlaceBuilding(buildingDef, position, selectedTeam.value);
+    // Track placed building for click-to-select
+    if (buildingId) {
+      const key = `${position.x},${position.z}`;
+      placedBuildings.value.set(key, { id: buildingId, def: buildingDef });
+      console.log(`Placed building at key "${key}" with ID: ${buildingId}`);
+    }
   }
 
   // Update entity counts
   updateEntityCounts();
+}
+
+// Handle selection click (when not in placement mode)
+function handleSelectionClick(event: MouseEvent) {
+  const position = screenToArena(event.clientX, event.clientY);
+  console.log('Selection click at position:', position);
+  console.log('Placed buildings:', Array.from(placedBuildings.value.entries()));
+
+  if (!position) {
+    // Clicked outside arena - deselect
+    deselectBuilding();
+    selectedPlacedBuildingId.value = null;
+    emit('attackableSelectionChange', false);
+    return;
+  }
+
+  // Check if there's a building at this position
+  const key = `${position.x},${position.z}`;
+  const buildingInfo = placedBuildings.value.get(key);
+  console.log(`Looking for building at key "${key}":`, buildingInfo);
+
+  if (buildingInfo) {
+    // Select this building
+    selectBuilding(buildingInfo.id);
+    selectedPlacedBuildingId.value = buildingInfo.id;
+    console.log(`Selected building: ${buildingInfo.id}`);
+
+    // Check if building can attack (has range and damage)
+    const canAttack = buildingInfo.def.range > 0 && buildingInfo.def.damage > 0;
+    emit('attackableSelectionChange', canAttack);
+    console.log(`Building can attack: ${canAttack} (range: ${buildingInfo.def.range}, damage: ${buildingInfo.def.damage})`);
+  } else {
+    // Clicked empty space - deselect
+    deselectBuilding();
+    selectedPlacedBuildingId.value = null;
+    emit('attackableSelectionChange', false);
+  }
+}
+
+// Handle force attack (Ctrl+Click)
+function handleForceAttack(event: MouseEvent) {
+  console.log('Force attack triggered');
+  const currentSelection = getSelectedBuildingId();
+  console.log('Current selection:', currentSelection);
+
+  if (!currentSelection) {
+    console.log('No building selected for force attack');
+    return;
+  }
+
+  const position = screenToArena(event.clientX, event.clientY);
+  console.log('Target position:', position);
+
+  if (!position) {
+    console.log('Click outside arena');
+    return;
+  }
+
+  // Execute force attack
+  const success = forceAttackGround(currentSelection, position);
+  console.log('Force attack result:', success);
+  if (success) {
+    console.log(`Force attack at (${position.x}, ${position.z})`);
+  }
 }
 
 // Cancel placement mode
@@ -127,6 +210,9 @@ function cancelPlacement() {
 // Clear all dev entities
 function handleClearAll() {
   devClearAll();
+  placedBuildings.value.clear();
+  selectedPlacedBuildingId.value = null;
+  emit('attackableSelectionChange', false);
   updateEntityCounts();
 }
 
@@ -142,9 +228,11 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
-// Expose click handler for parent to wire up
+// Expose click handlers for parent to wire up
 defineExpose({
   handleArenaClick,
+  handleSelectionClick,
+  handleForceAttack,
 });
 
 // Watch for engine to be ready, then initialize dev arena

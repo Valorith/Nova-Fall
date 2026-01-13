@@ -85,15 +85,67 @@ export class CombatEngine {
   // State
   private _isRunning = false;
   private _battleId: string | null = null;
-  private _lastFrameTime: number = 0;
+  private _lastFrameTime = 0;
 
   // Player IDs (stored for dev tools)
-  private _attackerId: string = '';
-  private _defenderId: string = '';
+  private _attackerId = '';
+  private _defenderId = '';
 
   // Dev mode tracking
-  private devUnitIds: Set<string> = new Set();
-  private devBuildingMeshes: Map<string, TransformNode> = new Map();
+  private devUnitIds = new Set<string>();
+  private devBuildingMeshes = new Map<string, TransformNode>();
+
+  // Building metadata for turret attacks and selection
+  private buildingData = new Map<
+    string,
+    {
+      x: number; // Grid position
+      z: number;
+      range: number;
+      damage: number;
+      attackType: string;
+      laserColor: string | null;
+      mesh: TransformNode;
+      rotatablePart: TransformNode | null; // Turret head (yaw rotation)
+      pitchablePart: TransformNode | null; // Barrel/gun (pitch rotation)
+      barrelTip: TransformNode | null; // The end of the barrel for laser origin
+      barrelLocalOffset: Vector3; // Pre-calculated offset from turret pivot to barrel tip in local space
+      scaleFactor: number; // Scale applied to the model
+      currentRotation: number; // Horizontal rotation (yaw)
+      targetRotation: number;
+      currentPitch: number; // Vertical rotation (pitch)
+      targetPitch: number;
+    }
+  >();
+
+  // Selection state
+  private selectedBuildingId: string | null = null;
+
+  // Selection ring (around selected building)
+  private selectionRing: Mesh | null = null;
+
+  // Range circle visualization
+  private rangeCircle: Mesh | null = null;
+
+  // Target ring visualization
+  private targetRing: Mesh | null = null;
+  private targetRingTargetId: string | null = null;
+
+  // Active lasers with fade-out support
+  private activeLasers = new Map<string, {
+    coreMesh: Mesh;
+    glowMesh: Mesh;
+    startTime: number;
+    duration: number;
+  }>();
+
+  // Pending attacks (waiting for turret rotation)
+  private pendingAttacks = new Map<string, {
+    targetWorldX: number;
+    targetWorldZ: number;
+    targetWorldY: number;
+    color: string;
+  }>();
 
   constructor(canvas: HTMLCanvasElement, options: CombatEngineOptions = {}) {
     this.canvas = canvas;
@@ -287,6 +339,12 @@ export class CombatEngine {
 
       // Update unit positions (interpolation)
       this.unitManager?.update(deltaTime);
+
+      // Update turret rotations
+      this.updateTurretRotations(deltaTime);
+
+      // Update laser lifecycle (remove expired lasers)
+      this.updateLasers();
 
       // Render the scene
       this.scene.render();
@@ -919,6 +977,26 @@ export class CombatEngine {
 
     this.devBuildingMeshes.set(buildingId, building);
 
+    // Store building data for turret rotation and attack handling
+    this.buildingData.set(buildingId, {
+      x: position.x,
+      z: position.z,
+      range: buildingDef.range || 0,
+      damage: buildingDef.damage || 0,
+      attackType: buildingDef.attackType || 'instant_laser',
+      laserColor: buildingDef.laserColor || null,
+      mesh: building,
+      rotatablePart: null, // Will be set when model loads (yaw)
+      pitchablePart: null, // Will be set when model loads (pitch)
+      barrelTip: null, // Will be set when model loads
+      barrelLocalOffset: new Vector3(0, 0, 4), // Default offset, will be calculated when model loads
+      scaleFactor: 1, // Will be set when model loads
+      currentRotation: 0,
+      targetRotation: 0,
+      currentPitch: 0,
+      targetPitch: 0,
+    });
+
     // Load 3D model if available, replacing the placeholder
     if (buildingDef.modelPath) {
       this.loadBuildingModel(
@@ -950,8 +1028,8 @@ export class CombatEngine {
     worldX: number,
     worldZ: number,
     _team: 'attacker' | 'defender',
-    tileWidth: number = 1,
-    tileHeight: number = 1
+    tileWidth = 1,
+    tileHeight = 1
   ): Promise<void> {
     try {
       // Parse modelPath for optional mesh name (e.g., "pack.glb#TurretA")
@@ -1001,7 +1079,7 @@ export class CombatEngine {
         const parentPattern = new RegExp(`^${escapedName}_`);
 
         // First try direct mesh name match
-        let targetNode = result.meshes.find(
+        const targetNode = result.meshes.find(
           (m) => m.name === targetMeshName || m.name === targetMeshName + '_primitive0'
         );
 
@@ -1039,7 +1117,7 @@ export class CombatEngine {
           meshesToUse = meshesToKeep;
 
           // Calculate center of all meshes we're keeping (before reparenting)
-          let centerSum = Vector3.Zero();
+          const centerSum = Vector3.Zero();
           let meshCount = 0;
           meshesToKeep.forEach((mesh) => {
             if (mesh instanceof Mesh && mesh.getTotalVertices() > 0) {
@@ -1209,6 +1287,20 @@ export class CombatEngine {
       // Store the root node for cleanup (includes all descendants)
       this.devBuildingMeshes.set(buildingId, rootToUse as TransformNode);
 
+      // Update building data with loaded mesh and find rotatable part
+      const buildingDataEntry = this.buildingData.get(buildingId);
+      if (buildingDataEntry) {
+        buildingDataEntry.mesh = rootToUse as TransformNode;
+        buildingDataEntry.scaleFactor = scaleFactor;
+        const { rotatablePart, pitchablePart, barrelTip, barrelLocalOffset } = this.findTurretParts(rootToUse as TransformNode);
+        buildingDataEntry.rotatablePart = rotatablePart;
+        buildingDataEntry.pitchablePart = pitchablePart;
+        buildingDataEntry.barrelTip = barrelTip;
+        buildingDataEntry.barrelLocalOffset = barrelLocalOffset;
+        console.log(`Turret parts: rotatable="${rotatablePart?.name || 'none'}", pitchable="${pitchablePart?.name || 'none'}", barrelTip="${barrelTip?.name || 'none'}"`);
+        console.log(`Barrel local offset: (${barrelLocalOffset.x.toFixed(2)}, ${barrelLocalOffset.y.toFixed(2)}, ${barrelLocalOffset.z.toFixed(2)}), scaleFactor=${scaleFactor.toFixed(3)}`);
+      }
+
     } catch (error) {
       console.error(`Failed to load building model ${modelPath}:`, error);
     }
@@ -1249,6 +1341,12 @@ export class CombatEngine {
     if (node) {
       this.disposeBuildingNode(node);
       this.devBuildingMeshes.delete(buildingId);
+      this.buildingData.delete(buildingId);
+
+      // Clear selection if this building was selected
+      if (this.selectedBuildingId === buildingId) {
+        this.deselectBuilding();
+      }
     }
   }
 
@@ -1256,6 +1354,9 @@ export class CombatEngine {
    * Clear all dev-spawned units and buildings
    */
   public devClearAll(): void {
+    // Clear selection first
+    this.deselectAll();
+
     // Remove all dev units
     for (const unitId of this.devUnitIds) {
       this.unitManager?.removeUnit(unitId);
@@ -1267,6 +1368,7 @@ export class CombatEngine {
       this.disposeBuildingNode(node);
     }
     this.devBuildingMeshes.clear();
+    this.buildingData.clear();
   }
 
   /**
@@ -1329,5 +1431,918 @@ export class CombatEngine {
       console.error(`❌ Failed to load model pack ${modelPath}:`, error);
       return [];
     }
+  }
+
+  // ==================== SELECTION SYSTEM ====================
+
+  /**
+   * Select a building and show its range circle and selection ring
+   */
+  public selectBuilding(buildingId: string): void {
+    // Clear previous selection
+    if (this.selectedBuildingId) {
+      this.hideRangeCircle();
+      this.hideSelectionRing();
+    }
+    this.selectedBuildingId = buildingId;
+
+    const building = this.buildingData.get(buildingId);
+    if (building) {
+      // Show selection ring around the building
+      this.showSelectionRing(building.x, building.z);
+
+      // Show range circle if building has attack range
+      if (building.range > 0) {
+        this.showRangeCircle(building.x, building.z, building.range);
+      }
+    }
+  }
+
+  /**
+   * Deselect the currently selected building
+   */
+  public deselectBuilding(): void {
+    this.selectedBuildingId = null;
+    this.hideSelectionRing();
+    this.hideRangeCircle();
+    this.hideTargetRing();
+  }
+
+  /**
+   * Clear all selection
+   */
+  public deselectAll(): void {
+    this.selectedBuildingId = null;
+    this.hideSelectionRing();
+    this.hideRangeCircle();
+    this.hideTargetRing();
+  }
+
+  /**
+   * Get currently selected building ID
+   */
+  public getSelectedBuildingId(): string | null {
+    return this.selectedBuildingId;
+  }
+
+  // ==================== SELECTION RING ====================
+
+  /**
+   * Show a selection ring around a building position
+   */
+  private showSelectionRing(gridX: number, gridZ: number): void {
+    this.hideSelectionRing();
+
+    const worldX = gridX * TILE_SIZE + TILE_SIZE / 2;
+    const worldZ = gridZ * TILE_SIZE + TILE_SIZE / 2;
+
+    // Single thick ring around the building
+    this.selectionRing = MeshBuilder.CreateTorus(
+      'selectionRing',
+      {
+        diameter: TILE_SIZE * 1.3,
+        thickness: 0.6, // Thicker ring
+        tessellation: 48,
+      },
+      this.scene
+    );
+    this.selectionRing.position = new Vector3(worldX, 0.12, worldZ);
+
+    const material = new StandardMaterial('selectionMat', this.scene);
+    material.emissiveColor = new Color3(0.2, 0.9, 0.4); // Green glow
+    material.alpha = 0.75;
+    this.selectionRing.material = material;
+
+    // Add to glow layer
+    if (this.glowLayer) {
+      this.glowLayer.addIncludedOnlyMesh(this.selectionRing);
+    }
+  }
+
+  /**
+   * Hide the selection ring
+   */
+  private hideSelectionRing(): void {
+    if (this.selectionRing) {
+      this.selectionRing.dispose();
+      this.selectionRing = null;
+    }
+  }
+
+  // ==================== RANGE CIRCLE ====================
+
+  /**
+   * Show a range circle around a position
+   */
+  public showRangeCircle(gridX: number, gridZ: number, range: number): void {
+    if (this.rangeCircle) {
+      this.rangeCircle.dispose();
+    }
+
+    // Create torus for clean ring visualization
+    // Babylon.js torus is created in XZ plane by default (flat on ground)
+    this.rangeCircle = MeshBuilder.CreateTorus(
+      'rangeCircle',
+      {
+        diameter: range * TILE_SIZE * 2,
+        thickness: 0.5,
+        tessellation: 64,
+      },
+      this.scene
+    );
+
+    // Position at grid center, slightly above ground
+    const worldX = gridX * TILE_SIZE + TILE_SIZE / 2;
+    const worldZ = gridZ * TILE_SIZE + TILE_SIZE / 2;
+    this.rangeCircle.position = new Vector3(worldX, 0.15, worldZ);
+
+    // Semi-transparent cyan material
+    const material = new StandardMaterial('rangeMat', this.scene);
+    material.diffuseColor = new Color3(0, 0.8, 1);
+    material.emissiveColor = new Color3(0, 0.4, 0.5);
+    material.alpha = 0.5;
+    this.rangeCircle.material = material;
+
+    // Add to glow layer if available
+    if (this.glowLayer) {
+      this.glowLayer.addIncludedOnlyMesh(this.rangeCircle);
+    }
+  }
+
+  /**
+   * Hide the range circle
+   */
+  public hideRangeCircle(): void {
+    if (this.rangeCircle) {
+      this.rangeCircle.dispose();
+      this.rangeCircle = null;
+    }
+  }
+
+  // ==================== TARGET RING ====================
+
+  /**
+   * Show a target ring on an enemy position
+   */
+  public showTargetRing(targetId: string, worldX: number, worldZ: number, radius: number = 2): void {
+    if (this.targetRing) {
+      this.targetRing.dispose();
+    }
+
+    this.targetRingTargetId = targetId;
+
+    // Create torus for target ring
+    // Babylon.js torus is created in XZ plane by default (flat on ground)
+    this.targetRing = MeshBuilder.CreateTorus(
+      'targetRing',
+      {
+        diameter: radius * 2,
+        thickness: 0.25,
+        tessellation: 32,
+      },
+      this.scene
+    );
+
+    this.targetRing.position = new Vector3(worldX, 0.2, worldZ);
+
+    // Red/orange emissive material
+    const material = new StandardMaterial('targetMat', this.scene);
+    material.emissiveColor = new Color3(1, 0.3, 0);
+    material.alpha = 0.8;
+    this.targetRing.material = material;
+
+    // Add to glow layer
+    if (this.glowLayer) {
+      this.glowLayer.addIncludedOnlyMesh(this.targetRing);
+    }
+  }
+
+  /**
+   * Hide the target ring
+   */
+  public hideTargetRing(): void {
+    if (this.targetRing) {
+      this.targetRing.dispose();
+      this.targetRing = null;
+      this.targetRingTargetId = null;
+    }
+  }
+
+  /**
+   * Update target ring position (for moving targets)
+   */
+  public updateTargetRingPosition(worldX: number, worldZ: number): void {
+    if (this.targetRing) {
+      this.targetRing.position.x = worldX;
+      this.targetRing.position.z = worldZ;
+    }
+  }
+
+  // ==================== LASER SYSTEM ====================
+
+  /**
+   * Create a laser beam mesh between two points
+   * Uses capsule shape (cylinder with hemisphere caps) for smooth ends
+   * Returns both core (bright center) and glow (outer) meshes
+   */
+  private createLaserBeam(
+    startPos: Vector3,
+    endPos: Vector3,
+    color: string
+  ): { core: Mesh; glow: Mesh } {
+    const distance = Vector3.Distance(startPos, endPos);
+    const id = Date.now();
+
+    // Parse color
+    let laserColor: Color3;
+    try {
+      laserColor = Color3.FromHexString(color);
+    } catch {
+      laserColor = new Color3(1, 0, 0);
+    }
+
+    // Core dimensions (thin beam appropriate for turret barrel)
+    const coreRadius = 0.08;
+    const glowRadius = 0.2;
+
+    // Create capsule-like shape using merged meshes
+    // Core beam
+    const coreCylinder = MeshBuilder.CreateCylinder(
+      `laser_core_cyl_${id}`,
+      {
+        height: distance,
+        diameter: coreRadius * 2,
+        tessellation: 12,
+      },
+      this.scene
+    );
+
+    // Hemisphere caps for core
+    const coreCapStart = MeshBuilder.CreateSphere(
+      `laser_core_cap_start_${id}`,
+      { diameter: coreRadius * 2, segments: 8 },
+      this.scene
+    );
+    const coreCapEnd = MeshBuilder.CreateSphere(
+      `laser_core_cap_end_${id}`,
+      { diameter: coreRadius * 2, segments: 8 },
+      this.scene
+    );
+
+    // Position caps at ends of cylinder (relative to cylinder center)
+    coreCapStart.position.y = -distance / 2;
+    coreCapEnd.position.y = distance / 2;
+
+    // Merge into single mesh
+    const core = Mesh.MergeMeshes(
+      [coreCylinder, coreCapStart, coreCapEnd],
+      true, true, undefined, false, true
+    ) as Mesh;
+    core.name = `laser_core_${id}`;
+
+    // Glow beam (same process)
+    const glowCylinder = MeshBuilder.CreateCylinder(
+      `laser_glow_cyl_${id}`,
+      {
+        height: distance,
+        diameter: glowRadius * 2,
+        tessellation: 12,
+      },
+      this.scene
+    );
+
+    const glowCapStart = MeshBuilder.CreateSphere(
+      `laser_glow_cap_start_${id}`,
+      { diameter: glowRadius * 2, segments: 8 },
+      this.scene
+    );
+    const glowCapEnd = MeshBuilder.CreateSphere(
+      `laser_glow_cap_end_${id}`,
+      { diameter: glowRadius * 2, segments: 8 },
+      this.scene
+    );
+
+    glowCapStart.position.y = -distance / 2;
+    glowCapEnd.position.y = distance / 2;
+
+    const glow = Mesh.MergeMeshes(
+      [glowCylinder, glowCapStart, glowCapEnd],
+      true, true, undefined, false, true
+    ) as Mesh;
+    glow.name = `laser_glow_${id}`;
+
+    // Position both at midpoint
+    const midpoint = Vector3.Lerp(startPos, endPos, 0.5);
+    core.position = midpoint.clone();
+    glow.position = midpoint.clone();
+
+    // Calculate rotation to face target
+    const direction = endPos.subtract(startPos).normalize();
+    const up = new Vector3(0, 1, 0);
+
+    // Apply rotation to both meshes
+    const applyRotation = (mesh: Mesh) => {
+      if (Math.abs(Vector3.Dot(direction, up)) > 0.99) {
+        mesh.rotation.x = direction.y > 0 ? 0 : Math.PI;
+      } else {
+        const tempTarget = midpoint.add(direction);
+        mesh.lookAt(tempTarget);
+        mesh.rotation.x += Math.PI / 2;
+      }
+    };
+    applyRotation(core);
+    applyRotation(glow);
+
+    // Core material - bright, full emissive, white-hot center
+    const coreMat = new StandardMaterial(`laser_core_mat_${id}`, this.scene);
+    // Make core slightly white for intensity
+    const hotColor = new Color3(
+      Math.min(1, laserColor.r + 0.5),
+      Math.min(1, laserColor.g + 0.5),
+      Math.min(1, laserColor.b + 0.5)
+    );
+    coreMat.emissiveColor = hotColor;
+    coreMat.diffuseColor = hotColor;
+    coreMat.disableLighting = true;
+    core.material = coreMat;
+
+    // Glow material - full color, semi-transparent
+    const glowMat = new StandardMaterial(`laser_glow_mat_${id}`, this.scene);
+    glowMat.emissiveColor = laserColor;
+    glowMat.diffuseColor = laserColor;
+    glowMat.alpha = 0.5;
+    glowMat.disableLighting = true;
+    glow.material = glowMat;
+
+    // Add both to glow layer
+    if (this.glowLayer) {
+      this.glowLayer.addIncludedOnlyMesh(core);
+      this.glowLayer.addIncludedOnlyMesh(glow);
+    }
+
+    return { core, glow };
+  }
+
+  /**
+   * Fire a laser from source to target position with visual effects
+   */
+  public fireLaser(sourcePos: Vector3, targetPos: Vector3, color: string = '#ff0000'): void {
+    const id = `laser_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const duration = 2000; // 2 seconds visible
+
+    const { core, glow } = this.createLaserBeam(sourcePos, targetPos, color);
+
+    this.activeLasers.set(id, {
+      coreMesh: core,
+      glowMesh: glow,
+      startTime: Date.now(),
+      duration,
+    });
+
+    // Create impact flash at target
+    this.createImpactFlash(targetPos, color);
+  }
+
+  /**
+   * Create a brief flash effect at impact point
+   */
+  private createImpactFlash(position: Vector3, color: string): void {
+    let flashColor: Color3;
+    try {
+      flashColor = Color3.FromHexString(color);
+    } catch {
+      flashColor = new Color3(1, 0, 0);
+    }
+
+    // Create sphere for impact
+    const flash = MeshBuilder.CreateSphere(
+      `impact_${Date.now()}`,
+      { diameter: 3, segments: 8 },
+      this.scene
+    );
+    flash.position = position.clone();
+    flash.position.y = 0.5;
+
+    const mat = new StandardMaterial('impactMat', this.scene);
+    mat.emissiveColor = flashColor;
+    mat.alpha = 0.8;
+    mat.disableLighting = true;
+    flash.material = mat;
+
+    if (this.glowLayer) {
+      this.glowLayer.addIncludedOnlyMesh(flash);
+    }
+
+    // Animate and dispose
+    let scale = 1;
+    const animate = () => {
+      scale += 0.15;
+      mat.alpha -= 0.04;
+      flash.scaling = new Vector3(scale, scale * 0.3, scale);
+
+      if (mat.alpha > 0) {
+        requestAnimationFrame(animate);
+      } else {
+        flash.dispose();
+        mat.dispose();
+      }
+    };
+    requestAnimationFrame(animate);
+  }
+
+  /**
+   * Update active lasers with fade-out effect (called in render loop)
+   */
+  private updateLasers(): void {
+    const now = Date.now();
+
+    for (const [id, laser] of this.activeLasers) {
+      const elapsed = now - laser.startTime;
+      const progress = elapsed / laser.duration;
+
+      if (progress >= 1) {
+        // Laser expired - dispose
+        laser.coreMesh.dispose();
+        laser.glowMesh.dispose();
+        this.activeLasers.delete(id);
+      } else {
+        // Fade out in the last 30% of duration
+        if (progress > 0.7) {
+          const fadeProgress = (progress - 0.7) / 0.3;
+          const alpha = 1 - fadeProgress;
+
+          const coreMat = laser.coreMesh.material as StandardMaterial;
+          const glowMat = laser.glowMesh.material as StandardMaterial;
+
+          if (coreMat) coreMat.alpha = alpha;
+          if (glowMat) glowMat.alpha = alpha * 0.4;
+
+          // Shrink slightly as it fades
+          const scale = 1 - fadeProgress * 0.3;
+          laser.coreMesh.scaling.x = scale;
+          laser.coreMesh.scaling.z = scale;
+          laser.glowMesh.scaling.x = scale;
+          laser.glowMesh.scaling.z = scale;
+        }
+      }
+    }
+  }
+
+  // ==================== TURRET ROTATION ====================
+
+  /**
+   * Find the turret parts: the rotatable head (yaw), pitchable barrel (pitch), and barrel tip
+   * Uses mesh hierarchy and naming conventions to identify parts
+   *
+   * For models without proper hierarchy (like flat GLB exports), this will:
+   * 1. Identify the base mesh (lowest Y position)
+   * 2. Create a new parent node for all non-base meshes (turret head)
+   * 3. Return that parent as the rotatable part
+   * 4. Calculate the barrel local offset from the turret head's bounding box
+   */
+  private findTurretParts(root: TransformNode): {
+    rotatablePart: TransformNode | null;
+    pitchablePart: TransformNode | null;
+    barrelTip: TransformNode | null;
+    barrelLocalOffset: Vector3;
+  } {
+    const rotateKeywords = ['turret', 'head', 'top', 'rotate', 'swivel', 'upper'];
+    const pitchKeywords = ['barrel', 'gun', 'cannon', 'weapon', 'arm'];
+    const tipKeywords = ['muzzle', 'tip', 'nozzle', 'end'];
+
+    // Get all direct children (meshes)
+    const children = root.getChildren();
+    const meshChildren: TransformNode[] = [];
+
+    for (const child of children) {
+      if (child instanceof TransformNode) {
+        meshChildren.push(child);
+      }
+    }
+
+    console.log('Turret mesh hierarchy:', meshChildren.map(d => {
+      const pos = d.position;
+      return `${d.name}(y:${pos?.y?.toFixed(1) || '?'})`;
+    }).join(', '));
+
+    let rotatablePart: TransformNode | null = null;
+    let pitchablePart: TransformNode | null = null;
+    let barrelTip: TransformNode | null = null;
+    let headMeshes: TransformNode[] = [];
+
+    // First, try to find parts by keyword
+    for (const mesh of meshChildren) {
+      const nameLower = mesh.name.toLowerCase();
+
+      // Check for barrel tip/muzzle
+      const isTip = tipKeywords.some(kw => nameLower.includes(kw));
+      if (isTip && !barrelTip) {
+        barrelTip = mesh;
+        console.log(`Found barrel tip: "${mesh.name}"`);
+      }
+
+      // Check for pitchable part (barrel/gun)
+      const isPitchable = pitchKeywords.some(kw => nameLower.includes(kw));
+      if (isPitchable && !pitchablePart) {
+        pitchablePart = mesh;
+        console.log(`Found pitchable part (barrel): "${mesh.name}"`);
+      }
+
+      // Check for rotatable part by keyword (turret head)
+      const isRotatable = rotateKeywords.some(kw => nameLower.includes(kw));
+      if (isRotatable && !rotatablePart) {
+        rotatablePart = mesh;
+        console.log(`Found rotatable part (head): "${mesh.name}"`);
+      }
+    }
+
+    // Calculate barrel local offset BEFORE reparenting (need original positions)
+    // The offset will be relative to where we place the turret head pivot
+    let barrelLocalOffset = new Vector3(0, 0, 4); // Default fallback
+    let turretHeadCenterY = 0;
+
+    // If no rotatable part found by keyword, create a turret head group
+    // by separating base (lowest mesh) from the rest
+    if (!rotatablePart && meshChildren.length > 1) {
+      // Sort meshes by Y position to find the base
+      const sortedByY = [...meshChildren].sort((a, b) => {
+        const aY = a.position?.y ?? 0;
+        const bY = b.position?.y ?? 0;
+        return aY - bY;
+      });
+
+      // The lowest mesh is likely the base
+      const baseMesh = sortedByY[0];
+      headMeshes = sortedByY.slice(1); // Everything above the base
+
+      if (baseMesh && headMeshes.length > 0) {
+        console.log(`Identified base mesh: "${baseMesh.name}" (y=${baseMesh.position?.y?.toFixed(1)})`);
+        console.log(`Turret head meshes: ${headMeshes.map(m => m.name).join(', ')}`);
+
+        // Calculate the center position of head meshes for the pivot point
+        for (const mesh of headMeshes) {
+          turretHeadCenterY += mesh.position?.y ?? 0;
+        }
+        turretHeadCenterY /= headMeshes.length;
+
+        // Calculate barrel offset BEFORE reparenting using original mesh positions
+        // Find the mesh that extends furthest in Z (that's the barrel tip)
+        let overallMaxZ = -Infinity;
+        let minX = Infinity, maxX = -Infinity;
+
+        for (const mesh of headMeshes) {
+          if (mesh instanceof Mesh && mesh.getTotalVertices() > 0) {
+            const boundingInfo = mesh.getBoundingInfo();
+            const min = boundingInfo.boundingBox.minimum;
+            const max = boundingInfo.boundingBox.maximum;
+            const meshPos = mesh.position || Vector3.Zero();
+
+            const meshMaxZ = max.z + meshPos.z;
+            minX = Math.min(minX, min.x + meshPos.x);
+            maxX = Math.max(maxX, max.x + meshPos.x);
+
+            if (meshMaxZ > overallMaxZ) {
+              overallMaxZ = meshMaxZ;
+            }
+          }
+        }
+
+        if (overallMaxZ > -Infinity) {
+          // Barrel tip: centered X, small negative Y offset to align with barrel centerline, max Z (front)
+          const localCenterX = (minX + maxX) / 2;
+          const localBarrelY = -0.22; // Offset down from pivot to barrel centerline
+          barrelLocalOffset = new Vector3(localCenterX, localBarrelY, overallMaxZ);
+          console.log(`Barrel offset: pivotY=${turretHeadCenterY.toFixed(2)}, localOffset=(${barrelLocalOffset.x.toFixed(2)}, ${barrelLocalOffset.y.toFixed(2)}, ${barrelLocalOffset.z.toFixed(2)})`);
+        }
+
+        // Create a new parent node for the turret head parts
+        const turretHeadNode = new TransformNode('_turretHead', this.scene);
+        turretHeadNode.parent = root;
+
+        // Position the turret head node at the center Y of head parts
+        turretHeadNode.position.y = turretHeadCenterY;
+
+        // Reparent head meshes under the turret head node
+        for (const mesh of headMeshes) {
+          const originalY = mesh.position?.y ?? 0;
+          mesh.parent = turretHeadNode;
+          // Adjust position relative to new parent
+          mesh.position.y = originalY - turretHeadCenterY;
+        }
+
+        rotatablePart = turretHeadNode;
+        console.log(`Created turret head group at y=${turretHeadCenterY.toFixed(1)} with ${headMeshes.length} meshes`);
+      }
+    } else if (!rotatablePart && meshChildren.length === 1) {
+      // Only one mesh - use it directly
+      rotatablePart = meshChildren[0] ?? null;
+      headMeshes = meshChildren;
+      console.log(`Single mesh turret, using: "${rotatablePart?.name}"`);
+
+      // Calculate offset for single mesh - use center Y (barrel centerline)
+      if (rotatablePart instanceof Mesh && rotatablePart.getTotalVertices() > 0) {
+        const boundingInfo = rotatablePart.getBoundingInfo();
+        const min = boundingInfo.boundingBox.minimum;
+        const max = boundingInfo.boundingBox.maximum;
+        const meshPos = rotatablePart.position || Vector3.Zero();
+        barrelLocalOffset = new Vector3(
+          (min.x + max.x) / 2,
+          (min.y + max.y) / 2 + meshPos.y, // Use center Y
+          max.z + meshPos.z
+        );
+      }
+    }
+
+    // If still no pitchable part, use the rotatable part for both
+    if (!pitchablePart && rotatablePart) {
+      console.log('No separate pitchable part found, using rotatable part for pitch');
+      pitchablePart = rotatablePart;
+    }
+
+    // If headMeshes wasn't populated (parts found by keyword), calculate offset from rotatablePart
+    if (headMeshes.length === 0 && rotatablePart) {
+      const rotChildren = rotatablePart.getChildMeshes();
+      if (rotChildren.length > 0) {
+        // Calculate bounding box from children
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        let minZ = Infinity, maxZ = -Infinity;
+
+        for (const mesh of rotChildren) {
+          if (mesh instanceof Mesh && mesh.getTotalVertices() > 0) {
+            const boundingInfo = mesh.getBoundingInfo();
+            const min = boundingInfo.boundingBox.minimum;
+            const max = boundingInfo.boundingBox.maximum;
+            const meshPos = mesh.position || Vector3.Zero();
+
+            minX = Math.min(minX, min.x + meshPos.x);
+            maxX = Math.max(maxX, max.x + meshPos.x);
+            minY = Math.min(minY, min.y + meshPos.y);
+            maxY = Math.max(maxY, max.y + meshPos.y);
+            minZ = Math.min(minZ, min.z + meshPos.z);
+            maxZ = Math.max(maxZ, max.z + meshPos.z);
+          }
+        }
+
+        if (maxZ > -Infinity) {
+          barrelLocalOffset = new Vector3((minX + maxX) / 2, (minY + maxY) / 2, maxZ); // Use center Y
+          console.log(`Barrel offset from keyword-found part: (${barrelLocalOffset.x.toFixed(2)}, ${barrelLocalOffset.y.toFixed(2)}, ${barrelLocalOffset.z.toFixed(2)})`);
+        }
+      } else if (rotatablePart instanceof Mesh && rotatablePart.getTotalVertices() > 0) {
+        const boundingInfo = rotatablePart.getBoundingInfo();
+        const min = boundingInfo.boundingBox.minimum;
+        const max = boundingInfo.boundingBox.maximum;
+        barrelLocalOffset = new Vector3(0, (min.y + max.y) / 2, max.z); // Use center Y
+        console.log(`Barrel offset from single mesh: (${barrelLocalOffset.x.toFixed(2)}, ${barrelLocalOffset.y.toFixed(2)}, ${barrelLocalOffset.z.toFixed(2)})`);
+      }
+    }
+
+    // If still no barrel tip found
+    if (!barrelTip && pitchablePart) {
+      console.log('No barrel tip found, will use calculated offset from pitchable part');
+    }
+
+    return { rotatablePart, pitchablePart, barrelTip, barrelLocalOffset };
+  }
+
+  /**
+   * Calculate target rotation from turret position to target position
+   */
+  private calculateTargetRotation(
+    turretX: number,
+    turretZ: number,
+    targetX: number,
+    targetZ: number
+  ): number {
+    return Math.atan2(targetX - turretX, targetZ - turretZ);
+  }
+
+  /**
+   * Update turret rotations (called in render loop)
+   * Handles both horizontal (yaw) and vertical (pitch) rotation
+   * Yaw is applied to the rotatable part (turret head)
+   * Pitch is applied to the pitchable part (barrel/gun)
+   * Also checks for pending attacks and fires when rotation is complete
+   */
+  private updateTurretRotations(deltaTime: number): void {
+    const yawSpeed = 3.0; // Radians per second for horizontal rotation
+    const pitchSpeed = 2.0; // Radians per second for vertical rotation
+
+    for (const [buildingId, data] of this.buildingData) {
+      // Yaw rotates the turret head (or whole mesh as fallback)
+      const yawPart = data.rotatablePart || data.mesh;
+      // Pitch rotates the barrel (or same as yaw part if no separate barrel)
+      const pitchPart = data.pitchablePart || yawPart;
+      const samePart = pitchPart === yawPart;
+
+      // Update yaw (horizontal rotation) on the turret head
+      let yawDiff = data.targetRotation - data.currentRotation;
+      while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+      while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+
+      const isYawRotating = Math.abs(yawDiff) > 0.05;
+      if (isYawRotating) {
+        const maxYaw = yawSpeed * deltaTime;
+        const yawAmount = Math.sign(yawDiff) * Math.min(maxYaw, Math.abs(yawDiff));
+        data.currentRotation += yawAmount;
+      }
+
+      // Update pitch (vertical rotation) on the barrel
+      let pitchDiff = data.targetPitch - data.currentPitch;
+      const isPitchRotating = Math.abs(pitchDiff) > 0.02;
+      if (isPitchRotating) {
+        const maxPitch = pitchSpeed * deltaTime;
+        const pitchAmount = Math.sign(pitchDiff) * Math.min(maxPitch, Math.abs(pitchDiff));
+        data.currentPitch += pitchAmount;
+      }
+
+      // Apply rotations - log once when attack starts
+      const hasPendingAttack = this.pendingAttacks.has(buildingId);
+
+      if (samePart) {
+        // If we created a _turretHead group, rotate it directly
+        // Otherwise for legacy single-mesh models, try rotating the parent container
+        const partToRotate = yawPart.name === '_turretHead' ? yawPart : (yawPart.parent instanceof TransformNode ? yawPart.parent : yawPart);
+
+        // Apply yaw and pitch using Euler angles
+        // Y = yaw (horizontal), X = pitch (vertical)
+        // Note: Negate pitch because Babylon.js positive X rotation tilts down
+        partToRotate.rotationQuaternion = null;
+        partToRotate.rotation.x = -data.currentPitch;
+        partToRotate.rotation.y = data.currentRotation;
+        partToRotate.rotation.z = 0;
+      } else {
+        // Separate parts - apply yaw and pitch to different nodes
+        yawPart.rotationQuaternion = null;
+        pitchPart.rotationQuaternion = null;
+        yawPart.rotation.y = data.currentRotation;
+        pitchPart.rotation.x = data.currentPitch;
+
+        if (hasPendingAttack) {
+          console.log(`Rotating separate parts - yaw(${yawPart.name}): ${(data.currentRotation * 180 / Math.PI).toFixed(1)}deg, pitch(${pitchPart.name}): ${(data.currentPitch * 180 / Math.PI).toFixed(1)}deg`);
+        }
+      }
+
+      // Check if both rotations are complete
+      const isFullyAimed = !isYawRotating && !isPitchRotating;
+      if (isFullyAimed) {
+        // Rotation complete - check for pending attack
+        const pendingAttack = this.pendingAttacks.get(buildingId);
+        if (pendingAttack) {
+          this.pendingAttacks.delete(buildingId);
+          this.executeAttack(buildingId, data, pendingAttack);
+        }
+      }
+    }
+  }
+
+  /**
+   * Execute the actual attack (fire laser) after rotation is complete
+   */
+  private executeAttack(
+    buildingId: string,
+    data: typeof this.buildingData extends Map<string, infer V> ? V : never,
+    attack: { targetWorldX: number; targetWorldZ: number; targetWorldY: number; color: string }
+  ): void {
+    let sourcePos: Vector3;
+
+    // Try to get barrel tip world position
+    if (data.barrelTip) {
+      data.barrelTip.computeWorldMatrix(true);
+      sourcePos = data.barrelTip.getAbsolutePosition().clone();
+      console.log(`Firing from barrel tip at (${sourcePos.x.toFixed(1)}, ${sourcePos.y.toFixed(1)}, ${sourcePos.z.toFixed(1)})`);
+    } else if (data.rotatablePart) {
+      // Get the rotatable part (turret head)
+      const turretHead = data.rotatablePart;
+      turretHead.computeWorldMatrix(true);
+      const turretPos = turretHead.getAbsolutePosition();
+
+      // Use pre-calculated barrel offset (in local model units), scaled by the building's scale factor
+      const scaledOffset = data.barrelLocalOffset.scale(data.scaleFactor);
+
+      // Create rotation matrix from current yaw and pitch
+      // Note: pitch is negated because Babylon.js positive X rotation tilts down
+      const yawMatrix = Matrix.RotationY(data.currentRotation);
+      const pitchMatrix = Matrix.RotationX(-data.currentPitch);
+      const rotationMatrix = pitchMatrix.multiply(yawMatrix);
+
+      // Transform the scaled local barrel offset by the rotation
+      const rotatedOffset = Vector3.TransformCoordinates(scaledOffset, rotationMatrix);
+
+      // Add to turret position to get barrel tip world position
+      sourcePos = turretPos.add(rotatedOffset);
+
+      console.log(`Firing from turret head + offset: turret=(${turretPos.x.toFixed(1)}, ${turretPos.y.toFixed(1)}, ${turretPos.z.toFixed(1)}), ` +
+        `localOffset=(${data.barrelLocalOffset.x.toFixed(1)}, ${data.barrelLocalOffset.y.toFixed(1)}, ${data.barrelLocalOffset.z.toFixed(1)}), ` +
+        `scale=${data.scaleFactor.toFixed(3)}, source=(${sourcePos.x.toFixed(1)}, ${sourcePos.y.toFixed(1)}, ${sourcePos.z.toFixed(1)})`);
+    } else {
+      // Fallback: calculate from building grid position
+      const buildingWorldX = data.x * TILE_SIZE + TILE_SIZE / 2;
+      const buildingWorldZ = data.z * TILE_SIZE + TILE_SIZE / 2;
+      const buildingHeight = 6.0;
+
+      const barrelLength = TILE_SIZE * 0.5;
+      const horizontalLength = barrelLength * Math.cos(data.currentPitch);
+      const verticalOffset = barrelLength * Math.sin(data.currentPitch);
+
+      const barrelTipX = buildingWorldX + Math.sin(data.currentRotation) * horizontalLength;
+      const barrelTipZ = buildingWorldZ + Math.cos(data.currentRotation) * horizontalLength;
+      const barrelTipY = buildingHeight + verticalOffset;
+
+      sourcePos = new Vector3(barrelTipX, barrelTipY, barrelTipZ);
+      console.log(`Firing from fallback position at (${sourcePos.x.toFixed(1)}, ${sourcePos.y.toFixed(1)}, ${sourcePos.z.toFixed(1)})`);
+    }
+
+    const targetPos = new Vector3(attack.targetWorldX, attack.targetWorldY, attack.targetWorldZ);
+
+    // Fire the laser with improved visuals
+    this.fireLaser(sourcePos, targetPos, attack.color);
+
+    // Show target ring at attack location
+    this.showTargetRing('ground', attack.targetWorldX, attack.targetWorldZ, 2.0);
+
+    // Hide target ring after laser duration
+    setTimeout(() => {
+      if (this.targetRingTargetId === 'ground') {
+        this.hideTargetRing();
+      }
+    }, 2500);
+
+    console.log(`Turret ${buildingId} fired at (${attack.targetWorldX.toFixed(1)}, ${attack.targetWorldZ.toFixed(1)})`);
+  }
+
+  // ==================== FORCE ATTACK ====================
+
+  /**
+   * Force attack a ground position (Ctrl+Click or Right-Click)
+   * Queues the attack to fire after turret finishes rotating
+   */
+  public forceAttackGround(buildingId: string, targetPos: ArenaPosition): boolean {
+    const building = this.buildingData.get(buildingId);
+    if (!building) {
+      console.log('Building not found:', buildingId);
+      return false;
+    }
+
+    if (building.range <= 0 || building.damage <= 0) {
+      console.log('Building cannot attack (no range or damage)');
+      return false;
+    }
+
+    // Get building world position
+    const buildingWorldX = building.x * TILE_SIZE + TILE_SIZE / 2;
+    const buildingWorldZ = building.z * TILE_SIZE + TILE_SIZE / 2;
+
+    // Target world position (ground level)
+    const targetWorldX = targetPos.x * TILE_SIZE + TILE_SIZE / 2;
+    const targetWorldZ = targetPos.z * TILE_SIZE + TILE_SIZE / 2;
+    const targetWorldY = 0.1; // Ground level
+
+    // Calculate horizontal distance
+    const dx = targetWorldX - buildingWorldX;
+    const dz = targetWorldZ - buildingWorldZ;
+    const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
+
+    // Check if in range
+    const rangeInMeters = building.range * TILE_SIZE;
+    if (horizontalDistance > rangeInMeters) {
+      console.log('Target out of range:', horizontalDistance.toFixed(1), '>', rangeInMeters.toFixed(1));
+      return false;
+    }
+
+    // Set turret horizontal rotation (yaw) toward target
+    building.targetRotation = this.calculateTargetRotation(
+      buildingWorldX,
+      buildingWorldZ,
+      targetWorldX,
+      targetWorldZ
+    );
+
+    // Calculate turret barrel height (approximate from building position)
+    // Get actual turret height from mesh if available
+    let turretHeight = 6.0; // Default building height
+    const pitchPart = building.pitchablePart || building.rotatablePart;
+    if (pitchPart) {
+      pitchPart.computeWorldMatrix(true);
+      turretHeight = pitchPart.getAbsolutePosition().y;
+    }
+
+    // Calculate vertical pitch angle (negative because we're aiming down at ground)
+    // Pitch = arctan(heightDiff / horizontalDistance)
+    const heightDiff = turretHeight - targetWorldY;
+    building.targetPitch = -Math.atan2(heightDiff, horizontalDistance);
+
+    console.log(`Turret pitch: height=${turretHeight.toFixed(1)}, targetY=${targetWorldY}, hDist=${horizontalDistance.toFixed(1)}, pitch=${(building.targetPitch * 180 / Math.PI).toFixed(1)}deg`);
+
+    // Queue the attack - it will fire when rotation completes
+    this.pendingAttacks.set(buildingId, {
+      targetWorldX,
+      targetWorldZ,
+      targetWorldY,
+      color: building.laserColor || '#ff0000',
+    });
+
+    console.log(`Attack queued for turret ${buildingId}, rotating to target...`);
+    return true;
   }
 }

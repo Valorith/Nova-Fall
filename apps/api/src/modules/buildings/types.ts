@@ -1,6 +1,7 @@
 import type { BuildingDefinition } from '@prisma/client';
 
 export type BuildingCategory = 'turret' | 'wall' | 'structure' | 'utility';
+export type AttackType = 'instant_laser' | 'laser_burst' | 'bullet' | 'missile';
 
 export interface BuildingDefinitionInput {
   name: string;
@@ -14,7 +15,14 @@ export interface BuildingDefinitionInput {
   damage?: number;
   range?: number;
   attackSpeed?: number;
+  // Attack type configuration
+  attackType?: AttackType;
+  laserColor?: string | null;
+  projectileSpeed?: number;
+  burstCount?: number;
+  burstInterval?: number;
   category?: BuildingCategory;
+  aiPresetId?: string | null;
 }
 
 export interface BuildingDefinitionListQuery {

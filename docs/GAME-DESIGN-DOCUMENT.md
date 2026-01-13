@@ -303,6 +303,27 @@ If a player is not present when combat begins, their forces operate on autopilot
 | Commando       | Specialist       | Stealth, sabotage   | Tier 4    | 25        |
 | Titan Walker   | Super-heavy      | Ultimate unit       | Tier 5    | 100       |
 
+### 4.10 Attack Types & Visuals
+
+Units and buildings can have different attack types that affect visual presentation:
+
+| Attack Type     | Description                           | Visual Effect           |
+| --------------- | ------------------------------------- | ----------------------- |
+| `instant_laser` | Instant hit-scan beam                 | Brief laser beam (200ms)|
+| `laser_burst`   | Multiple rapid laser shots            | Burst of quick beams    |
+| `bullet`        | Physical projectile with travel time  | Moving projectile       |
+| `missile`       | Slower tracking projectile            | Guided missile trail    |
+
+#### Per-Unit Configuration
+- **Laser Color**: Configurable hex color per unit/building
+- **Projectile Speed**: Travel time for bullet/missile types
+- **Burst Count/Interval**: Number of shots and timing for burst attacks
+
+#### Turret Rotation
+Turrets rotate smoothly toward their current target. Models with identifiable turret head meshes (named "turret", "head", "gun", "barrel", or "top") will rotate only that part, otherwise the entire model rotates.
+
+> **Implementation Details**: See `docs/TURRET-ATTACK-SYSTEM-PLAN.md` for full technical specification.
+
 ---
 
 ## 5. Economy & Trading System

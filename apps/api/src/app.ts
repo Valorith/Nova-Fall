@@ -19,6 +19,7 @@ import { settingsRoutes } from './modules/settings/index.js';
 import { unitRoutes } from './modules/units/index.js';
 import { buildingRoutes } from './modules/buildings/index.js';
 import { modelRoutes } from './modules/models/index.js';
+import { aiPresetRoutes } from './modules/ai-presets/index.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -61,6 +62,7 @@ export async function buildApp() {
   await app.register(unitRoutes);
   await app.register(buildingRoutes);
   await app.register(modelRoutes);
+  await app.register(aiPresetRoutes);
 
   // API version endpoint
   app.get('/api/v1', async () => {

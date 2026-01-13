@@ -90,7 +90,7 @@ export const nodesApi = {
   claim: (id: string) => api.post(`/nodes/${id}/claim`),
   abandon: (id: string) => api.post(`/nodes/${id}/abandon`),
   getShopItems: () => api.get<{ items: ShopItemDefinition[] }>('/nodes/shop-items'),
-  purchaseItem: (nodeId: string, itemId: string, quantity: number = 1) =>
+  purchaseItem: (nodeId: string, itemId: string, quantity = 1) =>
     api.post<{ success: boolean; storage: Record<string, number>; creditsRemaining: number }>(
       `/nodes/${nodeId}/shop/purchase`,
       { itemId, quantity }
@@ -275,7 +275,7 @@ import type {
   DbItemDefinition,
   DbItemDefinitionInput,
 } from '@nova-fall/shared';
-import { DbItemCategory } from '@nova-fall/shared';
+import type { DbItemCategory } from '@nova-fall/shared';
 
 export interface ItemDefinitionListQuery {
   category?: DbItemCategory;
@@ -410,9 +410,7 @@ export const craftingApi = {
 };
 
 // Settings API
-export interface NodeIconsMap {
-  [nodeType: string]: string;
-}
+export type NodeIconsMap = Record<string, string>;
 
 export const settingsApi = {
   getAll: () => api.get<{ data: Record<string, unknown> }>('/api/settings'),
@@ -525,8 +523,50 @@ export const modelsApi = {
   getInfo: (path: string) => api.get<ModelFile>('/models/info', { params: { path } }),
 };
 
+// AI Presets API
+import type { DbAIPreset, DbAIPresetInput, BehaviorTree } from '@nova-fall/shared';
+
+export type AIPresetCategory = 'unit' | 'building';
+
+export interface AIPresetListQuery {
+  category?: AIPresetCategory;
+  includeTemplates?: boolean;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AIPresetListResponse {
+  presets: DbAIPreset[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AIPresetStats {
+  total: number;
+  templates: number;
+  byCategory: Record<string, number>;
+}
+
+export const aiPresetsApi = {
+  getAll: (query?: AIPresetListQuery) =>
+    api.get<AIPresetListResponse>('/ai-presets', { params: query }),
+  getById: (id: string) => api.get<DbAIPreset>(`/ai-presets/${id}`),
+  getStats: () => api.get<AIPresetStats>('/ai-presets/stats'),
+  getTemplates: () => api.get<{ templates: DbAIPreset[] }>('/ai-presets/templates'),
+  getCategories: () => api.get<{ categories: AIPresetCategory[] }>('/ai-presets/categories'),
+  create: (data: DbAIPresetInput) => api.post<DbAIPreset>('/ai-presets', data),
+  update: (id: string, data: Partial<DbAIPresetInput>) =>
+    api.put<DbAIPreset>(`/ai-presets/${id}`, data),
+  delete: (id: string) => api.delete(`/ai-presets/${id}`),
+  duplicate: (id: string, newName?: string) =>
+    api.post<DbAIPreset>(`/ai-presets/${id}/duplicate`, { name: newName }),
+};
+
 // Re-export shared types for convenience
 export type { Blueprint, BlueprintInput, BlueprintMaterial, BlueprintCategory, BlueprintQuality };
 export type { CraftingQueue, ItemStorage };
 export type { DbUnitDefinition, DbUnitDefinitionInput, UnitCategory };
 export type { DbBuildingDefinition, DbBuildingDefinitionInput, BuildingCategory };
+export type { DbAIPreset, DbAIPresetInput, BehaviorTree };

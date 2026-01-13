@@ -11,7 +11,7 @@ import {
   isBlueprintLearned,
 } from './service.js';
 import type { StartCraftRequestBody } from './types.js';
-import { NodeType } from '@nova-fall/shared';
+import type { NodeType } from '@nova-fall/shared';
 
 interface AuthenticatedRequest extends FastifyRequest {
   userId: string;

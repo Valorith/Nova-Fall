@@ -111,13 +111,13 @@ export const useItemsStore = defineStore('items', () => {
   }
 
   // Get all items in storage as array with display info
-  function getStorageItems(storage: Record<string, number | undefined>): Array<{
+  function getStorageItems(storage: Record<string, number | undefined>): {
     itemId: string;
     amount: number;
     display: ItemDisplayInfo;
     isBlueprint: boolean;
     linkedBlueprintId: string | null;
-  }> {
+  }[] {
     return Object.entries(storage)
       .filter(([, amount]) => amount !== undefined && amount > 0)
       .map(([itemId, amount]) => {

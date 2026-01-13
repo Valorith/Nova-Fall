@@ -605,14 +605,27 @@ model UnitDefinition {
   range       Float    @default(1)  // Attack range in tiles
   attackSpeed Float    @default(1)  // Attacks per second
 
+  // Attack type configuration
+  attackType       String   @default("instant_laser")  // 'instant_laser' | 'laser_burst' | 'bullet' | 'missile'
+  laserColor       String?  // Hex color like "#ff0000", null = default red
+  projectileSpeed  Float    @default(50)               // Units per second for non-instant attacks
+  burstCount       Int      @default(1)                // For laser_burst: number of shots
+  burstInterval    Float    @default(0.1)              // Seconds between burst shots
+
   // Category: infantry | combat_vehicle | support_vehicle
   category    String   @default("infantry")
+
+  // AI Behavior
+  aiPresetId  String?
+  aiPreset    AIPreset? @relation(fields: [aiPresetId], references: [id])
 
   // Relations
   items       ItemDefinition[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([aiPresetId])
 }
 
 // ==================== BUILDING DEFINITIONS ====================
@@ -637,14 +650,48 @@ model BuildingDefinition {
   range       Float    @default(0)
   attackSpeed Float    @default(0)
 
+  // Attack type configuration
+  attackType       String   @default("instant_laser")  // 'instant_laser' | 'laser_burst' | 'bullet' | 'missile'
+  laserColor       String?  // Hex color like "#ff0000", null = default red
+  projectileSpeed  Float    @default(50)               // Units per second for non-instant attacks
+  burstCount       Int      @default(1)                // For laser_burst: number of shots
+  burstInterval    Float    @default(0.1)              // Seconds between burst shots
+
   // Category: turret | wall | structure | utility
   category    String   @default("structure")
+
+  // AI Behavior
+  aiPresetId  String?
+  aiPreset    AIPreset? @relation(fields: [aiPresetId], references: [id])
 
   // Relations
   items       ItemDefinition[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([aiPresetId])
+}
+
+// ==================== AI PRESETS ====================
+
+model AIPreset {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  category    String   // 'unit' | 'building'
+  treeData    Json     // Serialized behavior tree (BehaviorTree type)
+  isTemplate  Boolean  @default(false)  // System templates are read-only
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  unitDefinitions     UnitDefinition[]
+  buildingDefinitions BuildingDefinition[]
+
+  @@index([category])
+  @@index([isTemplate])
 }
 
 // ==================== BLUEPRINTS ====================

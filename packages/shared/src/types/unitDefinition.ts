@@ -6,6 +6,7 @@
 import type { BlueprintQuality } from './enums.js';
 
 export type UnitCategory = 'infantry' | 'combat_vehicle' | 'support_vehicle';
+export type UnitAttackType = 'instant_laser' | 'laser_burst' | 'bullet' | 'missile';
 
 /**
  * Unit definition as stored in the database
@@ -29,8 +30,18 @@ export interface DbUnitDefinition {
   range: number; // Attack range in tiles
   attackSpeed: number; // Attacks per second
 
+  // Attack type configuration
+  attackType: UnitAttackType;
+  laserColor: string | null; // Hex color like "#ff0000", null = default red
+  projectileSpeed: number; // Units per second for non-instant attacks
+  burstCount: number; // For laser_burst: number of shots
+  burstInterval: number; // Seconds between burst shots
+
   // Category
   category: UnitCategory;
+
+  // AI Behavior
+  aiPresetId: string | null; // Reference to AI preset for behavior tree
 
   // Relations (item count for display)
   items?: { id: string; itemId: string; name: string; quality: BlueprintQuality }[];
@@ -55,7 +66,14 @@ export interface DbUnitDefinitionInput {
   speed?: number;
   range?: number;
   attackSpeed?: number;
+  // Attack type configuration
+  attackType?: UnitAttackType;
+  laserColor?: string | null;
+  projectileSpeed?: number;
+  burstCount?: number;
+  burstInterval?: number;
   category?: UnitCategory;
+  aiPresetId?: string | null;
 }
 
 /**

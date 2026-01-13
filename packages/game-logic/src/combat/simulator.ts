@@ -10,7 +10,7 @@
  * - Death handling
  */
 
-import type { UnitStats } from '@nova-fall/shared';
+import type { UnitStats, BehaviorTree, AIContext } from '@nova-fall/shared';
 import { UnitState } from '@nova-fall/shared';
 import {
   applyDamage,
@@ -18,6 +18,7 @@ import {
   isInRange,
   attackCooldownMs,
 } from './damage.js';
+import { BehaviorTreeExecutor, type ActionResult } from '../ai/index.js';
 
 /**
  * Unit state in the simulation
@@ -39,6 +40,7 @@ export interface SimUnit {
   targetId: string | null;
   lastAttackTime: number;
   rotation: number;
+  aiPreset?: BehaviorTree | null;
 }
 
 /**
@@ -60,6 +62,7 @@ export interface SimBuilding {
   attackSpeed: number;
   lastAttackTime: number;
   targetId: string | null;
+  aiPreset?: BehaviorTree | null;
 }
 
 /**
@@ -132,8 +135,30 @@ const CORE_Z = Math.floor(ARENA_SIZE / 2);
 /**
  * Combat simulator class
  */
+/**
+ * Cached data computed once per tick for performance
+ */
+interface TickCache {
+  attackerUnits: SimUnit[];
+  defenderUnits: SimUnit[];
+  allBuildings: SimBuilding[];
+  attackerBuildings: SimBuilding[];
+  defenderBuildings: SimBuilding[];
+}
+
+/**
+ * Reusable flow field wrapper to avoid allocations
+ */
+interface FlowFieldWrapper {
+  getDirection: (x: number, z: number) => { dx: number; dz: number } | null;
+  getDistance: (x: number, z: number) => number;
+}
+
 export class CombatSimulator {
   private state: CombatSimState;
+  private executorCache: Map<string, BehaviorTreeExecutor> = new Map();
+  private tickCache: TickCache | null = null;
+  private flowFieldWrapper: FlowFieldWrapper | null = null;
 
   constructor(
     battleId: string,
@@ -190,6 +215,343 @@ export class CombatSimulator {
   }
 
   /**
+   * Get or create a behavior tree executor for a unit/building
+   */
+  private getExecutor(entityId: string, tree: BehaviorTree): BehaviorTreeExecutor {
+    let executor = this.executorCache.get(entityId);
+    if (!executor) {
+      executor = new BehaviorTreeExecutor(tree);
+      this.executorCache.set(entityId, executor);
+    }
+    return executor;
+  }
+
+  /**
+   * Build tick cache - called once per tick to pre-compute unit/building lists
+   */
+  private buildTickCache(): TickCache {
+    const allUnits = Array.from(this.state.units.values());
+    const allBuildings = Array.from(this.state.buildings.values());
+
+    return {
+      attackerUnits: allUnits.filter(
+        u => u.ownerId === this.state.attackerId && u.state !== UnitState.DEAD
+      ),
+      defenderUnits: allUnits.filter(
+        u => u.ownerId === this.state.defenderId && u.state !== UnitState.DEAD
+      ),
+      allBuildings,
+      attackerBuildings: allBuildings.filter(b => b.ownerId === this.state.attackerId),
+      defenderBuildings: allBuildings.filter(b => b.ownerId === this.state.defenderId),
+    };
+  }
+
+  /**
+   * Get the reusable flow field wrapper
+   */
+  private getFlowFieldWrapper(): FlowFieldWrapper {
+    if (!this.flowFieldWrapper) {
+      const flowField = this.state.flowField;
+      this.flowFieldWrapper = {
+        getDirection: (x: number, z: number): { dx: number; dz: number } | null => {
+          const gridX = Math.floor(x);
+          const gridZ = Math.floor(z);
+          const dirIdx = flowField.directions[gridX]?.[gridZ];
+          if (dirIdx === undefined || dirIdx < 0) return null;
+          return DIRECTIONS[dirIdx] || null;
+        },
+        getDistance: (x: number, z: number): number => {
+          const gridX = Math.floor(x);
+          const gridZ = Math.floor(z);
+          return flowField.distances[gridX]?.[gridZ] ?? Infinity;
+        },
+      };
+    }
+    return this.flowFieldWrapper;
+  }
+
+  /**
+   * Build AI context for a unit using tick cache
+   */
+  private buildUnitContext(unit: SimUnit): AIContext {
+    const cache = this.tickCache!;
+    const isAttacker = unit.ownerId === this.state.attackerId;
+
+    // Use cached lists based on team
+    const enemyUnits = isAttacker ? cache.defenderUnits : cache.attackerUnits;
+    const enemyBuildings = isAttacker ? cache.defenderBuildings : cache.attackerBuildings;
+    const allyUnits = isAttacker ? cache.attackerUnits : cache.defenderUnits;
+
+    // Build enemies array (units + buildings)
+    const enemies: AIContext['enemies'] = [];
+    for (const u of enemyUnits) {
+      enemies.push({
+        id: u.id,
+        x: u.x,
+        z: u.z,
+        health: u.health,
+        maxHealth: u.maxHealth,
+        type: u.typeId,
+        isBuilding: false,
+      });
+    }
+    for (const b of enemyBuildings) {
+      enemies.push({
+        id: b.id,
+        x: b.x,
+        z: b.z,
+        health: b.health,
+        maxHealth: b.maxHealth,
+        type: b.typeId,
+        isBuilding: true,
+      });
+    }
+
+    // Build allies array (excluding self)
+    const allies: AIContext['allies'] = [];
+    for (const u of allyUnits) {
+      if (u.id === unit.id) continue;
+      allies.push({
+        id: u.id,
+        x: u.x,
+        z: u.z,
+        health: u.health,
+        maxHealth: u.maxHealth,
+        type: u.typeId,
+      });
+    }
+
+    // Build buildings array
+    const buildings: AIContext['buildings'] = [];
+    for (const b of cache.allBuildings) {
+      buildings.push({
+        id: b.id,
+        x: b.x,
+        z: b.z,
+        health: b.health,
+        maxHealth: b.maxHealth,
+        type: b.typeId,
+        isEnemy: b.ownerId !== unit.ownerId,
+      });
+    }
+
+    return {
+      unit: {
+        id: unit.id,
+        x: unit.x,
+        z: unit.z,
+        health: unit.health,
+        maxHealth: unit.maxHealth,
+        shield: unit.shield,
+        maxShield: unit.maxShield,
+        state: unit.state,
+        targetId: unit.targetId,
+        stats: {
+          damage: unit.stats.damage,
+          armor: unit.stats.armor,
+          range: unit.stats.range,
+          speed: unit.stats.speed,
+          attackSpeed: unit.stats.attackSpeed,
+        },
+      },
+      enemies,
+      allies,
+      buildings,
+      core: {
+        x: CORE_X,
+        z: CORE_Z,
+        health: this.state.core.health,
+        maxHealth: this.state.core.maxHealth,
+      },
+      flowField: this.getFlowFieldWrapper(),
+      currentTime: this.state.currentTime,
+    };
+  }
+
+  /**
+   * Build AI context for a building (turret) using tick cache
+   */
+  private buildBuildingContext(building: SimBuilding): AIContext {
+    const cache = this.tickCache!;
+    const isAttacker = building.ownerId === this.state.attackerId;
+
+    // Use cached lists based on team
+    const enemyUnits = isAttacker ? cache.defenderUnits : cache.attackerUnits;
+
+    // Build enemies array
+    const enemies: AIContext['enemies'] = [];
+    for (const u of enemyUnits) {
+      enemies.push({
+        id: u.id,
+        x: u.x,
+        z: u.z,
+        health: u.health,
+        maxHealth: u.maxHealth,
+        type: u.typeId,
+        isBuilding: false,
+      });
+    }
+
+    // Build buildings array
+    const buildings: AIContext['buildings'] = [];
+    for (const b of cache.allBuildings) {
+      buildings.push({
+        id: b.id,
+        x: b.x,
+        z: b.z,
+        health: b.health,
+        maxHealth: b.maxHealth,
+        type: b.typeId,
+        isEnemy: b.ownerId !== building.ownerId,
+      });
+    }
+
+    return {
+      unit: {
+        id: building.id,
+        x: building.x,
+        z: building.z,
+        health: building.health,
+        maxHealth: building.maxHealth,
+        shield: building.shield,
+        maxShield: building.maxShield,
+        state: 'idle',
+        targetId: building.targetId,
+        stats: {
+          damage: building.damage,
+          armor: building.armor,
+          range: building.range,
+          speed: 0, // Buildings don't move
+          attackSpeed: building.attackSpeed,
+        },
+      },
+      enemies,
+      allies: [], // Buildings don't have allies for now
+      buildings,
+      core: {
+        x: CORE_X,
+        z: CORE_Z,
+        health: this.state.core.health,
+        maxHealth: this.state.core.maxHealth,
+      },
+      flowField: this.getFlowFieldWrapper(), // Reuse flow field wrapper
+      currentTime: this.state.currentTime,
+    };
+  }
+
+  /**
+   * Apply an action result to a unit
+   */
+  private applyUnitAction(unit: SimUnit, action: ActionResult, deltaMs: number): void {
+    switch (action.type) {
+      case 'attack': {
+        // Attack specified target
+        if (action.targetId === 'core') {
+          // Attack the core
+          this.processCoreDamage(unit);
+        } else if (action.targetId) {
+          const target = this.state.units.get(action.targetId);
+          if (target && target.state !== UnitState.DEAD) {
+            this.processUnitAttack(unit, target);
+          }
+        }
+        break;
+      }
+
+      case 'move': {
+        // Move toward specified position
+        if (action.moveX !== undefined && action.moveZ !== undefined) {
+          this.moveUnitToward(unit, action.moveX, action.moveZ, deltaMs);
+        }
+        break;
+      }
+
+      case 'set_target': {
+        // Set the unit's current target
+        unit.targetId = action.targetId ?? null;
+        break;
+      }
+
+      case 'clear_target': {
+        // Clear the unit's target
+        unit.targetId = null;
+        break;
+      }
+
+      case 'hold': {
+        // Do nothing, hold position
+        unit.state = UnitState.IDLE;
+        break;
+      }
+    }
+  }
+
+  /**
+   * Apply an action result to a building
+   */
+  private applyBuildingAction(building: SimBuilding, action: ActionResult): void {
+    switch (action.type) {
+      case 'attack': {
+        // Attack specified target
+        if (action.targetId) {
+          const target = this.state.units.get(action.targetId);
+          if (target && target.state !== UnitState.DEAD) {
+            this.processTurretAttack(building, target);
+          }
+        }
+        break;
+      }
+
+      case 'set_target': {
+        building.targetId = action.targetId ?? null;
+        break;
+      }
+
+      case 'clear_target': {
+        building.targetId = null;
+        break;
+      }
+
+      // Buildings ignore movement actions
+      case 'move':
+      case 'hold':
+        break;
+    }
+  }
+
+  /**
+   * Move unit toward a position
+   */
+  private moveUnitToward(unit: SimUnit, targetX: number, targetZ: number, deltaMs: number): void {
+    const dx = targetX - unit.x;
+    const dz = targetZ - unit.z;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+
+    if (distance < 0.1) return; // Already at target
+
+    // Normalize direction
+    const dirX = dx / distance;
+    const dirZ = dz / distance;
+
+    // Calculate movement
+    const speed = unit.stats.speed; // tiles per minute
+    const tilesPerMs = speed / 60000;
+    const moveDistance = Math.min(tilesPerMs * deltaMs, distance);
+
+    // Update position
+    unit.x += dirX * moveDistance;
+    unit.z += dirZ * moveDistance;
+
+    // Set target position for client interpolation
+    unit.targetX = unit.x;
+    unit.targetZ = unit.z;
+
+    // Update rotation to face movement direction
+    unit.rotation = Math.atan2(dirX, dirZ);
+    unit.state = UnitState.MOVING;
+  }
+
+  /**
    * Process a single simulation tick
    * @param deltaMs Time since last tick in milliseconds
    */
@@ -199,17 +561,23 @@ export class CombatSimulator {
     this.state.currentTime += deltaMs;
     this.state.events = [];
 
+    // Build tick cache once per tick for performance
+    this.tickCache = this.buildTickCache();
+
     // Process attacker units (move toward core, attack defenders/core)
     this.processAttackerUnits(deltaMs);
 
     // Process defender units (attack attackers)
-    this.processDefenderUnits();
+    this.processDefenderUnits(deltaMs);
 
     // Process turrets (buildings that can attack)
     this.processTurrets();
 
     // Check win conditions
     this.checkWinConditions();
+
+    // Clear tick cache
+    this.tickCache = null;
 
     return this.state.events;
   }
@@ -218,18 +586,27 @@ export class CombatSimulator {
    * Process attacker units - they move toward the core
    */
   private processAttackerUnits(deltaMs: number): void {
-    const attackerUnits = Array.from(this.state.units.values()).filter(
-      u => u.ownerId === this.state.attackerId && u.state !== UnitState.DEAD
-    );
-
-    const defenderUnits = Array.from(this.state.units.values()).filter(
-      u => u.ownerId === this.state.defenderId && u.state !== UnitState.DEAD
-    );
+    const cache = this.tickCache!;
+    const attackerUnits = cache.attackerUnits;
+    const defenderUnits = cache.defenderUnits;
 
     for (const unit of attackerUnits) {
       // Skip spawning units
       if (unit.state === UnitState.SPAWNING) continue;
 
+      // Use behavior tree if available
+      if (unit.aiPreset) {
+        const executor = this.getExecutor(unit.id, unit.aiPreset);
+        const context = this.buildUnitContext(unit);
+        const result = executor.tick(context);
+
+        if (result.action) {
+          this.applyUnitAction(unit, result.action, deltaMs);
+        }
+        continue;
+      }
+
+      // Default behavior (fallback when no AI preset)
       // Find nearby defender to attack
       const targetIdx = findNearestTarget(
         unit.x,
@@ -257,18 +634,27 @@ export class CombatSimulator {
   /**
    * Process defender units - they attack attackers
    */
-  private processDefenderUnits(): void {
-    const defenderUnits = Array.from(this.state.units.values()).filter(
-      u => u.ownerId === this.state.defenderId && u.state !== UnitState.DEAD
-    );
-
-    const attackerUnits = Array.from(this.state.units.values()).filter(
-      u => u.ownerId === this.state.attackerId && u.state !== UnitState.DEAD
-    );
+  private processDefenderUnits(deltaMs: number): void {
+    const cache = this.tickCache!;
+    const defenderUnits = cache.defenderUnits;
+    const attackerUnits = cache.attackerUnits;
 
     for (const unit of defenderUnits) {
       if (unit.state === UnitState.SPAWNING) continue;
 
+      // Use behavior tree if available
+      if (unit.aiPreset) {
+        const executor = this.getExecutor(unit.id, unit.aiPreset);
+        const context = this.buildUnitContext(unit);
+        const result = executor.tick(context);
+
+        if (result.action) {
+          this.applyUnitAction(unit, result.action, deltaMs);
+        }
+        continue;
+      }
+
+      // Default behavior (fallback when no AI preset)
       // Find nearby attacker to attack
       const targetIdx = findNearestTarget(
         unit.x,
@@ -291,14 +677,26 @@ export class CombatSimulator {
    * Process turret attacks
    */
   private processTurrets(): void {
-    const attackerUnits = Array.from(this.state.units.values()).filter(
-      u => u.ownerId === this.state.attackerId && u.state !== UnitState.DEAD
-    );
+    const cache = this.tickCache!;
+    const attackerUnits = cache.attackerUnits;
 
-    for (const turret of this.state.buildings.values()) {
+    for (const turret of cache.allBuildings) {
       // Only process turrets (buildings with attack capability)
       if (turret.attackSpeed <= 0) continue;
 
+      // Use behavior tree if available
+      if (turret.aiPreset) {
+        const executor = this.getExecutor(turret.id, turret.aiPreset);
+        const context = this.buildBuildingContext(turret);
+        const result = executor.tick(context);
+
+        if (result.action) {
+          this.applyBuildingAction(turret, result.action);
+        }
+        continue;
+      }
+
+      // Default behavior (fallback when no AI preset)
       // Find target
       const targetIdx = findNearestTarget(
         turret.x,
@@ -473,11 +871,8 @@ export class CombatSimulator {
     }
 
     // All attacker units dead = defender wins
-    const aliveAttackers = Array.from(this.state.units.values()).filter(
-      u => u.ownerId === this.state.attackerId && u.state !== UnitState.DEAD
-    );
-
-    if (aliveAttackers.length === 0) {
+    // Use tick cache - already filtered to living units
+    if (this.tickCache!.attackerUnits.length === 0) {
       this.state.isComplete = true;
       this.state.winnerId = this.state.defenderId;
     }

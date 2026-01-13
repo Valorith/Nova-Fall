@@ -47,7 +47,18 @@
       "Bash(claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest)",
       "mcp__chrome-devtools__list_pages",
       "mcp__chrome-devtools__take_snapshot",
-      "mcp__chrome-devtools__new_page"
+      "mcp__chrome-devtools__new_page",
+      "WebFetch(domain:vueflow.dev)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:baklava.tech)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm db:migrate:*)",
+      "Bash(ls:*)",
+      "Bash(pnpm --filter api exec tsx:*)",
+      "Bash(curl:*)",
+      "Bash(lsof:*)",
+      "Bash(pnpm exec prisma db execute:*)",
+      "Bash(EOF)"
     ]
   }
 }

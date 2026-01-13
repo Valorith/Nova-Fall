@@ -81,7 +81,7 @@ async function seedUnitBlueprint(
   const blueprintName = `Train ${unit.name}`;
 
   // Convert training cost to inputs array
-  const inputs: Array<{ itemId: string; quantity: number }> = [];
+  const inputs: { itemId: string; quantity: number }[] = [];
 
   if (unit.trainingCost.credits) {
     inputs.push({ itemId: 'credits', quantity: unit.trainingCost.credits });

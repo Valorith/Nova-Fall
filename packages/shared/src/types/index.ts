@@ -7,3 +7,4 @@ export * from './unitDefinition.js';
 export * from './buildingDefinition.js';
 export * from './crafting.js';
 export * from './combat.js';
+export * from './ai.js';

@@ -11,9 +11,7 @@ const props = defineProps<{
   playerCredits: number;
 }>();
 
-const emit = defineEmits<{
-  (e: 'purchase', itemId: string, storage: ItemStorage, creditsRemaining: number): void;
-}>();
+const emit = defineEmits<(e: 'purchase', itemId: string, storage: ItemStorage, creditsRemaining: number) => void>();
 
 const purchasing = ref<string | null>(null);
 const error = ref<string | null>(null);

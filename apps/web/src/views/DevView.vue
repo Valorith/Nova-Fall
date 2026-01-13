@@ -5,20 +5,31 @@ import ItemsEditor from '@/components/dev/ItemsEditor.vue';
 import UnitsEditor from '@/components/dev/UnitsEditor.vue';
 import BuildingsEditor from '@/components/dev/BuildingsEditor.vue';
 import SettingsEditor from '@/components/dev/SettingsEditor.vue';
+import AIEditor from '@/components/dev/AIEditor.vue';
 
 // Dev panel tabs
-type DevTab = 'blueprints' | 'items' | 'units' | 'buildings' | 'settings' | 'debug';
+type DevTab = 'blueprints' | 'items' | 'units' | 'buildings' | 'ai' | 'settings' | 'debug';
 
 const activeTab = ref<DevTab>('blueprints');
+
+// For navigating to AI Editor with a specific preset
+const aiEditorPresetId = ref<string | null>(null);
 
 const tabs: { id: DevTab; label: string; icon: string }[] = [
   { id: 'blueprints', label: 'Blueprints', icon: 'B' },
   { id: 'items', label: 'Items', icon: 'I' },
   { id: 'units', label: 'Units', icon: 'U' },
   { id: 'buildings', label: 'Buildings', icon: 'G' },
+  { id: 'ai', label: 'AI Editor', icon: 'A' },
   { id: 'settings', label: 'Settings', icon: 'S' },
   { id: 'debug', label: 'Debug', icon: 'D' },
 ];
+
+// Navigate to AI Editor with a specific preset selected
+function navigateToAIEditor(presetId: string) {
+  aiEditorPresetId.value = presetId;
+  activeTab.value = 'ai';
+}
 </script>
 
 <template>
@@ -56,9 +67,11 @@ const tabs: { id: DevTab; label: string; icon: string }[] = [
 
       <ItemsEditor v-else-if="activeTab === 'items'" />
 
-      <UnitsEditor v-else-if="activeTab === 'units'" />
+      <UnitsEditor v-else-if="activeTab === 'units'" @navigate-to-ai-editor="navigateToAIEditor" />
 
-      <BuildingsEditor v-else-if="activeTab === 'buildings'" />
+      <BuildingsEditor v-else-if="activeTab === 'buildings'" @navigate-to-ai-editor="navigateToAIEditor" />
+
+      <AIEditor v-else-if="activeTab === 'ai'" :initial-preset-id="aiEditorPresetId" @preset-loaded="aiEditorPresetId = null" />
 
       <SettingsEditor v-else-if="activeTab === 'settings'" />
 

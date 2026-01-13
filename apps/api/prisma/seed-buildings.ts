@@ -94,7 +94,7 @@ async function seedBuildingBlueprint(
   const blueprintName = `Manufacture ${building.name}`;
 
   // Convert craft cost to inputs array
-  const inputs: Array<{ itemId: string; quantity: number }> = [];
+  const inputs: { itemId: string; quantity: number }[] = [];
 
   if (building.craftCost.credits) {
     inputs.push({ itemId: 'credits', quantity: building.craftCost.credits });

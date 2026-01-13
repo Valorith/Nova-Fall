@@ -93,11 +93,11 @@ export function isNodeCore(itemId: string): itemId is NodeCoreId {
 }
 
 // Get all items in storage as array with definitions
-export function getStorageItems(storage: ItemStorage): Array<{
+export function getStorageItems(storage: ItemStorage): {
   itemId: string;
   amount: number;
   definition: ItemDefinition | undefined;
-}> {
+}[] {
   return Object.entries(storage)
     .filter(([, amount]) => amount !== undefined && amount > 0)
     .map(([itemId, amount]) => ({

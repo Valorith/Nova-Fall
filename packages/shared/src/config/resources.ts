@@ -177,7 +177,7 @@ export const HOURLY_PRODUCTION: Record<string, Partial<Record<ResourceType, numb
 // Get production rates for a node type (with optional tier multiplier)
 export function getNodeProduction(
   nodeType: string,
-  tier: number = 1
+  tier = 1
 ): Partial<Record<ResourceType, number>> {
   const base = HOURLY_PRODUCTION[nodeType] ?? {};
   const tierMultiplier = 1 + (tier - 1) * 0.25; // 25% bonus per tier

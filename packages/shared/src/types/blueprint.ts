@@ -1,4 +1,4 @@
-import { BlueprintCategory, BlueprintQuality, NodeType } from './enums.js';
+import type { BlueprintCategory, BlueprintQuality, NodeType } from './enums.js';
 
 // Material input/output for crafting
 export interface BlueprintMaterial {
