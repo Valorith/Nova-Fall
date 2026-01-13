@@ -147,7 +147,10 @@ async function main() {
   console.log('\n📜 Creating training blueprints:');
 
   for (const [unitId, unit] of unitEntries) {
-    await seedUnitBlueprint(unitId, unit, itemIds[unitId]!);
+    const itemId = itemIds[unitId];
+    if (itemId) {
+      await seedUnitBlueprint(unitId, unit, itemId);
+    }
   }
 
   // Show summary

@@ -102,7 +102,7 @@ export function getStorageItems(storage: ItemStorage): {
     .filter(([, amount]) => amount !== undefined && amount > 0)
     .map(([itemId, amount]) => ({
       itemId,
-      amount: amount!,
+      amount: amount ?? 0,
       definition: getItemDefinition(itemId),
     }))
     .sort((a, b) => {
@@ -162,10 +162,11 @@ export function removeItems(
   }
 
   const newAmount = current - toRemove;
-  const newStorage = { ...storage };
+  let newStorage = { ...storage };
 
   if (newAmount === 0) {
-    delete newStorage[itemId];
+    const { [itemId]: _, ...rest } = newStorage;
+    newStorage = rest;
   } else {
     newStorage[itemId] = newAmount;
   }

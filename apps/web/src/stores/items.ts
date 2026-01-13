@@ -129,7 +129,7 @@ export const useItemsStore = defineStore('items', () => {
           (item?.category === 'BLUEPRINT' && Boolean(item?.linkedBlueprintId));
         return {
           itemId,
-          amount: amount!,
+          amount: amount ?? 0,
           display: getItemDisplay(itemId),
           isBlueprint: isBlueprintItem,
           linkedBlueprintId: item?.linkedBlueprintId ?? null,

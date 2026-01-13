@@ -313,12 +313,13 @@ export async function startCrafting(
   const result = await prisma.$transaction(async (tx) => {
     // Deduct materials for FIRST RUN ONLY (per-run consumption model)
     // Worker will consume materials for subsequent runs
-    const newStorage = { ...storage };
+    let newStorage = { ...storage };
     for (const [itemId, needed] of Object.entries(inputsPerRun)) {
       if (needed === undefined) continue;
       newStorage[itemId] = (newStorage[itemId] || 0) - needed;
       if (newStorage[itemId] === 0) {
-        delete newStorage[itemId];
+        const { [itemId]: _, ...rest } = newStorage;
+        newStorage = rest;
       }
     }
 
@@ -447,10 +448,11 @@ export async function learnBlueprint(
   // Perform transaction: remove item, add to learned blueprints
   const result = await prisma.$transaction(async (tx) => {
     // Remove one blueprint item from storage
-    const newStorage = { ...storage };
+    let newStorage = { ...storage };
     newStorage[blueprintItemId] = (newStorage[blueprintItemId] || 0) - 1;
     if (newStorage[blueprintItemId] === 0) {
-      delete newStorage[blueprintItemId];
+      const { [blueprintItemId]: _, ...rest } = newStorage;
+      newStorage = rest;
     }
 
     // Update node storage

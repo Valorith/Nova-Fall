@@ -6,6 +6,7 @@ import {
   type ResourceStorage,
   type ItemStorage,
   type CraftingQueue,
+  type NodeType as SharedNodeType,
   nodeRequiresCore,
 } from '@nova-fall/shared';
 import type { NodeStatus, NodeType } from '@prisma/client';
@@ -777,9 +778,10 @@ export async function installCore(
   }
 
   // Remove core from storage and install it
-  const updatedStorage: ItemStorage = { ...nodeStorage };
+  let updatedStorage: ItemStorage = { ...nodeStorage };
   if (coreCount === 1) {
-    delete updatedStorage[coreId];
+    const { [coreId]: _, ...rest } = updatedStorage;
+    updatedStorage = rest;
   } else {
     updatedStorage[coreId] = coreCount - 1;
   }
@@ -827,7 +829,7 @@ export async function destroyCore(
   }
 
   // Check if this is an HQ or Crown node (always active, can't have cores)
-  if (!nodeRequiresCore(node.type as unknown as import('@nova-fall/shared').NodeType)) {
+  if (!nodeRequiresCore(node.type as unknown as SharedNodeType)) {
     return { success: false, error: 'This node type does not use cores' };
   }
 

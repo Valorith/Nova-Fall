@@ -83,7 +83,7 @@ const groupedDefinitions = computed(() => {
     if (!groups[def.category]) {
       groups[def.category] = [];
     }
-    groups[def.category]!.push(def);
+    groups[def.category].push(def);
   }
   return groups;
 });

@@ -1343,12 +1343,13 @@ async function handleTransferCreated(transfer: TransferResponse) {
 
   // Update source node storage by subtracting transferred resources
   if (transferSourceNode.value) {
-    const currentStorage = { ...(transferSourceNode.value.storage as ItemStorage) };
+    let currentStorage = { ...(transferSourceNode.value.storage as ItemStorage) };
     for (const [itemId, amount] of Object.entries(transfer.resources)) {
       if (amount && amount > 0) {
         currentStorage[itemId] = Math.max(0, (currentStorage[itemId] ?? 0) - amount);
         if (currentStorage[itemId] === 0) {
-          delete currentStorage[itemId];
+          const { [itemId]: _, ...rest } = currentStorage;
+          currentStorage = rest;
         }
       }
     }

@@ -240,8 +240,8 @@ export async function checkDominationVictory(sessionId: string): Promise<boolean
   }
 
   // Victory if only one player has HQ
-  if (playersWithHQ.length === 1) {
-    const winner = playersWithHQ[0]!;
+  if (playersWithHQ.length === 1 && playersWithHQ[0]) {
+    const winner = playersWithHQ[0];
     const winnerId = winner.playerId ?? winner.id;
     const winnerName = winner.player?.displayName ?? winner.botName ?? 'Unknown';
 

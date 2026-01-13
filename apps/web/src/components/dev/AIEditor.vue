@@ -48,9 +48,7 @@ const props = withDefaults(defineProps<Props>(), {
   initialPresetId: null,
 });
 
-const emit = defineEmits<{
-  (e: 'preset-loaded'): void;
-}>();
+const emit = defineEmits<(e: 'preset-loaded') => void>();
 
 // Types
 type AIPresetCategory = 'unit' | 'building';
@@ -211,7 +209,8 @@ async function selectPreset(preset: DbAIPreset) {
   }
 
   // Load tree into Vue Flow - use selectedPreset.value which has fresh data from API
-  const tree = selectedPreset.value!.treeData as BehaviorTree;
+  if (!selectedPreset.value) return;
+  const tree = selectedPreset.value.treeData as BehaviorTree;
   await loadTreeIntoCanvas(tree, 'selectPreset');
 }
 
@@ -484,12 +483,14 @@ function validateTree() {
   // Check for disconnected nodes
   const connectedNodeIds = new Set<string>();
   if (rootCandidates.length === 1) {
-    const root = rootCandidates[0]!;
+    const root = rootCandidates[0];
+    if (!root) return;
     connectedNodeIds.add(root.id);
     const queue = [root.id];
 
     while (queue.length > 0) {
-      const nodeId = queue.shift()!;
+      const nodeId = queue.shift();
+      if (!nodeId) continue;
       const childEdges = edges.value.filter((e) => e.source === nodeId);
       for (const edge of childEdges) {
         if (!connectedNodeIds.has(edge.target)) {
@@ -644,8 +645,8 @@ function pasteNodes() {
   }
 
   // Select the first pasted node
-  if (newNodes.length > 0) {
-    selectedNodeId.value = newNodes[0]!.id;
+  if (newNodes.length > 0 && newNodes[0]) {
+    selectedNodeId.value = newNodes[0].id;
   }
 
   saveTreeState();

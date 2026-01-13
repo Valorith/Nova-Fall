@@ -160,7 +160,10 @@ async function main() {
   console.log('\n📜 Creating manufacturing blueprints:');
 
   for (const [buildingId, building] of buildingEntries) {
-    await seedBuildingBlueprint(buildingId, building, itemIds[buildingId]!);
+    const itemId = itemIds[buildingId];
+    if (itemId) {
+      await seedBuildingBlueprint(buildingId, building, itemId);
+    }
   }
 
   // Show summary

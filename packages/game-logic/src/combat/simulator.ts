@@ -156,7 +156,7 @@ interface FlowFieldWrapper {
 
 export class CombatSimulator {
   private state: CombatSimState;
-  private executorCache: Map<string, BehaviorTreeExecutor> = new Map();
+  private executorCache = new Map<string, BehaviorTreeExecutor>();
   private tickCache: TickCache | null = null;
   private flowFieldWrapper: FlowFieldWrapper | null = null;
 
@@ -274,7 +274,8 @@ export class CombatSimulator {
    * Build AI context for a unit using tick cache
    */
   private buildUnitContext(unit: SimUnit): AIContext {
-    const cache = this.tickCache!;
+    if (!this.tickCache) throw new Error('Tick cache not initialized');
+    const cache = this.tickCache;
     const isAttacker = unit.ownerId === this.state.attackerId;
 
     // Use cached lists based on team
@@ -372,7 +373,8 @@ export class CombatSimulator {
    * Build AI context for a building (turret) using tick cache
    */
   private buildBuildingContext(building: SimBuilding): AIContext {
-    const cache = this.tickCache!;
+    if (!this.tickCache) throw new Error('Tick cache not initialized');
+    const cache = this.tickCache;
     const isAttacker = building.ownerId === this.state.attackerId;
 
     // Use cached lists based on team
@@ -586,7 +588,8 @@ export class CombatSimulator {
    * Process attacker units - they move toward the core
    */
   private processAttackerUnits(deltaMs: number): void {
-    const cache = this.tickCache!;
+    if (!this.tickCache) return;
+    const cache = this.tickCache;
     const attackerUnits = cache.attackerUnits;
     const defenderUnits = cache.defenderUnits;
 
@@ -635,7 +638,8 @@ export class CombatSimulator {
    * Process defender units - they attack attackers
    */
   private processDefenderUnits(deltaMs: number): void {
-    const cache = this.tickCache!;
+    if (!this.tickCache) return;
+    const cache = this.tickCache;
     const defenderUnits = cache.defenderUnits;
     const attackerUnits = cache.attackerUnits;
 
@@ -677,7 +681,8 @@ export class CombatSimulator {
    * Process turret attacks
    */
   private processTurrets(): void {
-    const cache = this.tickCache!;
+    if (!this.tickCache) return;
+    const cache = this.tickCache;
     const attackerUnits = cache.attackerUnits;
 
     for (const turret of cache.allBuildings) {
@@ -872,7 +877,7 @@ export class CombatSimulator {
 
     // All attacker units dead = defender wins
     // Use tick cache - already filtered to living units
-    if (this.tickCache!.attackerUnits.length === 0) {
+    if (this.tickCache && this.tickCache.attackerUnits.length === 0) {
       this.state.isComplete = true;
       this.state.winnerId = this.state.defenderId;
     }

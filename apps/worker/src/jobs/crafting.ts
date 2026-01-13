@@ -125,7 +125,7 @@ export async function processCompletedCrafts(nodeId?: string): Promise<number> {
       continue;
     }
 
-    const storage = { ...(node.storage as ItemStorage) };
+    let storage = { ...(node.storage as ItemStorage) };
     const completedRuns: CompletedRun[] = [];
     const newQueue = [...queue];
 
@@ -180,7 +180,8 @@ export async function processCompletedCrafts(nodeId?: string): Promise<number> {
               for (const input of inputs) {
                 storage[input.itemId] = (storage[input.itemId] || 0) - input.quantity;
                 if (storage[input.itemId] === 0) {
-                  delete storage[input.itemId];
+                  const { [input.itemId]: _, ...rest } = storage;
+                  storage = rest;
                 }
               }
             }

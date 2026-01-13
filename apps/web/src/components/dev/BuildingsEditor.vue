@@ -8,9 +8,7 @@ import ModelSelectorModal from './ModelSelectorModal.vue';
 import AIPresetSelector from '../ai-editor/AIPresetSelector.vue';
 
 // Emit for communicating with parent (DevView)
-const emit = defineEmits<{
-  (e: 'navigate-to-ai-editor', presetId: string): void;
-}>();
+const emit = defineEmits<(e: 'navigate-to-ai-editor', presetId: string) => void>();
 
 // Ref for click-outside detection
 const linkItemSectionRef = ref<HTMLElement | null>(null);
@@ -345,10 +343,11 @@ const filteredItems = computed(() => {
 async function linkSelectedItems() {
   if (!selectedBuilding.value || selectedItemIds.value.size === 0) return;
   linkingItem.value = true;
+  const buildingId = selectedBuilding.value.id;
   try {
     // Link all selected items
     const promises = Array.from(selectedItemIds.value).map((itemId) =>
-      itemsApi.update(itemId, { buildingDefinitionId: selectedBuilding.value!.id })
+      itemsApi.update(itemId, { buildingDefinitionId: buildingId })
     );
     await Promise.all(promises);
     // Refresh the building to get updated items list

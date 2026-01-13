@@ -39,7 +39,7 @@ const itemsByCategory = computed(() => {
     if (!grouped.has(item.category)) {
       grouped.set(item.category, []);
     }
-    grouped.get(item.category)!.push(item);
+    grouped.get(item.category)?.push(item);
   }
   return grouped;
 });

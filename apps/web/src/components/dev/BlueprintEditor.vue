@@ -724,13 +724,14 @@ function handleInputKeydown(event: KeyboardEvent) {
         inputDropdownIndex.value = (inputDropdownIndex.value + 1) % items.length;
       }
       break;
-    case 'Enter':
+    case 'Enter': {
       event.preventDefault();
       const selectedItem = items[inputDropdownIndex.value];
       if (selectedItem) {
         addInputItem(selectedItem);
       }
       break;
+    }
     case 'Escape':
       showInputDropdown.value = false;
       break;
@@ -767,13 +768,14 @@ function handleOutputKeydown(event: KeyboardEvent) {
         outputDropdownIndex.value = (outputDropdownIndex.value + 1) % items.length;
       }
       break;
-    case 'Enter':
+    case 'Enter': {
       event.preventDefault();
       const selectedItem = items[outputDropdownIndex.value];
       if (selectedItem) {
         addOutputItem(selectedItem);
       }
       break;
+    }
     case 'Escape':
       showOutputDropdown.value = false;
       break;

@@ -1584,7 +1584,7 @@ export class CombatEngine {
   /**
    * Show a target ring on an enemy position
    */
-  public showTargetRing(targetId: string, worldX: number, worldZ: number, radius: number = 2): void {
+  public showTargetRing(targetId: string, worldX: number, worldZ: number, radius = 2): void {
     if (this.targetRing) {
       this.targetRing.dispose();
     }
@@ -1786,7 +1786,7 @@ export class CombatEngine {
   /**
    * Fire a laser from source to target position with visual effects
    */
-  public fireLaser(sourcePos: Vector3, targetPos: Vector3, color: string = '#ff0000'): void {
+  public fireLaser(sourcePos: Vector3, targetPos: Vector3, color = '#ff0000'): void {
     const id = `laser_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const duration = 2000; // 2 seconds visible
 
@@ -2148,7 +2148,7 @@ export class CombatEngine {
       }
 
       // Update pitch (vertical rotation) on the barrel
-      let pitchDiff = data.targetPitch - data.currentPitch;
+      const pitchDiff = data.targetPitch - data.currentPitch;
       const isPitchRotating = Math.abs(pitchDiff) > 0.02;
       if (isPitchRotating) {
         const maxPitch = pitchSpeed * deltaTime;

@@ -49,7 +49,7 @@ function distanceSq(x1: number, z1: number, x2: number, z2: number): number {
  */
 function findNearestEnemy(
   context: AIContext,
-  filter: string = 'any'
+  filter = 'any'
 ): { id: string; x: number; z: number } | null {
   let nearestId: string | null = null;
   let nearestX = 0;
