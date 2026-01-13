@@ -55,7 +55,7 @@ function distanceSq(x1: number, z1: number, x2: number, z2: number): number {
  * Helper: Find enemy by ID
  */
 function findEnemy(context: AIContext, id: string) {
-  return context.enemies.find((e) => e.id === id);
+  return context.enemies.find((e: AIContext['enemies'][number]) => e.id === id);
 }
 
 // ==================== CONDITION EVALUATORS ====================

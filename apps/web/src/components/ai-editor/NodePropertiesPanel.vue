@@ -80,10 +80,11 @@ const availableDefinitions = computed((): (ConditionDef | ActionDef)[] => {
 const groupedDefinitions = computed(() => {
   const groups: Record<string, (ConditionDef | ActionDef)[]> = {};
   for (const def of availableDefinitions.value) {
-    if (!groups[def.category]) {
-      groups[def.category] = [];
+    const category = def.category;
+    if (!groups[category]) {
+      groups[category] = [];
     }
-    groups[def.category].push(def);
+    groups[category].push(def);
   }
   return groups;
 });

@@ -106,7 +106,7 @@ function findLowestHealthEnemy(context: AIContext): { id: string; x: number; z: 
  * Helper: Find enemy by current target ID
  */
 function findEnemy(context: AIContext, id: string) {
-  return context.enemies.find((e) => e.id === id);
+  return context.enemies.find((e: AIContext['enemies'][number]) => e.id === id);
 }
 
 /**
@@ -203,7 +203,7 @@ const ACTION_EXECUTORS: Record<
     const maxRangeSq = maxRange * maxRange;
 
     // Get all enemies in range
-    const enemiesInRange = context.enemies.filter((enemy) => {
+    const enemiesInRange = context.enemies.filter((enemy: AIContext['enemies'][number]) => {
       const distSq = distanceSq(context.unit.x, context.unit.z, enemy.x, enemy.z);
       return distSq <= maxRangeSq;
     });
