@@ -58,7 +58,8 @@
       "Bash(curl:*)",
       "Bash(lsof:*)",
       "Bash(pnpm exec prisma db execute:*)",
-      "Bash(EOF)"
+      "Bash(EOF)",
+      "Bash(pnpm --filter @nova-fall/web build:*)"
     ]
   }
 }

@@ -10,7 +10,7 @@
     "dev:api": "pnpm --filter @nova-fall/api dev",
     "dev:ws": "pnpm --filter @nova-fall/ws-server dev",
     "dev:worker": "pnpm --filter @nova-fall/worker dev",
-    "build": "pnpm -r build",
+    "build": "pnpm --filter @nova-fall/shared build && pnpm --filter @nova-fall/game-logic build && pnpm -r build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
