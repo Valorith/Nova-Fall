@@ -632,7 +632,7 @@ onMounted(fetchUnits);
               <AIPresetSelector
                 :model-value="selectedUnit.aiPresetId"
                 category="unit"
-                disabled
+                readonly
                 @edit="handleAIPresetEdit"
               />
             </div>

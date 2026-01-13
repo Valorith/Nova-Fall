@@ -21,6 +21,8 @@ export interface BehaviorNode {
   label: string;
   params: Record<string, unknown>;
   position: { x: number; y: number };
+  collapsed?: boolean; // For subtree collapse in editor
+  comment?: string; // User annotation/note
 }
 
 /**

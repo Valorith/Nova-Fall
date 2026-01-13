@@ -641,7 +641,7 @@ onMounted(fetchBuildings);
               <AIPresetSelector
                 :model-value="selectedBuilding.aiPresetId"
                 category="building"
-                disabled
+                readonly
                 @edit="handleAIPresetEdit"
               />
             </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, markRaw, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, markRaw, nextTick, provide } from 'vue';
 import { VueFlow, useVueFlow } from '@vue-flow/core';
 import type { Node, Edge, Connection } from '@vue-flow/core';
 import { MiniMap } from '@vue-flow/minimap';
@@ -9,6 +9,8 @@ import { useRefHistory } from '@vueuse/core';
 import type { DbAIPreset, BehaviorTree, BehaviorNodeType, ValidationIssue } from '@nova-fall/shared';
 import { aiPresetsApi } from '@/services/api';
 import { autoArrangeNodes } from '@/components/ai-editor/utils/autoLayout';
+import { calculateExecutionOrder, getPathToNode, getDescendants } from '@/components/ai-editor/utils/executionOrder';
+import { unchainSequenceEdges, chainEdgesForDisplay, unchainEdgesForSave } from '@/components/ai-editor/utils/sequenceChaining';
 
 // Custom node components
 import SelectorNode from '@/components/ai-editor/nodes/SelectorNode.vue';
@@ -18,6 +20,7 @@ import DecoratorNode from '@/components/ai-editor/nodes/DecoratorNode.vue';
 import ConditionNode from '@/components/ai-editor/nodes/ConditionNode.vue';
 import ActionNode from '@/components/ai-editor/nodes/ActionNode.vue';
 import NodePropertiesPanel from '@/components/ai-editor/NodePropertiesPanel.vue';
+import LogicDescriptionPanel from '@/components/ai-editor/LogicDescriptionPanel.vue';
 
 // Vue Flow imports for styles
 import '@vue-flow/core/dist/style.css';
@@ -89,10 +92,37 @@ const form = ref({
 });
 
 // Vue Flow state
-const { nodes, edges, fitView, setNodes, setEdges, addNodes, addEdges, removeNodes, project, onConnect } = useVueFlow();
+const { nodes, edges, fitView, setNodes, setEdges, addNodes, addEdges, removeNodes, project, onConnect, onNodesInitialized, onPaneReady } = useVueFlow();
 
 // Selected node for properties panel
 const selectedNodeId = ref<string | null>(null);
+
+// Execution order toggle
+const showExecutionOrder = ref(true);
+
+// Flow highlighting - track hovered node for path highlighting
+const hoveredNodeId = ref<string | null>(null);
+
+// Flag to skip edge validation during programmatic loading
+// Vue Flow calls isValidConnection even for setEdges, so we need to bypass validation during loading
+const isLoadingEdges = ref(false);
+
+// Collapsed subtrees - track which composite nodes are collapsed
+const collapsedNodes = ref<Set<string>>(new Set());
+
+// Toggle collapse state for a node
+function toggleNodeCollapse(nodeId: string) {
+  const newSet = new Set(collapsedNodes.value);
+  if (newSet.has(nodeId)) {
+    newSet.delete(nodeId);
+  } else {
+    newSet.add(nodeId);
+  }
+  collapsedNodes.value = newSet;
+}
+
+// Provide toggle function for custom nodes to use
+provide('toggleNodeCollapse', toggleNodeCollapse);
 
 // Drag state for palette
 const isDragging = ref(false);
@@ -104,6 +134,17 @@ let nodeIdCounter = 0;
 // Component instance ID for debugging (detect HMR multiple instances)
 const instanceId = Math.random().toString(36).substring(2, 8);
 console.log(`[AIEditor:${instanceId}] Component instance created`);
+
+// Handle nodes initialized event - log for debugging
+// onNodesInitialized fires when node dimensions are set, but Handle components may not be mounted yet
+onNodesInitialized(() => {
+  console.log(`[AIEditor:${instanceId}] onNodesInitialized fired`);
+});
+
+// Handle pane ready event - log when Vue Flow is fully initialized
+onPaneReady(() => {
+  console.log(`[AIEditor:${instanceId}] onPaneReady fired`);
+});
 
 // Clipboard for copy/paste
 const clipboard = ref<{ nodes: Node[]; edges: Edge[] } | null>(null);
@@ -133,6 +174,53 @@ function generateEdgeId(source: string, target: string): string {
 const selectedNode = computed(() => {
   if (!selectedNodeId.value) return null;
   return nodes.value.find((n) => n.id === selectedNodeId.value) || null;
+});
+
+// Computed: execution order for all nodes
+const executionOrder = computed(() => {
+  if (!showExecutionOrder.value) return new Map<string, number>();
+  return calculateExecutionOrder(nodes.value, edges.value);
+});
+
+// Computed: highlighted path (from root to hovered node)
+const highlightedPath = computed(() => {
+  if (!hoveredNodeId.value) return new Set<string>();
+  const path = getPathToNode(hoveredNodeId.value, edges.value);
+  return new Set(path);
+});
+
+// Computed: highlighted edge IDs
+const highlightedEdges = computed(() => {
+  if (!hoveredNodeId.value) return new Set<string>();
+  const edgeIds = new Set<string>();
+  for (const edge of edges.value) {
+    if (highlightedPath.value.has(edge.source) && highlightedPath.value.has(edge.target)) {
+      edgeIds.add(edge.id);
+    }
+  }
+  return edgeIds;
+});
+
+// Computed: hidden node IDs (descendants of collapsed nodes)
+const hiddenNodeIds = computed(() => {
+  const hidden = new Set<string>();
+  for (const collapsedId of collapsedNodes.value) {
+    const descendants = getDescendants(collapsedId, edges.value);
+    for (const descendantId of descendants) {
+      hidden.add(descendantId);
+    }
+  }
+  return hidden;
+});
+
+// Computed: subtree counts for collapsed nodes
+const subtreeCounts = computed(() => {
+  const counts = new Map<string, number>();
+  for (const collapsedId of collapsedNodes.value) {
+    const descendants = getDescendants(collapsedId, edges.value);
+    counts.set(collapsedId, descendants.size);
+  }
+  return counts;
 });
 
 // Categories
@@ -179,6 +267,68 @@ async function fetchPresets() {
 // Watch filters
 watch([searchQuery, filterCategory, includeTemplates], fetchPresets);
 
+// Watch execution order, highlighting, and collapse state to update node/edge data
+watch(
+  [executionOrder, highlightedPath, hoveredNodeId, collapsedNodes, hiddenNodeIds, subtreeCounts],
+  () => {
+    // Update nodes with execution order, dimmed state, and collapse info
+    for (const node of nodes.value) {
+      const order = executionOrder.value.get(node.id);
+      const isDimmed = hoveredNodeId.value !== null && !highlightedPath.value.has(node.id);
+      const isCollapsed = collapsedNodes.value.has(node.id);
+      const isHidden = hiddenNodeIds.value.has(node.id);
+      const subtreeCount = subtreeCounts.value.get(node.id) ?? 0;
+
+      // Only update if values changed to avoid unnecessary reactivity
+      if (
+        node.data.executionOrder !== order ||
+        node.data.dimmed !== isDimmed ||
+        node.data.collapsed !== isCollapsed ||
+        node.data.subtreeCount !== subtreeCount
+      ) {
+        node.data = {
+          ...node.data,
+          executionOrder: order,
+          dimmed: isDimmed,
+          collapsed: isCollapsed,
+          subtreeCount: subtreeCount,
+        };
+      }
+
+      // Update node hidden state (Vue Flow uses 'hidden' property)
+      if (node.hidden !== isHidden) {
+        node.hidden = isHidden;
+      }
+    }
+
+    // Update edge visibility and styles
+    for (const edge of edges.value) {
+      // Hide edges connected to hidden nodes
+      const sourceHidden = hiddenNodeIds.value.has(edge.source);
+      const targetHidden = hiddenNodeIds.value.has(edge.target);
+      const shouldHideEdge = sourceHidden || targetHidden;
+
+      if (edge.hidden !== shouldHideEdge) {
+        edge.hidden = shouldHideEdge;
+      }
+
+      // Update edge styles for highlighting (only for visible edges)
+      if (!shouldHideEdge) {
+        if (hoveredNodeId.value) {
+          const isHighlighted = highlightedEdges.value.has(edge.id);
+          edge.style = isHighlighted
+            ? { stroke: '#60a5fa', strokeWidth: 3 }
+            : { stroke: '#4b5563', strokeWidth: 1, opacity: 0.3 };
+        } else {
+          // Reset to default when not hovering
+          edge.style = { stroke: '#4b5563' };
+        }
+      }
+    }
+  },
+  { immediate: true }
+);
+
 // Reset filters
 function resetFilters() {
   searchQuery.value = '';
@@ -223,6 +373,9 @@ async function loadTreeIntoCanvas(tree: BehaviorTree, source = 'unknown') {
   }
 
   console.log(`[AIEditor:${instanceId}] LoadTree START (source: ${source})`);
+
+  // Clear collapsed state when loading new tree
+  collapsedNodes.value = new Set();
 
   // Clear existing nodes and edges first
   setNodes([]);
@@ -270,7 +423,7 @@ async function loadTreeIntoCanvas(tree: BehaviorTree, source = 'unknown') {
   });
 
   // Convert behavior edges to Vue Flow edges
-  const vfEdges: Edge[] = tree.edges.map((edge) => ({
+  const rawEdges: Edge[] = tree.edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
     target: edge.target,
@@ -281,13 +434,30 @@ async function loadTreeIntoCanvas(tree: BehaviorTree, source = 'unknown') {
     type: 'smoothstep',
   }));
 
-  console.log(`[AIEditor:${instanceId}] LoadTree - setting ${vfNodes.length} Vue Flow nodes`);
+  // Chain Sequence edges for visual display:
+  // Instead of Sequence → [A, B, C], show Sequence → A → B → C
+  // This makes the execution flow more intuitive
+  const vfEdges = chainEdgesForDisplay(vfNodes, rawEdges);
 
+  console.log(`[AIEditor:${instanceId}] LoadTree - setting ${vfNodes.length} nodes, ${vfEdges.length} edges`);
+
+  // Set nodes first, then edges after a brief delay to ensure nodes are initialized
   setNodes(vfNodes);
-  setEdges(vfEdges);
 
-  // Fit view after loading
-  setTimeout(() => fitView({ padding: 0.2 }), 100);
+  // Log the edges we're about to set
+  console.log(`[AIEditor:${instanceId}] LoadTree - edges to set:`, vfEdges.map(e => `${e.source}->${e.target}`));
+
+  // Use nextTick to ensure nodes are in the DOM before setting edges
+  // Set isLoadingEdges flag to bypass validation for chain edges
+  nextTick(() => {
+    isLoadingEdges.value = true;
+    setEdges(vfEdges);
+    isLoadingEdges.value = false;
+    console.log(`[AIEditor:${instanceId}] LoadTree - edge count after setEdges: ${edges.value.length}`);
+
+    // Fit view after loading
+    setTimeout(() => fitView({ padding: 0.2 }), 50);
+  });
 }
 
 // Get node color based on type
@@ -388,6 +558,11 @@ function onDragOver(event: DragEvent) {
 
 // Connection validation - determine if connection is valid
 function isValidConnection(connection: Connection): boolean {
+  // Skip validation during programmatic loading (e.g., setEdges for chained sequence display)
+  if (isLoadingEdges.value) {
+    return true;
+  }
+
   const sourceNode = nodes.value.find((n) => n.id === connection.source);
   const targetNode = nodes.value.find((n) => n.id === connection.target);
 
@@ -395,7 +570,8 @@ function isValidConnection(connection: Connection): boolean {
 
   const sourceType = sourceNode.data.type as BehaviorNodeType;
 
-  // Leaf nodes (condition, action) cannot have children
+  // Leaf nodes (condition, action) cannot have children (for user-initiated connections)
+  // Note: Programmatic chain edges bypass this via isLoadingEdges flag
   const leafTypes: BehaviorNodeType[] = ['condition', 'action'];
   if (leafTypes.includes(sourceType)) {
     return false;
@@ -531,13 +707,20 @@ function validateTree() {
     }
   }
 
-  // Check leaf nodes don't have children
+  // Check leaf nodes don't have children (excluding visual chain edges)
+  // Chain edges connect siblings within a Sequence for visual clarity - they're not real parent-child relationships
   const leafTypes: BehaviorNodeType[] = ['condition', 'action'];
+  const leafNodeIds = new Set(
+    nodes.value.filter((n) => leafTypes.includes(n.data.type as BehaviorNodeType)).map((n) => n.id)
+  );
   for (const node of nodes.value) {
     const nodeType = node.data.type as BehaviorNodeType;
     if (leafTypes.includes(nodeType)) {
-      const childCount = edges.value.filter((e) => e.source === node.id).length;
-      if (childCount > 0) {
+      // Count only edges that go to non-leaf nodes (real children, not chain siblings)
+      const realChildCount = edges.value.filter(
+        (e) => e.source === node.id && !leafNodeIds.has(e.target)
+      ).length;
+      if (realChildCount > 0) {
         issues.push({
           nodeId: node.id,
           message: `Leaf node "${node.data.label}" cannot have children`,
@@ -707,13 +890,12 @@ async function autoLayoutTree() {
     console.log(`  ${n.data.label} [${n.id}]: (${n.position.x}, ${n.position.y})`);
   });
 
-  // Use dagre-based layout algorithm
-  // Node dimensions should match actual rendered sizes (min-width: 130px, ~50px tall)
+  // Use dagre-based layout algorithm with dynamic node widths
+  // Node widths are calculated based on label length to prevent overlap
   const arrangedNodes = autoArrangeNodes(nodes.value, edges.value, {
     direction: 'TB',
-    nodeWidth: 140,
     nodeHeight: 50,
-    horizontalSpacing: 40,
+    horizontalSpacing: 50,
     verticalSpacing: 60,
   });
 
@@ -723,8 +905,8 @@ async function autoLayoutTree() {
     console.log(`  ${n.data.label} [${n.id}]: (${n.position.x}, ${n.position.y})`);
   });
 
-  // Store current edges before clearing
-  const currentEdges = edges.value.map((e) => ({
+  // Store current edges before clearing (with fresh data)
+  const currentEdges: Edge[] = edges.value.map((e) => ({
     id: e.id,
     source: e.source,
     target: e.target,
@@ -750,18 +932,26 @@ async function autoLayoutTree() {
     data: { ...n.data },
   }));
 
+  console.log(`[AIEditor:${instanceId}] AutoLayout - ${freshNodes.length} nodes, ${currentEdges.length} edges`);
+
+  // Set nodes first
   setNodes(freshNodes);
-  setEdges(currentEdges);
 
-  console.log(`[AIEditor:${instanceId}] AutoLayout - nodes set, now saving...`);
+  // Use nextTick to ensure nodes are in the DOM before setting edges
+  // Use isLoadingEdges flag to bypass validation for chain edges
+  nextTick(() => {
+    isLoadingEdges.value = true;
+    setEdges(currentEdges);
+    isLoadingEdges.value = false;
+    console.log(`[AIEditor:${instanceId}] AutoLayout - edge count after setEdges: ${edges.value.length}`);
 
-  // Fit viewport to show all nodes after layout settles
-  setTimeout(() => fitView({ padding: 0.2 }), 50);
+    // Fit viewport to show all nodes after layout settles
+    setTimeout(() => fitView({ padding: 0.2 }), 50);
+  });
 
   // Auto-save the new positions for any selected preset (including templates)
   if (selectedPreset.value) {
     try {
-      // Pass the arranged nodes directly (not nodes.value which might be stale)
       await saveTreePositionsWithNodes(freshNodes, currentEdges);
     } catch (err) {
       console.error(`[AIEditor:${instanceId}] AutoLayout save failed:`, err);
@@ -801,6 +991,10 @@ async function saveTreePositionsWithNodes(nodeList: Node[], edgeList: Edge[]) {
     const rootNode = nodeList.find((n) => !nodesWithIncoming.has(n.id));
     const rootId = rootNode?.id ?? nodeList[0]?.id ?? '';
 
+    // Unchain Sequence edges before saving to database
+    // Display uses chained format (A → B → C), but DB stores standard format (Parent → [A, B, C])
+    const unchainedEdges = unchainEdgesForSave(nodeList, edgeList);
+
     const treeData: BehaviorTree = {
       version: 1,
       category: selectedPreset.value.category as 'unit' | 'building',
@@ -816,7 +1010,7 @@ async function saveTreePositionsWithNodes(nodeList: Node[], edgeList: Edge[]) {
         },
         position: { x: n.position.x, y: n.position.y }, // Ensure clean copy
       })),
-      edges: edgeList.map((e) => {
+      edges: unchainedEdges.map((e) => {
         const edge: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string } = {
           id: e.id,
           source: e.source,
@@ -963,7 +1157,8 @@ function startCreate() {
   isEditing.value = false;
   selectedNodeId.value = null;
 
-  // Clear canvas
+  // Clear canvas and collapse state
+  collapsedNodes.value = new Set();
   setNodes([]);
   setEdges([]);
 }
@@ -991,31 +1186,37 @@ async function cancelEdit() {
 
 // Build tree data from current Vue Flow state
 function buildTreeData(): BehaviorTree {
+  // Convert nodes to BehaviorNode format
+  const behaviorNodes = nodes.value.map((n) => ({
+    id: n.id,
+    type: n.data.type as BehaviorNodeType,
+    label: n.data.label as string,
+    params: {
+      ...(n.data.params || {}),
+      // Include conditionId/actionId in params for DB persistence
+      ...(n.data.conditionId && { conditionId: n.data.conditionId }),
+      ...(n.data.actionId && { actionId: n.data.actionId }),
+    },
+    position: n.position,
+  }));
+
+  // Convert edges and unchain Sequence edges back to standard format
+  // (Child1 → Child2 chains become Sequence → [Child1, Child2])
+  const behaviorEdges = edges.value.map((e) => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    ...(e.sourceHandle && { sourceHandle: e.sourceHandle }),
+    ...(e.targetHandle && { targetHandle: e.targetHandle }),
+  }));
+
+  const unchainedEdges = unchainSequenceEdges(behaviorNodes, behaviorEdges);
+
   return {
     version: 1,
     category: selectedPreset.value?.category as 'unit' | 'building' || form.value.category,
-    nodes: nodes.value.map((n) => ({
-      id: n.id,
-      type: n.data.type,
-      label: n.data.label,
-      params: {
-        ...(n.data.params || {}),
-        // Include conditionId/actionId in params for DB persistence
-        ...(n.data.conditionId && { conditionId: n.data.conditionId }),
-        ...(n.data.actionId && { actionId: n.data.actionId }),
-      },
-      position: n.position,
-    })),
-    edges: edges.value.map((e) => {
-      const edge: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string } = {
-        id: e.id,
-        source: e.source,
-        target: e.target,
-      };
-      if (e.sourceHandle) edge.sourceHandle = e.sourceHandle;
-      if (e.targetHandle) edge.targetHandle = e.targetHandle;
-      return edge;
-    }),
+    nodes: behaviorNodes,
+    edges: unchainedEdges,
     rootId: nodes.value[0]?.id ?? '',
   };
 }
@@ -1187,6 +1388,17 @@ watch(() => props.initialPresetId, async (newId) => {
           </svg>
           <span>Auto-Arrange</span>
         </button>
+        <!-- Execution order toggle -->
+        <button
+          v-if="(selectedPreset || isCreating) && nodes.length > 0"
+          class="btn-icon-text"
+          :class="{ active: showExecutionOrder }"
+          title="Toggle execution order numbers"
+          @click="showExecutionOrder = !showExecutionOrder"
+        >
+          <span class="order-toggle-icon">123</span>
+          <span>Order</span>
+        </button>
       </div>
       <div class="header-actions">
         <button
@@ -1298,6 +1510,8 @@ watch(() => props.initialPresetId, async (newId) => {
           :default-edge-options="{ type: 'smoothstep', animated: true, style: { stroke: '#4b5563' } }"
           @node-click="onNodeClick"
           @pane-click="onPaneClick"
+          @node-mouse-enter="(e: any) => hoveredNodeId = e.node.id"
+          @node-mouse-leave="() => hoveredNodeId = null"
           @drop="onDrop"
           @dragover="onDragOver"
         >
@@ -1478,7 +1692,16 @@ watch(() => props.initialPresetId, async (newId) => {
             :node="selectedNode"
             @update:node="handleNodeUpdate"
             @delete:node="handleNodeDelete"
-          />
+          >
+            <template #before-actions>
+              <!-- Logic Flow Panel -->
+              <LogicDescriptionPanel
+                v-if="nodes.length > 0"
+                :nodes="nodes"
+                :edges="edges"
+              />
+            </template>
+          </NodePropertiesPanel>
 
           <!-- Preset actions at bottom -->
           <div v-if="selectedPreset && !selectedPreset.isTemplate" class="properties-actions">
@@ -2300,6 +2523,18 @@ textarea.form-input {
 .btn-icon-text:hover {
   background: #374151;
   color: #e5e5e5;
+}
+
+.btn-icon-text.active {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
+  color: #60a5fa;
+}
+
+.order-toggle-icon {
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: -0.5px;
 }
 
 /* Validation section */

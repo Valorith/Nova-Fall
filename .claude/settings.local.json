@@ -59,7 +59,14 @@
       "Bash(lsof:*)",
       "Bash(pnpm exec prisma db execute:*)",
       "Bash(EOF)",
-      "Bash(pnpm --filter @nova-fall/web build:*)"
+      "Bash(pnpm --filter @nova-fall/web build:*)",
+      "Bash(pnpm --filter @nova-fall/shared --filter @nova-fall/game-logic build:*)",
+      "Bash(xargs kill -9)",
+      "Bash(pnpm --filter web typecheck:*)",
+      "Bash(pnpm --filter=web typecheck:*)",
+      "Bash(pnpm --filter=api db:seed-ai-presets:*)",
+      "Bash(psql:*)",
+      "Bash(pnpm --filter api db:seed-ai-presets:*)"
     ]
   }
 }

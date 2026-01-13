@@ -274,11 +274,11 @@ Examples:
 | Field              | Value                                     |
 | ------------------ | ----------------------------------------- |
 | **Current Phase**  | Phase 4 - Combat System                   |
-| **Phase Progress** | Turret attack system complete (yaw, pitch, laser) |
+| **Phase Progress** | AI Editor polished, Scout/Tank presets added |
 | **Current Task**   | Add barrelOffsetY config field, then continue 4.3 |
 | **Blockers**       | None                                      |
-| **Last Session**   | Session 50 - 2026-01-12                   |
-| **Last Updated**   | 2026-01-12                                |
+| **Last Session**   | Session 52 - 2026-01-13                   |
+| **Last Updated**   | 2026-01-13                                |
 
 ---
 
@@ -367,6 +367,7 @@ Record ALL significant decisions here. If it's not documented, it didn't happen.
 | 2026-01-11 | Unit tileSize configurable (1-10)         | Different unit types can have different footprints     | User        |
 | 2026-01-11 | Switched to macOS development             | Traveling with MacBook Pro                             | User        |
 | 2026-01-12 | barrelOffsetY config per building         | Allows per-turret barrel position tuning without code changes | User   |
+| 2026-01-13 | Dynamic node width for AI Editor layout   | Calculates width from label length to prevent overlap          | Claude |
 
 ---
 
@@ -503,5 +504,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-_Last Updated: 2026-01-12 (Session 50)_
-_Version: 2.0.5 (macOS)_
+_Last Updated: 2026-01-13 (Session 52)_
+_Version: 2.0.6 (macOS)_

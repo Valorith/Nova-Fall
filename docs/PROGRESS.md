@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 4 - Combat System    |
 | **Overall Progress**   | Phases 0-3 complete        |
 | **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 50                         |
+| **Total Sessions**     | 52                         |
 
 ---
 
@@ -3431,6 +3431,67 @@ ARENA_METERS = 480; // 480m x 480m arena
 
 ---
 
+## Session 51 - 2026-01-13
+
+**Duration:** ~1 hour
+**Phase:** Phase 4 - Combat System
+**Focus:** AI Editor - Sequence node chaining visual improvement
+
+### Completed Tasks
+
+**AI Editor Enhancement - Sequence Chaining:**
+- [x] Implemented visual sequence chaining for behavior tree editor
+- [x] Sequence children now display as chains showing execution order
+- [x] Example: `Attack Sequence → Has Target → Target In Range → Attack Target`
+- [x] Added `isLoadingEdges` flag to bypass Vue Flow validation during programmatic loading
+- [x] Auto-Arrange preserves all chained connections correctly
+- [x] Save/Load round-trip works (chain format converts to standard for DB)
+- [x] Removed debug console.log statements from sequenceChaining.ts
+
+### Technical Details
+
+**Problem:**
+- Vue Flow was rejecting chain edges between leaf nodes (action, condition)
+- Console showed 7 edges being set but only 4 accepted
+- `isValidConnection` was being called even for programmatic `setEdges` operations
+
+**Root Cause:**
+```typescript
+// Existing validation blocked leaf nodes from having children
+const leafTypes: BehaviorNodeType[] = ['condition', 'action'];
+if (leafTypes.includes(sourceType)) {
+  return false;
+}
+```
+
+**Solution:**
+- Added `isLoadingEdges` ref flag to AIEditor.vue
+- Modified `isValidConnection` to bypass validation when flag is true
+- Wrapped `setEdges` calls in `loadTreeIntoCanvas` and `autoLayoutTree` with flag toggling
+
+**Key Code Changes:**
+- `AIEditor.vue`: Added `isLoadingEdges` flag and validation bypass
+- `sequenceChaining.ts`: Removed debug console.log statements
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Bypass validation only during programmatic loading | Manual user connections should still be validated |
+| Chain is visual only, DB stores standard format | AI logic depends on standard parent-child relationships |
+
+### Issues Encountered
+
+- **Vue Flow validation on programmatic edges:** Unexpected that `isValidConnection` runs for `setEdges`
+- **Solution:** Flag-based bypass that only activates during load/layout operations
+
+### Next Session Plan
+
+1. Add `barrelOffsetY` config field to BuildingDefinition
+2. Continue with Phase 4.3 - Auto-targeting system
+
+---
+
 ## Session 46 - 2026-01-11
 
 **Duration:** ~2 hours
@@ -3843,4 +3904,76 @@ ARENA_METERS = 480; // 480m x 480m arena
 
 ---
 
-_Last Updated: 2026-01-12 (Session 50 - Turret laser beam origin alignment)_
+## Session 52 - 2026-01-13
+
+**Duration:** ~1 hour
+**Phase:** Phase 4 - Combat System
+**Focus:** AI Editor improvements and new AI presets
+
+### Completed Tasks
+
+**AI Editor Bug Fixes:**
+- [x] Fixed AI Behavior dropdown not appearing (event propagation issue)
+  - Click events were bubbling to document's `handleClickOutside` listener
+  - Added `.stop` modifier to prevent immediate close
+
+**AI Editor UI Improvements:**
+- [x] Added readonly mode to AIPresetSelector component
+  - View mode shows just a label with preset name instead of dropdown
+  - Updated BuildingsEditor.vue and UnitsEditor.vue to use readonly prop
+
+**New AI Presets Created:**
+- [x] Scout AI - Hit-and-run distraction unit
+  - Kites away when targeted
+  - Makes quick strikes on structures when in range
+  - Approaches targets at weapon range (never fully commits)
+  - Patrols when no targets available
+- [x] Tank AI - Protective frontline unit
+  - Interposes between allies and enemy structures
+  - Only engages when supported by non-tank allies
+  - Regroups with allies if isolated (won't suicide alone)
+  - Holds position as fallback
+
+**Auto-Arrange Improvements:**
+- [x] Dynamic node width calculation based on label length
+  - Nodes with longer names no longer overlap
+  - Added `charWidth` (8px/char) and `nodePadding` (50px) options
+  - Increased default `horizontalSpacing` from 40px to 50px
+  - Changed `nodeWidth` to `minNodeWidth` (120px minimum)
+
+### Technical Details
+
+**Files Modified:**
+- `apps/web/src/components/ai-editor/AIPresetSelector.vue` - Bug fix and readonly mode
+- `apps/web/src/components/dev/BuildingsEditor.vue` - Use readonly prop
+- `apps/web/src/components/dev/UnitsEditor.vue` - Use readonly prop
+- `apps/web/src/components/ai-editor/utils/autoLayout.ts` - Dynamic node widths
+- `apps/api/prisma/seed-ai-presets.ts` - Added Scout and Tank AI presets
+
+**AI Preset Count:** 7 total (5 unit, 2 building)
+
+### Decisions Made
+
+| Decision | Rationale |
+|----------|-----------|
+| Dynamic node width for AI Editor layout | Prevents overlap for nodes with long labels |
+
+### Issues Encountered
+
+- **AI dropdown not opening:** Click event bubbled to `handleClickOutside` which immediately closed dropdown. Fixed by adding `.stop` modifier to click handlers.
+
+### Notes
+
+- Session 51's sequence chaining work continues to function correctly
+- All AI presets display properly in the AI Editor
+- Auto-arrange now handles varying node widths gracefully
+
+### Next Session Plan
+
+1. Add `barrelOffsetY` config field to BuildingDefinition
+2. Continue Section 4.3: Full Combat Features
+3. Implement auto-targeting for towers
+
+---
+
+_Last Updated: 2026-01-13 (Session 52 - AI Editor improvements)_

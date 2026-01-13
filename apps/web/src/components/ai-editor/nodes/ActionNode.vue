@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Handle, Position } from '@vue-flow/core';
+import { generateNodeTooltip, type NodeData } from '../utils/tooltipGenerator';
 
 interface Props {
   id: string;
@@ -9,6 +10,9 @@ interface Props {
     type: string;
     actionId?: string;
     params: Record<string, unknown>;
+    comment?: string;
+    executionOrder?: number;
+    dimmed?: boolean;
   };
   selected?: boolean;
 }
@@ -33,11 +37,31 @@ const paramPreview = computed(() => {
   if (radius) return `r: ${radius}`;
   return '';
 });
+
+const tooltip = computed(() => {
+  return generateNodeTooltip(props.data as NodeData, 0);
+});
 </script>
 
 <template>
-  <div class="action-node" :class="{ selected: props.selected }">
+  <div
+    class="action-node"
+    :class="{ selected: props.selected, dimmed: props.data.dimmed }"
+    :title="tooltip"
+  >
     <Handle type="target" :position="Position.Top" class="handle handle-target" />
+
+    <!-- Comment indicator -->
+    <span v-if="data.comment" class="comment-indicator" :title="data.comment">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4V4c0-1.1-.9-2-2-2z" />
+      </svg>
+    </span>
+
+    <!-- Execution order badge -->
+    <span v-if="data.executionOrder" class="execution-badge">
+      {{ data.executionOrder }}
+    </span>
 
     <div class="node-header">
       <span class="node-icon">!</span>
@@ -48,12 +72,15 @@ const paramPreview = computed(() => {
       <span class="param-preview">{{ paramPreview }}</span>
     </div>
 
-    <!-- Actions are leaves - no source handle -->
+    <!-- Source handle for Sequence chaining (visual only - actions are still leaves in the behavior tree) -->
+    <!-- No id attribute so this becomes the default source handle -->
+    <Handle type="source" :position="Position.Bottom" class="handle handle-source" />
   </div>
 </template>
 
 <style scoped>
 .action-node {
+  position: relative;
   background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   border: 2px solid #15803d;
   border-radius: 8px;
@@ -71,6 +98,11 @@ const paramPreview = computed(() => {
 .action-node:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(34, 197, 94, 0.4);
+}
+
+.action-node.dimmed {
+  opacity: 0.4;
+  filter: grayscale(40%);
 }
 
 .node-header {
@@ -125,5 +157,43 @@ const paramPreview = computed(() => {
 
 .handle-target {
   top: -5px;
+}
+
+.handle-source {
+  bottom: -5px;
+}
+
+.comment-indicator {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #6b7280;
+  border-radius: 50%;
+  color: #fff;
+  z-index: 10;
+  cursor: help;
+}
+
+.execution-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #3b82f6;
+  border: 2px solid #1d4ed8;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  z-index: 10;
 }
 </style>

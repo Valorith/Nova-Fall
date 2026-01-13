@@ -7,10 +7,12 @@ interface Props {
   modelValue: string | null;
   category: 'unit' | 'building';
   disabled?: boolean;
+  readonly?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   disabled: false,
+  readonly: false,
 });
 
 const emit = defineEmits<{
@@ -114,8 +116,17 @@ onUnmounted(() => {
 
 <template>
   <div class="ai-preset-selector">
+    <!-- Readonly mode - just show a label -->
+    <div v-if="readonly" class="readonly-display">
+      <span v-if="selectedPreset" class="preset-name-readonly">
+        {{ selectedPreset.name }}
+        <span v-if="selectedPreset.isTemplate" class="template-badge">T</span>
+      </span>
+      <span v-else class="no-preset-readonly">None</span>
+    </div>
+
     <!-- Current selection / Button to open -->
-    <div v-if="!showDropdown" class="selector-display" @click="openDropdown">
+    <div v-else-if="!showDropdown" class="selector-display" @click.stop="openDropdown">
       <div v-if="selectedPreset" class="selected-preset">
         <div class="preset-info">
           <span class="preset-name">{{ selectedPreset.name }}</span>
@@ -148,7 +159,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Dropdown -->
-    <div v-if="showDropdown" class="selector-dropdown">
+    <div v-if="showDropdown" class="selector-dropdown" @click.stop>
       <div class="dropdown-header">
         <input
           v-model="searchQuery"
@@ -425,5 +436,26 @@ onUnmounted(() => {
 
 .btn-remove:hover {
   background: rgba(239, 68, 68, 0.25);
+}
+
+/* Readonly mode */
+.readonly-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preset-name-readonly {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #e5e5e5;
+}
+
+.no-preset-readonly {
+  font-size: 14px;
+  color: #6b7280;
+  font-style: italic;
 }
 </style>

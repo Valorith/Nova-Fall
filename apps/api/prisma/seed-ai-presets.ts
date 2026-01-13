@@ -310,6 +310,220 @@ const AREA_DENIAL: BehaviorTree = {
   ],
 };
 
+// Scout AI - Hit-and-run distraction tactics
+// Quickly engages enemy defenses then retreats to draw fire away from other units
+const SCOUT: BehaviorTree = {
+  version: 1,
+  category: 'unit',
+  rootId: 'root',
+  nodes: [
+    {
+      id: 'root',
+      type: 'selector',
+      label: 'Scout AI',
+      params: {},
+      position: { x: 300, y: 0 },
+    },
+    // Priority 1: Kite away if being targeted and took damage recently
+    {
+      id: 'kite_seq',
+      type: 'sequence',
+      label: 'Kite Away',
+      params: {},
+      position: { x: 50, y: 100 },
+    },
+    {
+      id: 'is_targeted',
+      type: 'condition',
+      label: 'Being Targeted',
+      params: { conditionId: 'is_being_targeted' },
+      position: { x: 0, y: 200 },
+    },
+    {
+      id: 'kite_action',
+      type: 'action',
+      label: 'Kite Away',
+      params: { actionId: 'kite_away', distance: 6, maintain_range: true },
+      position: { x: 100, y: 200 },
+    },
+    // Priority 2: Quick strike if enemy in range
+    {
+      id: 'strike_seq',
+      type: 'sequence',
+      label: 'Quick Strike',
+      params: {},
+      position: { x: 250, y: 100 },
+    },
+    {
+      id: 'enemy_in_range',
+      type: 'condition',
+      label: 'Enemy In Range',
+      params: { conditionId: 'enemy_in_range', range_mult: 1.0 },
+      position: { x: 200, y: 200 },
+    },
+    {
+      id: 'quick_attack',
+      type: 'action',
+      label: 'Quick Attack',
+      params: { actionId: 'attack_nearest', filter: 'structure', burst_count: 2 },
+      position: { x: 300, y: 200 },
+    },
+    // Priority 3: Approach enemy structures at max range
+    {
+      id: 'approach_seq',
+      type: 'sequence',
+      label: 'Approach Target',
+      params: {},
+      position: { x: 450, y: 100 },
+    },
+    {
+      id: 'set_structure_target',
+      type: 'action',
+      label: 'Find Structure',
+      params: { actionId: 'set_target', filter: 'structure', priority: 'nearest' },
+      position: { x: 400, y: 200 },
+    },
+    {
+      id: 'approach_at_range',
+      type: 'action',
+      label: 'Approach at Range',
+      params: { actionId: 'move_to_target', stop_at_range: true, range_mult: 0.95 },
+      position: { x: 500, y: 200 },
+    },
+    // Fallback: Patrol/scout around
+    {
+      id: 'patrol_action',
+      type: 'action',
+      label: 'Patrol Area',
+      params: { actionId: 'patrol', radius: 10, speed_mult: 1.2 },
+      position: { x: 650, y: 100 },
+    },
+  ],
+  edges: [
+    { id: 'e1', source: 'root', target: 'kite_seq' },
+    { id: 'e2', source: 'root', target: 'strike_seq' },
+    { id: 'e3', source: 'root', target: 'approach_seq' },
+    { id: 'e4', source: 'root', target: 'patrol_action' },
+    { id: 'e5', source: 'kite_seq', target: 'is_targeted' },
+    { id: 'e6', source: 'kite_seq', target: 'kite_action' },
+    { id: 'e7', source: 'strike_seq', target: 'enemy_in_range' },
+    { id: 'e8', source: 'strike_seq', target: 'quick_attack' },
+    { id: 'e9', source: 'approach_seq', target: 'set_structure_target' },
+    { id: 'e10', source: 'approach_seq', target: 'approach_at_range' },
+  ],
+};
+
+// Tank AI - Protective frontline unit that shields allies
+// Absorbs damage from enemy structures, only engages when allies are present
+const TANK: BehaviorTree = {
+  version: 1,
+  category: 'unit',
+  rootId: 'root',
+  nodes: [
+    {
+      id: 'root',
+      type: 'selector',
+      label: 'Tank AI',
+      params: {},
+      position: { x: 350, y: 0 },
+    },
+    // Priority 1: Position between allies and enemies when allies nearby
+    {
+      id: 'protect_seq',
+      type: 'sequence',
+      label: 'Shield Allies',
+      params: {},
+      position: { x: 50, y: 100 },
+    },
+    {
+      id: 'has_allies',
+      type: 'condition',
+      label: 'Has Nearby Allies',
+      params: { conditionId: 'friendly_count', operator: '>', value: 0, radius: 15, exclude_role: 'tank' },
+      position: { x: 0, y: 200 },
+    },
+    {
+      id: 'enemy_structure_exists',
+      type: 'condition',
+      label: 'Enemy Structure Exists',
+      params: { conditionId: 'enemy_count', operator: '>', value: 0, radius: 20, filter: 'structure' },
+      position: { x: 100, y: 200 },
+    },
+    {
+      id: 'interpose',
+      type: 'action',
+      label: 'Interpose',
+      params: { actionId: 'interpose', ally_filter: 'nearest_non_tank', enemy_filter: 'structure' },
+      position: { x: 200, y: 200 },
+    },
+    // Priority 2: Engage and loiter if allies nearby (tank for team)
+    {
+      id: 'engage_seq',
+      type: 'sequence',
+      label: 'Engage with Support',
+      params: {},
+      position: { x: 300, y: 100 },
+    },
+    {
+      id: 'has_support',
+      type: 'condition',
+      label: 'Has Support',
+      params: { conditionId: 'friendly_count', operator: '>', value: 0, radius: 12, exclude_role: 'tank' },
+      position: { x: 280, y: 200 },
+    },
+    {
+      id: 'loiter_attack',
+      type: 'action',
+      label: 'Loiter and Attack',
+      params: { actionId: 'loiter_attack', filter: 'structure', loiter_radius: 3, priority: 'nearest' },
+      position: { x: 380, y: 200 },
+    },
+    // Priority 3: Move to allies if alone (don't suicide)
+    {
+      id: 'regroup_seq',
+      type: 'sequence',
+      label: 'Regroup',
+      params: {},
+      position: { x: 500, y: 100 },
+    },
+    {
+      id: 'is_alone',
+      type: 'condition',
+      label: 'Is Alone',
+      params: { conditionId: 'friendly_count', operator: '==', value: 0, radius: 15, exclude_role: 'tank' },
+      position: { x: 480, y: 200 },
+    },
+    {
+      id: 'move_to_allies',
+      type: 'action',
+      label: 'Move To Allies',
+      params: { actionId: 'move_to_friendly', filter: 'non_tank', priority: 'nearest' },
+      position: { x: 580, y: 200 },
+    },
+    // Fallback: Hold position and wait
+    {
+      id: 'hold_position',
+      type: 'action',
+      label: 'Hold Position',
+      params: { actionId: 'hold_position' },
+      position: { x: 700, y: 100 },
+    },
+  ],
+  edges: [
+    { id: 'e1', source: 'root', target: 'protect_seq' },
+    { id: 'e2', source: 'root', target: 'engage_seq' },
+    { id: 'e3', source: 'root', target: 'regroup_seq' },
+    { id: 'e4', source: 'root', target: 'hold_position' },
+    { id: 'e5', source: 'protect_seq', target: 'has_allies' },
+    { id: 'e6', source: 'protect_seq', target: 'enemy_structure_exists' },
+    { id: 'e7', source: 'protect_seq', target: 'interpose' },
+    { id: 'e8', source: 'engage_seq', target: 'has_support' },
+    { id: 'e9', source: 'engage_seq', target: 'loiter_attack' },
+    { id: 'e10', source: 'regroup_seq', target: 'is_alone' },
+    { id: 'e11', source: 'regroup_seq', target: 'move_to_allies' },
+  ],
+};
+
 // ==================== TEMPLATES LIST ====================
 
 const templates = [
@@ -332,6 +546,22 @@ const templates = [
     description: 'Prioritizes protecting low-health allies. Falls back to attacking if no allies need help.',
     category: 'unit',
     treeData: SUPPORT_HEALER,
+    isTemplate: true,
+  },
+  {
+    name: 'Scout',
+    description:
+      'Hit-and-run distraction unit. Probes enemy defenses by moving in and out of range, drawing fire away from other units. Never fully commits to an attack.',
+    category: 'unit',
+    treeData: SCOUT,
+    isTemplate: true,
+  },
+  {
+    name: 'Tank',
+    description:
+      'Protective frontline unit that absorbs damage for allies. Positions between friendly units and enemy structures. Will not engage alone - regroups with allies if isolated.',
+    category: 'unit',
+    treeData: TANK,
     isTemplate: true,
   },
   {

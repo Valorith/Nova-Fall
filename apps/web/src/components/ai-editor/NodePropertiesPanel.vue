@@ -22,6 +22,7 @@ const emit = defineEmits<{
 
 // Local form state for editing
 const localLabel = ref('');
+const localComment = ref('');
 const localParams = ref<Record<string, unknown>>({});
 const selectedDefinitionId = ref<string | null>(null);
 
@@ -31,6 +32,7 @@ watch(
   (newNode) => {
     if (newNode) {
       localLabel.value = newNode.data.label || '';
+      localComment.value = (newNode.data.comment as string) || '';
       localParams.value = { ...((newNode.data.params as Record<string, unknown>) || {}) };
       selectedDefinitionId.value =
         (newNode.data.conditionId as string) || (newNode.data.actionId as string) || null;
@@ -130,6 +132,14 @@ function updateLabel() {
   });
 }
 
+function updateComment() {
+  if (!props.node) return;
+  emit('update:node', props.node.id, {
+    ...props.node.data,
+    comment: localComment.value || undefined, // Remove if empty
+  });
+}
+
 function updateDefinition(defId: string) {
   if (!props.node) return;
   selectedDefinitionId.value = defId;
@@ -209,6 +219,21 @@ function formatNodeType(type: string): string {
           placeholder="Node label"
           @blur="updateLabel"
           @keyup.enter="updateLabel"
+        />
+      </div>
+
+      <!-- Comment Editor -->
+      <div class="property-section">
+        <label class="property-label">
+          Comment
+          <span class="optional-tag">(optional)</span>
+        </label>
+        <textarea
+          v-model="localComment"
+          class="property-input comment-input"
+          placeholder="Add notes about this node..."
+          rows="3"
+          @blur="updateComment"
         />
       </div>
 
@@ -325,6 +350,9 @@ function formatNodeType(type: string): string {
         </div>
       </div>
 
+      <!-- Slot for additional content (like LogicDescriptionPanel) -->
+      <slot name="before-actions"></slot>
+
       <!-- Delete Button -->
       <div class="actions-section">
         <button class="btn-delete" @click="deleteNode">Delete Node</button>
@@ -401,13 +429,22 @@ function formatNodeType(type: string): string {
 }
 
 .property-label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   font-weight: 600;
   color: #9ca3af;
   text-transform: uppercase;
   margin-bottom: 8px;
   letter-spacing: 0.5px;
+}
+
+.optional-tag {
+  font-size: 10px;
+  font-weight: 400;
+  color: #6b7280;
+  text-transform: lowercase;
 }
 
 .property-input,
@@ -430,6 +467,14 @@ function formatNodeType(type: string): string {
 
 .property-input::placeholder {
   color: #4b5563;
+}
+
+.comment-input {
+  resize: vertical;
+  min-height: 60px;
+  max-height: 150px;
+  font-family: inherit;
+  line-height: 1.4;
 }
 
 .definition-description {
