@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData, type TransferData } from '../game';
+import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData, type TransferData, type LoadProgressCallback } from '../game';
 import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, NODE_CLAIM_COST_BY_TIER, nodeRequiresCore, getNodeProduction, nodeHasProduction, nodeSupportsCrafting, RESOURCES, getCraftingProgress, type MapNode, type ResourceStorage, type ItemStorage, type CraftingQueueItem, type CraftingQueue, type TileType } from '@nova-fall/shared';
 import PlayerResourcesPanel, { type UpkeepBreakdownItem, type IncomeBreakdownItem } from '@/components/game/PlayerResourcesPanel.vue';
 import ResourceDisplay from '@/components/game/ResourceDisplay.vue';
@@ -16,6 +16,7 @@ import CoreSlotPanel from '@/components/game/CoreSlotPanel.vue';
 import CraftingPanel from '@/components/game/CraftingPanel.vue';
 import BlueprintLearnModal from '@/components/game/BlueprintLearnModal.vue';
 import CombatView from '@/components/game/CombatView.vue';
+import MapLoadingOverlay from '@/components/game/MapLoadingOverlay.vue';
 import type { VictoryEvent } from '@/services/socket';
 import { useGameStore } from '@/stores/game';
 import { useAuthStore } from '@/stores/auth';
@@ -52,6 +53,11 @@ const isBlueprintLearnOpen = ref(false);
 const selectedBlueprintItemId = ref<string | null>(null);
 const inCombatView = ref(false);
 const combatViewRef = ref<InstanceType<typeof CombatView> | null>(null);
+
+// Map loading state
+const isMapLoading = ref(true);
+const loadingProgress = ref(0);
+const loadingStage = ref('Initializing...');
 
 // Transfer mode state (for click-to-select-destination flow)
 const isTransferMode = ref(false);
@@ -507,6 +513,18 @@ function generateMockMapData(): { nodes: MapNode[]; connections: ConnectionData[
   return { nodes, connections };
 }
 
+// Progress callback for map loading
+const handleLoadProgress: LoadProgressCallback = (stage, progress) => {
+  loadingStage.value = stage;
+  loadingProgress.value = progress;
+  if (progress >= 100) {
+    // Small delay before hiding to let the 100% state show
+    setTimeout(() => {
+      isMapLoading.value = false;
+    }, 300);
+  }
+};
+
 onMounted(async () => {
   if (!gameContainer.value) return;
 
@@ -567,7 +585,7 @@ onMounted(async () => {
     const { nodes, connections } = generateMockMapData();
     // Store mock nodes in the game store (batch load to avoid triggering updates)
     gameStore.loadNodesBatch(nodes);
-    engine.value.loadMapData(nodes, connections);
+    engine.value.loadMapData(nodes, connections, handleLoadProgress);
     engine.value.setPlayerNames(extractPlayerNames(nodes));
 
     // Generate mock storage for claimed nodes
@@ -668,9 +686,10 @@ onMounted(async () => {
       await itemsStore.reloadItems();
 
       // Load from API with session scope
+      handleLoadProgress('Loading map data from server...', 0);
       await gameStore.loadMapData(props.sessionId);
       if (!engine.value) return; // Component unmounted during async operation
-      engine.value.loadMapData(gameStore.nodeList, gameStore.connections);
+      engine.value.loadMapData(gameStore.nodeList, gameStore.connections, handleLoadProgress);
       engine.value.setPlayerNames(extractPlayerNames(gameStore.nodeList));
 
       // Load player resources from the session
@@ -691,7 +710,7 @@ onMounted(async () => {
       // Fallback to mock data
       const { nodes, connections } = generateMockMapData();
       gameStore.loadNodesBatch(nodes);
-      engine.value.loadMapData(nodes, connections);
+      engine.value.loadMapData(nodes, connections, handleLoadProgress);
       engine.value.setPlayerNames(extractPlayerNames(nodes));
     }
   }
@@ -884,7 +903,8 @@ function handleEnterCombat() {
     combatDuration: 1800,
   };
 
-  // Enter combat view
+  // Close the node details panel and enter combat view
+  selectedNodeIds.value = [];
   inCombatView.value = true;
   combatViewRef.value?.enterCombat(mockSetup, playerId);
 }
@@ -1499,6 +1519,13 @@ function handleBlueprintLearned(storage: Record<string, number>) {
       @exit="handleExitCombat"
     />
 
+    <!-- Map Loading Overlay -->
+    <MapLoadingOverlay
+      :visible="isMapLoading"
+      :progress="loadingProgress"
+      :stage="loadingStage"
+    />
+
     <!-- Transfer Mode Connector Line -->
     <svg
       v-if="isTransferMode && sourceNodeScreenPos"
@@ -1552,8 +1579,8 @@ function handleBlueprintLearned(storage: Record<string, number>) {
 
     <!-- UI Overlay -->
     <div class="pointer-events-none absolute inset-0">
-      <!-- Dev Panel (top-left, below navbar) -->
-      <div class="pointer-events-auto absolute top-14 left-4 z-50">
+      <!-- Dev Panel (top-left, below navbar) - hidden in combat mode -->
+      <div v-show="!inCombatView" class="pointer-events-auto absolute top-14 left-4 z-50">
         <DevPanel
           :resources="playerResources"
           :can-claim-node="canClaimNodeFree"

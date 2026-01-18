@@ -1,6 +1,6 @@
 import { prisma } from '../../lib/prisma.js';
 import type { UnitDefinitionInput, UnitDefinitionListQuery } from './types.js';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 export const unitDefinitionService = {
   // Get all unit definitions with optional filtering
@@ -84,6 +84,11 @@ export const unitDefinitionService = {
     if (data.projectileSpeed !== undefined) createData.projectileSpeed = data.projectileSpeed;
     if (data.burstCount !== undefined) createData.burstCount = data.burstCount;
     if (data.burstInterval !== undefined) createData.burstInterval = data.burstInterval;
+    // Rotation clamps
+    if (data.yawClampMin !== undefined) createData.yawClampMin = data.yawClampMin;
+    if (data.yawClampMax !== undefined) createData.yawClampMax = data.yawClampMax;
+    if (data.pitchClampMin !== undefined) createData.pitchClampMin = data.pitchClampMin;
+    if (data.pitchClampMax !== undefined) createData.pitchClampMax = data.pitchClampMax;
     if (data.category !== undefined) createData.category = data.category;
     if (data.aiPresetId) {
       createData.aiPreset = { connect: { id: data.aiPresetId } };
@@ -113,6 +118,21 @@ export const unitDefinitionService = {
     if (data.projectileSpeed !== undefined) updateData.projectileSpeed = data.projectileSpeed;
     if (data.burstCount !== undefined) updateData.burstCount = data.burstCount;
     if (data.burstInterval !== undefined) updateData.burstInterval = data.burstInterval;
+    if (data.barrelOffsetY !== undefined) updateData.barrelOffsetY = data.barrelOffsetY;
+    if (data.barrelMeshName !== undefined) updateData.barrelMeshName = data.barrelMeshName;
+    if (data.meshPartFlags !== undefined) {
+      updateData.meshPartFlags = data.meshPartFlags === null ? Prisma.DbNull : data.meshPartFlags;
+    }
+    if (data.barrelLinePosition !== undefined) {
+      updateData.barrelLinePosition = data.barrelLinePosition === null
+        ? Prisma.DbNull
+        : (data.barrelLinePosition as unknown as Prisma.InputJsonValue);
+    }
+    // Rotation clamps
+    if (data.yawClampMin !== undefined) updateData.yawClampMin = data.yawClampMin;
+    if (data.yawClampMax !== undefined) updateData.yawClampMax = data.yawClampMax;
+    if (data.pitchClampMin !== undefined) updateData.pitchClampMin = data.pitchClampMin;
+    if (data.pitchClampMax !== undefined) updateData.pitchClampMax = data.pitchClampMax;
     if (data.category !== undefined) updateData.category = data.category;
     if (data.aiPresetId !== undefined) {
       if (data.aiPresetId === null) {
@@ -178,6 +198,15 @@ export const unitDefinitionService = {
         projectileSpeed: original.projectileSpeed,
         burstCount: original.burstCount,
         burstInterval: original.burstInterval,
+        barrelOffsetY: original.barrelOffsetY,
+        barrelMeshName: original.barrelMeshName,
+        meshPartFlags: original.meshPartFlags as Prisma.InputJsonValue ?? Prisma.DbNull,
+        barrelLinePosition: original.barrelLinePosition as Prisma.InputJsonValue ?? Prisma.DbNull,
+        // Rotation clamps
+        yawClampMin: original.yawClampMin,
+        yawClampMax: original.yawClampMax,
+        pitchClampMin: original.pitchClampMin,
+        pitchClampMax: original.pitchClampMax,
         category: original.category,
       },
     });

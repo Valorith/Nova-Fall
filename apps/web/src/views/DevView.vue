@@ -6,9 +6,10 @@ import UnitsEditor from '@/components/dev/UnitsEditor.vue';
 import BuildingsEditor from '@/components/dev/BuildingsEditor.vue';
 import SettingsEditor from '@/components/dev/SettingsEditor.vue';
 import AIEditor from '@/components/dev/AIEditor.vue';
+import ModelCalibrationPanel from '@/components/dev/ModelCalibrationPanel.vue';
 
 // Dev panel tabs
-type DevTab = 'blueprints' | 'items' | 'units' | 'buildings' | 'ai' | 'settings' | 'debug';
+type DevTab = 'blueprints' | 'items' | 'units' | 'buildings' | 'ai' | 'calibration' | 'settings' | 'debug';
 
 const activeTab = ref<DevTab>('blueprints');
 
@@ -21,6 +22,7 @@ const tabs: { id: DevTab; label: string; icon: string }[] = [
   { id: 'units', label: 'Units', icon: 'U' },
   { id: 'buildings', label: 'Buildings', icon: 'G' },
   { id: 'ai', label: 'AI Editor', icon: 'A' },
+  { id: 'calibration', label: 'Model Calibration', icon: 'M' },
   { id: 'settings', label: 'Settings', icon: 'S' },
   { id: 'debug', label: 'Debug', icon: 'D' },
 ];
@@ -72,6 +74,8 @@ function navigateToAIEditor(presetId: string) {
       <BuildingsEditor v-else-if="activeTab === 'buildings'" @navigate-to-ai-editor="navigateToAIEditor" />
 
       <AIEditor v-else-if="activeTab === 'ai'" :initial-preset-id="aiEditorPresetId" @preset-loaded="aiEditorPresetId = null" />
+
+      <ModelCalibrationPanel v-else-if="activeTab === 'calibration'" />
 
       <SettingsEditor v-else-if="activeTab === 'settings'" />
 

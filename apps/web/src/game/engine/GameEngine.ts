@@ -3,7 +3,7 @@ import type { CameraOptions } from './Camera';
 import { Camera } from './Camera';
 import type { MapNode, RoadType } from '@nova-fall/shared';
 import { MAP_BOUNDS } from '@nova-fall/shared';
-import { WorldRenderer, type TransferData } from '../rendering/WorldRenderer';
+import { WorldRenderer, type TransferData, type LoadProgressCallback } from '../rendering/WorldRenderer';
 
 export interface GameEngineOptions {
   container: HTMLElement;
@@ -50,7 +50,7 @@ export class GameEngine {
   private _currentZoomLevel: ZoomLevel = 'strategic';
 
   // Pending data (if loadMapData called before ready)
-  private _pendingMapData: { nodes: MapNode[]; connections: ConnectionData[] } | null = null;
+  private _pendingMapData: { nodes: MapNode[]; connections: ConnectionData[]; onProgress?: LoadProgressCallback } | null = null;
 
   // Selection state
   private _selectedNodeIds = new Set<string>();
@@ -154,7 +154,7 @@ export class GameEngine {
 
     // Process pending map data if any
     if (this._pendingMapData) {
-      this.worldRenderer.setMapData(this._pendingMapData.nodes, this._pendingMapData.connections);
+      this.worldRenderer.setMapData(this._pendingMapData.nodes, this._pendingMapData.connections, this._pendingMapData.onProgress);
       this._pendingMapData = null;
     }
   }
@@ -466,12 +466,14 @@ export class GameEngine {
   }
 
   // Load map data
-  public loadMapData(nodes: MapNode[], connections: ConnectionData[]) {
+  public loadMapData(nodes: MapNode[], connections: ConnectionData[], onProgress?: LoadProgressCallback) {
     if (this._isReady) {
-      this.worldRenderer.setMapData(nodes, connections);
+      this.worldRenderer.setMapData(nodes, connections, onProgress);
     } else {
-      // Queue for when ready
-      this._pendingMapData = { nodes, connections };
+      // Queue for when ready - only include onProgress if defined
+      this._pendingMapData = onProgress
+        ? { nodes, connections, onProgress }
+        : { nodes, connections };
     }
   }
 

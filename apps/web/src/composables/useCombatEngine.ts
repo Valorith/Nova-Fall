@@ -11,7 +11,7 @@
  * This is intentional - there's only one combat engine instance.
  */
 
-import { ref, shallowRef, onUnmounted, readonly, computed } from 'vue';
+import { ref, shallowRef, onMounted, onUnmounted, readonly, computed } from 'vue';
 import { CombatEngine } from '../game/combat';
 import type {
   CombatSetup,
@@ -36,6 +36,10 @@ const currentPlayerId = ref<string | null>(null);
 const combatResult = ref<CombatResult | null>(null);
 const error = ref<string | null>(null);
 
+// Reference count for components using this composable
+// Only dispose engine when all components unmount
+let componentRefCount = 0;
+
 // Core health state
 const coreHealth = ref<HQState>({
   health: 100,
@@ -47,6 +51,10 @@ const coreHealth = ref<HQState>({
 const timeRemaining = ref(30 * 60); // 30 minutes in seconds
 
 export function useCombatEngine() {
+  // Track component mount/unmount for reference counting
+  onMounted(() => {
+    componentRefCount++;
+  });
 
   // Computed values for UI
   const coreHealthPercent = computed(() =>
@@ -289,6 +297,18 @@ export function useCombatEngine() {
   };
 
   /**
+   * Spawn a unit at exact world coordinates for dev testing (no grid snapping)
+   */
+  const devSpawnUnitAtWorld = (
+    unitDef: DbUnitDefinition,
+    worldX: number,
+    worldZ: number,
+    team: 'attacker' | 'defender'
+  ): string | null => {
+    return engine.value?.devSpawnUnitAtWorld(unitDef, worldX, worldZ, team) ?? null;
+  };
+
+  /**
    * Place a building at position for dev testing
    */
   const devPlaceBuilding = (
@@ -319,6 +339,105 @@ export function useCombatEngine() {
    */
   const inspectModelPack = async (modelPath: string): Promise<string[]> => {
     return engine.value?.inspectModelPack(modelPath) ?? [];
+  };
+
+  /**
+   * Get list of all placed buildings (for calibration dropdown)
+   */
+  const getPlacedBuildings = (): { id: string; name: string; hasTurret: boolean }[] => {
+    return engine.value?.getPlacedBuildings() ?? [];
+  };
+
+  /**
+   * Get barrel offset info for a building (for calibration UI)
+   */
+  const getBuildingBarrelInfo = (
+    buildingId: string
+  ): {
+    hasTurret: boolean;
+    hasBarrelLine: boolean;
+  } | null => {
+    return engine.value?.getBuildingBarrelInfo(buildingId) ?? null;
+  };
+
+  /**
+   * Show calibration marker for a building's barrel tip
+   */
+  const showCalibrationMarker = (buildingId: string): boolean => {
+    return engine.value?.showCalibrationMarker(buildingId) ?? false;
+  };
+
+  /**
+   * Hide calibration marker
+   */
+  const hideCalibrationMarker = (): void => {
+    engine.value?.hideCalibrationMarker();
+  };
+
+  /**
+   * Fire a test laser from calibration marker
+   */
+  const fireCalibrationTestLaser = (): void => {
+    engine.value?.fireCalibrationTestLaser();
+  };
+
+  /**
+   * Get current calibration building ID
+   */
+  const getCalibrationBuildingId = (): string | null => {
+    return engine.value?.getCalibrationBuildingId() ?? null;
+  };
+
+  // ========================================
+  // Mesh Inspection & Highlighting
+  // ========================================
+
+  /**
+   * Get all mesh names from a building or unit's 3D model
+   */
+  const getEntityMeshNames = (entityType: 'building' | 'unit', entityId: string): string[] => {
+    return engine.value?.getEntityMeshNames(entityType, entityId) ?? [];
+  };
+
+  /**
+   * Highlight a specific mesh with a color
+   */
+  const highlightEntityMesh = (
+    entityType: 'building' | 'unit',
+    entityId: string,
+    meshName: string,
+    color: { r: number; g: number; b: number }
+  ): void => {
+    engine.value?.highlightEntityMesh(entityType, entityId, meshName, color);
+  };
+
+  /**
+   * Clear all mesh highlights and restore original materials
+   */
+  const clearEntityMeshHighlights = (entityType: 'building' | 'unit', entityId: string): void => {
+    engine.value?.clearEntityMeshHighlights(entityType, entityId);
+  };
+
+  /**
+   * Update barrel Y offset for a building or unit (runtime adjustment)
+   */
+  const updateEntityBarrelOffsetY = (
+    entityType: 'building' | 'unit',
+    entityId: string,
+    offsetY: number
+  ): void => {
+    engine.value?.updateEntityBarrelOffsetY(entityType, entityId, offsetY);
+  };
+
+  /**
+   * Set barrel mesh name for a building or unit (runtime override)
+   */
+  const setEntityBarrelMeshName = (
+    entityType: 'building' | 'unit',
+    entityId: string,
+    meshName: string
+  ): void => {
+    engine.value?.setEntityBarrelMeshName(entityType, entityId, meshName);
   };
 
   // ========================================
@@ -354,27 +473,100 @@ export function useCombatEngine() {
   };
 
   /**
-   * Force attack ground at position
+   * Force attack ground at grid position (snaps to tile center)
    */
   const forceAttackGround = (buildingId: string, position: ArenaPosition): boolean => {
     return engine.value?.forceAttackGround(buildingId, position) ?? false;
   };
 
   /**
-   * Cleanup on unmount
+   * Force attack ground at exact world coordinates (precise targeting)
+   */
+  const forceAttackGroundWorld = (buildingId: string, worldX: number, worldZ: number): boolean => {
+    return engine.value?.forceAttackGroundWorld(buildingId, worldX, worldZ) ?? false;
+  };
+
+  /**
+   * Convert screen coordinates to exact world position
+   */
+  const screenToWorld = (
+    screenX: number,
+    screenY: number
+  ): { x: number; y: number; z: number } | null => {
+    return engine.value?.screenToWorld(screenX, screenY) ?? null;
+  };
+
+  /**
+   * Force attack a unit by ID (uses unit's actual visual position for pinpoint accuracy)
+   */
+  const forceAttackUnit = (buildingId: string, targetUnitId: string): boolean => {
+    return engine.value?.forceAttackUnit(buildingId, targetUnitId) ?? false;
+  };
+
+  /**
+   * Get a unit's current visual world position
+   */
+  const getUnitWorldPosition = (unitId: string): { x: number; y: number; z: number } | null => {
+    return engine.value?.getUnitWorldPosition(unitId) ?? null;
+  };
+
+  /**
+   * Get all unit IDs in the arena
+   */
+  const getAllUnitIds = (): string[] => {
+    return engine.value?.getAllUnitIds() ?? [];
+  };
+
+  /**
+   * Issue a kill command - turret will track and attack unit until dead
+   */
+  const issueKillCommand = (buildingId: string, targetUnitId: string): boolean => {
+    return engine.value?.issueKillCommand(buildingId, targetUnitId) ?? false;
+  };
+
+  /**
+   * Cancel a kill command
+   */
+  const cancelKillCommand = (buildingId: string): void => {
+    engine.value?.cancelKillCommand(buildingId);
+  };
+
+  /**
+   * Cancel all kill commands
+   */
+  const cancelAllKillCommands = (): void => {
+    engine.value?.cancelAllKillCommands();
+  };
+
+  /**
+   * Check if building has an active kill command
+   */
+  const hasKillCommand = (buildingId: string): boolean => {
+    return engine.value?.hasKillCommand(buildingId) ?? false;
+  };
+
+  /**
+   * Cleanup on unmount - only dispose engine when all components unmount
    */
   onUnmounted(() => {
-    // Cleanup socket handlers
-    cleanupSocketHandlers();
+    componentRefCount--;
 
-    // Leave combat if still in one
-    if (currentBattleId.value) {
-      gameSocket.leaveCombat(currentBattleId.value);
-    }
+    // Only perform full cleanup when the last component unmounts
+    if (componentRefCount <= 0) {
+      componentRefCount = 0; // Safety reset
 
-    if (engine.value) {
-      engine.value.dispose();
-      engine.value = null;
+      // Cleanup socket handlers
+      cleanupSocketHandlers();
+
+      // Leave combat if still in one
+      if (currentBattleId.value) {
+        gameSocket.leaveCombat(currentBattleId.value);
+      }
+
+      if (engine.value) {
+        engine.value.dispose();
+        engine.value = null;
+      }
     }
   });
 
@@ -411,10 +603,26 @@ export function useCombatEngine() {
     hasArena,
     screenToArena,
     devSpawnUnit,
+    devSpawnUnitAtWorld,
     devPlaceBuilding,
     devClearAll,
     getDevEntityCount,
     inspectModelPack,
+
+    // Barrel calibration
+    getPlacedBuildings,
+    getBuildingBarrelInfo,
+    showCalibrationMarker,
+    hideCalibrationMarker,
+    fireCalibrationTestLaser,
+    getCalibrationBuildingId,
+
+    // Mesh inspection & highlighting
+    getEntityMeshNames,
+    highlightEntityMesh,
+    clearEntityMeshHighlights,
+    updateEntityBarrelOffsetY,
+    setEntityBarrelMeshName,
 
     // Selection & Force Attack
     selectBuilding,
@@ -422,5 +630,18 @@ export function useCombatEngine() {
     deselectAll,
     getSelectedBuildingId,
     forceAttackGround,
+    forceAttackGroundWorld,
+    screenToWorld,
+
+    // Unit targeting
+    forceAttackUnit,
+    getUnitWorldPosition,
+    getAllUnitIds,
+
+    // Kill commands
+    issueKillCommand,
+    cancelKillCommand,
+    cancelAllKillCommands,
+    hasKillCommand,
   };
 }

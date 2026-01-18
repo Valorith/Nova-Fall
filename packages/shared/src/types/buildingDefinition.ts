@@ -6,6 +6,17 @@
 import type { BlueprintQuality } from './enums.js';
 
 export type BuildingCategory = 'turret' | 'wall' | 'structure' | 'utility';
+export type MeshPartFlag = 'base' | 'pitch' | 'yaw' | 'barrel';
+
+/**
+ * Barrel line position in local space relative to pitch mesh
+ * Used to define laser origin point and direction
+ */
+export interface BarrelLinePosition {
+  x: number;
+  y: number;
+  z: number;
+}
 
 /**
  * Building definition as stored in the database
@@ -38,6 +49,16 @@ export interface DbBuildingDefinition {
   projectileSpeed: number; // Units per second for non-instant attacks
   burstCount: number; // For laser_burst: number of shots
   burstInterval: number; // Seconds between burst shots
+  barrelOffsetY: number; // DEPRECATED: Y offset from turret pivot to barrel centerline - use barrelLinePosition instead
+  barrelMeshName: string | null; // Explicit barrel mesh name (overrides auto-detection)
+  meshPartFlags: Record<string, MeshPartFlag[]> | null; // Mesh part flags: {"meshName": ["base", "pitch", "yaw"]}
+  barrelLinePosition: BarrelLinePosition | null; // Barrel line local position relative to pitch mesh
+
+  // Rotation clamps (degrees)
+  yawClampMin: number; // Minimum yaw rotation (-180 to 180)
+  yawClampMax: number; // Maximum yaw rotation (-180 to 180)
+  pitchClampMin: number; // Minimum pitch rotation (-90 to 90)
+  pitchClampMax: number; // Maximum pitch rotation (-90 to 90)
 
   // Category
   category: BuildingCategory;
@@ -73,6 +94,15 @@ export interface DbBuildingDefinitionInput {
   projectileSpeed?: number;
   burstCount?: number;
   burstInterval?: number;
+  barrelOffsetY?: number;
+  barrelMeshName?: string | null;
+  meshPartFlags?: Record<string, MeshPartFlag[]> | null;
+  barrelLinePosition?: BarrelLinePosition | null;
+  // Rotation clamps
+  yawClampMin?: number;
+  yawClampMax?: number;
+  pitchClampMin?: number;
+  pitchClampMax?: number;
   category?: BuildingCategory;
   aiPresetId?: string | null;
 }

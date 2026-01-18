@@ -7,6 +7,17 @@ import type { BlueprintQuality } from './enums.js';
 
 export type UnitCategory = 'infantry' | 'combat_vehicle' | 'support_vehicle';
 export type UnitAttackType = 'instant_laser' | 'laser_burst' | 'bullet' | 'missile';
+export type UnitMeshPartFlag = 'base' | 'pitch' | 'yaw' | 'barrel';
+
+/**
+ * Barrel line position in local space relative to pitch mesh
+ * Used to define laser origin point and direction
+ */
+export interface UnitBarrelLinePosition {
+  x: number;
+  y: number;
+  z: number;
+}
 
 /**
  * Unit definition as stored in the database
@@ -36,6 +47,16 @@ export interface DbUnitDefinition {
   projectileSpeed: number; // Units per second for non-instant attacks
   burstCount: number; // For laser_burst: number of shots
   burstInterval: number; // Seconds between burst shots
+  barrelOffsetY: number; // DEPRECATED: Y offset from pivot to barrel centerline - use barrelLinePosition instead
+  barrelMeshName: string | null; // Explicit barrel mesh name (overrides auto-detection)
+  meshPartFlags: Record<string, UnitMeshPartFlag[]> | null; // Mesh part flags: {"meshName": ["base", "pitch", "yaw"]}
+  barrelLinePosition: UnitBarrelLinePosition | null; // Barrel line local position relative to pitch mesh
+
+  // Rotation clamps (degrees)
+  yawClampMin: number; // Minimum yaw rotation (-180 to 180)
+  yawClampMax: number; // Maximum yaw rotation (-180 to 180)
+  pitchClampMin: number; // Minimum pitch rotation (-90 to 90)
+  pitchClampMax: number; // Maximum pitch rotation (-90 to 90)
 
   // Category
   category: UnitCategory;
@@ -72,6 +93,15 @@ export interface DbUnitDefinitionInput {
   projectileSpeed?: number;
   burstCount?: number;
   burstInterval?: number;
+  barrelOffsetY?: number;
+  barrelMeshName?: string | null;
+  meshPartFlags?: Record<string, UnitMeshPartFlag[]> | null;
+  barrelLinePosition?: UnitBarrelLinePosition | null;
+  // Rotation clamps
+  yawClampMin?: number;
+  yawClampMax?: number;
+  pitchClampMin?: number;
+  pitchClampMax?: number;
   category?: UnitCategory;
   aiPresetId?: string | null;
 }

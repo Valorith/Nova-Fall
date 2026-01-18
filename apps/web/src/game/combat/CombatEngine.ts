@@ -31,14 +31,10 @@ import {
   PBRMaterial,
   SceneLoader,
   TransformNode,
+  DynamicTexture,
 } from '@babylonjs/core';
 import '@babylonjs/loaders/glTF'; // Required for .glb loading
-import type {
-  CombatState,
-  CombatSetup,
-  ArenaPosition,
-  CombatUnitState,
-} from '@nova-fall/shared';
+import type { CombatState, CombatSetup, ArenaPosition, CombatUnitState } from '@nova-fall/shared';
 import { TileType, UnitState } from '@nova-fall/shared';
 import type { DbUnitDefinition, DbBuildingDefinition } from '@nova-fall/shared';
 import { UnitManager } from './UnitManager';
@@ -48,6 +44,8 @@ import { FlowField } from './FlowField';
 export const ARENA_SIZE = 60; // 60x60 tiles
 export const TILE_SIZE = 8; // 8 meters per tile
 export const ARENA_METERS = ARENA_SIZE * TILE_SIZE; // 480m x 480m
+
+const TURRET_ALIGNMENT_TOLERANCE = (0.5 * Math.PI) / 180;
 
 /**
  * Engine configuration options
@@ -99,22 +97,51 @@ export class CombatEngine {
   private buildingData = new Map<
     string,
     {
-      x: number; // Grid position
+      x: number; // Grid position (top-left)
       z: number;
+      tileWidth: number;
+      tileHeight: number;
       range: number;
       damage: number;
+      attackSpeed: number; // Attacks per second
       attackType: string;
       laserColor: string | null;
       mesh: TransformNode;
-      rotatablePart: TransformNode | null; // Turret head (yaw rotation)
-      pitchablePart: TransformNode | null; // Barrel/gun (pitch rotation)
-      barrelTip: TransformNode | null; // The end of the barrel for laser origin
-      barrelLocalOffset: Vector3; // Pre-calculated offset from turret pivot to barrel tip in local space
-      scaleFactor: number; // Scale applied to the model
+      yawParts: TransformNode[]; // All meshes that rotate for yaw
+      pitchParts: TransformNode[]; // All meshes that rotate for pitch
+      rootYawParts: TransformNode[]; // Root yaw meshes (no yaw parent)
+      rootPitchParts: TransformNode[]; // Root pitch meshes (no pitch parent)
+      yawOnlyParts: TransformNode[]; // Root yaw meshes not shared with pitch
+      pitchOnlyParts: TransformNode[]; // Root pitch meshes not shared with yaw
+      sharedParts: TransformNode[]; // Root meshes used for both yaw + pitch
+      baseRotations: Map<TransformNode, Vector3>; // Base rotations before aim adjustments
+      barrelLineAnchor: TransformNode | null; // TransformNode at barrel line origin
+      barrelLinePositionConfig: { x: number; y: number; z: number } | null; // Saved barrel line position
+      hasBarrelLine: boolean; // True when barrel line is configured
+      baseBarrelYaw: number; // Base yaw from barrel line forward
+      baseBarrelPitch: number; // Base pitch from barrel line forward
+      modelCenterLocal: Vector3 | null; // Local model center for fallback origin
+      visualCenterWorld: Vector3 | null; // World-space center of model
+      barrelMeshNameConfig: string | null; // Explicit barrel mesh name from building definition
+      meshPartFlagsConfig: Record<string, string[]> | null; // Mesh part flags: {"meshName": ["base", "pitch", "yaw"]}
       currentRotation: number; // Horizontal rotation (yaw)
       targetRotation: number;
       currentPitch: number; // Vertical rotation (pitch)
       targetPitch: number;
+      // Rotation clamps (in radians)
+      yawClampMin: number;
+      yawClampMax: number;
+      pitchClampMin: number;
+      pitchClampMax: number;
+      // Health tracking
+      health: number;
+      maxHealth: number;
+      healthBarPlane: Mesh | null;
+      healthBarTexture: DynamicTexture | null;
+      // Cooldown tracking
+      cooldownBarPlane: Mesh | null;
+      cooldownBarTexture: DynamicTexture | null;
+      lastFireTime: number; // Timestamp of last shot
     }
   >();
 
@@ -131,21 +158,42 @@ export class CombatEngine {
   private targetRing: Mesh | null = null;
   private targetRingTargetId: string | null = null;
 
+  // Barrel calibration visualization
+  private calibrationMarker: Mesh | null = null;
+  private calibrationBuildingId: string | null = null;
+
   // Active lasers with fade-out support
-  private activeLasers = new Map<string, {
-    coreMesh: Mesh;
-    glowMesh: Mesh;
-    startTime: number;
-    duration: number;
-  }>();
+  private activeLasers = new Map<
+    string,
+    {
+      coreMesh: Mesh;
+      glowMesh: Mesh;
+      startTime: number;
+      duration: number;
+    }
+  >();
 
   // Pending attacks (waiting for turret rotation)
-  private pendingAttacks = new Map<string, {
-    targetWorldX: number;
-    targetWorldZ: number;
-    targetWorldY: number;
-    color: string;
-  }>();
+  private pendingAttacks = new Map<
+    string,
+    {
+      targetWorldX: number;
+      targetWorldZ: number;
+      targetWorldY: number;
+      color: string;
+    }
+  >();
+
+  // Active kill commands (turret tracking and attacking a unit)
+  private activeKillCommands = new Map<
+    string,
+    {
+      targetUnitId: string;
+      nextFireTime: number; // Timestamp when turret can fire next
+      attackSpeed: number; // Attacks per second
+      damage: number;
+    }
+  >();
 
   constructor(canvas: HTMLCanvasElement, options: CombatEngineOptions = {}) {
     this.canvas = canvas;
@@ -269,20 +317,12 @@ export class CombatEngine {
    */
   private setupLighting(): void {
     // Ambient light for base visibility
-    const ambient = new HemisphericLight(
-      'ambient',
-      new Vector3(0, 1, 0),
-      this.scene
-    );
+    const ambient = new HemisphericLight('ambient', new Vector3(0, 1, 0), this.scene);
     ambient.intensity = 0.4;
     ambient.groundColor = new Color3(0.1, 0.1, 0.2);
 
     // Main directional light (sun-like)
-    const sun = new DirectionalLight(
-      'sun',
-      new Vector3(-1, -2, -1).normalize(),
-      this.scene
-    );
+    const sun = new DirectionalLight('sun', new Vector3(-1, -2, -1).normalize(), this.scene);
     sun.intensity = 0.8;
     sun.position = new Vector3(ARENA_METERS, 50, ARENA_METERS);
 
@@ -343,8 +383,15 @@ export class CombatEngine {
       // Update turret rotations
       this.updateTurretRotations(deltaTime);
 
+      // Process active kill commands
+      this.updateKillCommands(now);
+
       // Update laser lifecycle (remove expired lasers)
       this.updateLasers();
+
+      // Update cooldown bars
+      this.updateAllBuildingCooldownBars();
+      this.unitManager?.updateAllCooldownBars();
 
       // Render the scene
       this.scene.render();
@@ -603,9 +650,18 @@ export class CombatEngine {
     if (tiles.length === 0) return;
 
     // Create base mesh
-    const baseMesh = height > 0.1
-      ? MeshBuilder.CreateBox(name, { width: TILE_SIZE * 0.95, height, depth: TILE_SIZE * 0.95 }, this.scene)
-      : MeshBuilder.CreateGround(name, { width: TILE_SIZE * 0.95, height: TILE_SIZE * 0.95 }, this.scene);
+    const baseMesh =
+      height > 0.1
+        ? MeshBuilder.CreateBox(
+            name,
+            { width: TILE_SIZE * 0.95, height, depth: TILE_SIZE * 0.95 },
+            this.scene
+          )
+        : MeshBuilder.CreateGround(
+            name,
+            { width: TILE_SIZE * 0.95, height: TILE_SIZE * 0.95 },
+            this.scene
+          );
 
     const mat = new StandardMaterial(`${name}Mat`, this.scene);
     mat.diffuseColor = color;
@@ -672,11 +728,7 @@ export class CombatEngine {
       ]);
     }
 
-    const gridSystem = MeshBuilder.CreateLineSystem(
-      'grid',
-      { lines },
-      this.scene
-    );
+    const gridSystem = MeshBuilder.CreateLineSystem('grid', { lines }, this.scene);
     gridSystem.color = new Color3(0.2, 0.2, 0.25);
   }
 
@@ -693,22 +745,38 @@ export class CombatEngine {
     const thickness = TILE_SIZE;
 
     // North edge
-    const north = MeshBuilder.CreateGround('spawnNorth', { width: ARENA_METERS, height: thickness }, this.scene);
+    const north = MeshBuilder.CreateGround(
+      'spawnNorth',
+      { width: ARENA_METERS, height: thickness },
+      this.scene
+    );
     north.position = new Vector3(ARENA_METERS / 2, 0.02, ARENA_METERS - thickness / 2);
     north.material = spawnMat;
 
     // South edge
-    const south = MeshBuilder.CreateGround('spawnSouth', { width: ARENA_METERS, height: thickness }, this.scene);
+    const south = MeshBuilder.CreateGround(
+      'spawnSouth',
+      { width: ARENA_METERS, height: thickness },
+      this.scene
+    );
     south.position = new Vector3(ARENA_METERS / 2, 0.02, thickness / 2);
     south.material = spawnMat;
 
     // East edge
-    const east = MeshBuilder.CreateGround('spawnEast', { width: thickness, height: ARENA_METERS - 2 * thickness }, this.scene);
+    const east = MeshBuilder.CreateGround(
+      'spawnEast',
+      { width: thickness, height: ARENA_METERS - 2 * thickness },
+      this.scene
+    );
     east.position = new Vector3(ARENA_METERS - thickness / 2, 0.02, ARENA_METERS / 2);
     east.material = spawnMat;
 
     // West edge
-    const west = MeshBuilder.CreateGround('spawnWest', { width: thickness, height: ARENA_METERS - 2 * thickness }, this.scene);
+    const west = MeshBuilder.CreateGround(
+      'spawnWest',
+      { width: thickness, height: ARENA_METERS - 2 * thickness },
+      this.scene
+    );
     west.position = new Vector3(thickness / 2, 0.02, ARENA_METERS / 2);
     west.material = spawnMat;
   }
@@ -876,25 +944,47 @@ export class CombatEngine {
    * Uses raycasting to find where the mouse intersects the ground plane
    */
   public screenToArena(screenX: number, screenY: number): ArenaPosition | null {
+    const worldPos = this.screenToWorld(screenX, screenY);
+    if (!worldPos) return null;
+
+    const gridPos = this.worldToGrid(new Vector3(worldPos.x, worldPos.y, worldPos.z));
+
+    // Clamp to arena bounds
+    if (gridPos.x >= 0 && gridPos.x < ARENA_SIZE && gridPos.z >= 0 && gridPos.z < ARENA_SIZE) {
+      return gridPos;
+    }
+
+    return null;
+  }
+
+  /**
+   * Convert screen coordinates to exact world position on ground plane
+   * Returns precise coordinates without grid snapping
+   */
+  public screenToWorld(
+    screenX: number,
+    screenY: number
+  ): { x: number; y: number; z: number } | null {
     // Get canvas-relative coordinates
     const rect = this.canvas.getBoundingClientRect();
     const canvasX = screenX - rect.left;
     const canvasY = screenY - rect.top;
 
-    // Use Babylon.js picking
+    // Use Babylon.js picking (Babylon handles DPR internally)
     const pickResult = this.scene.pick(canvasX, canvasY);
 
     if (pickResult?.hit && pickResult.pickedPoint) {
-      // Convert any hit on ground-level meshes to grid position
-      // Accept hits on: pickingPlane, grid, baseTile, or any mesh near ground level
+      // Accept hits on meshes near or above ground level (includes buildings/units)
       const hitY = pickResult.pickedPoint.y;
-      if (hitY < 5) {
-        // Near ground level
-        const gridPos = this.worldToGrid(pickResult.pickedPoint);
+      if (hitY < 25) {
+        // Near ground level - return exact world position
+        const worldX = pickResult.pickedPoint.x;
+        const worldZ = pickResult.pickedPoint.z;
 
-        // Clamp to arena bounds
-        if (gridPos.x >= 0 && gridPos.x < ARENA_SIZE && gridPos.z >= 0 && gridPos.z < ARENA_SIZE) {
-          return gridPos;
+        // Check if within arena bounds (in world units)
+        const arenaWorldSize = ARENA_SIZE * TILE_SIZE;
+        if (worldX >= 0 && worldX < arenaWorldSize && worldZ >= 0 && worldZ < arenaWorldSize) {
+          return { x: worldX, y: 0.1, z: worldZ };
         }
       }
     }
@@ -935,6 +1025,30 @@ export class CombatEngine {
   }
 
   /**
+   * Spawn a unit at exact world coordinates for dev testing (no grid snapping)
+   */
+  public devSpawnUnitAtWorld(
+    unitDef: DbUnitDefinition,
+    worldX: number,
+    worldZ: number,
+    team: 'attacker' | 'defender'
+  ): string {
+    // Calculate nearest grid position for state tracking
+    const gridPos: ArenaPosition = {
+      x: Math.floor(worldX / TILE_SIZE),
+      z: Math.floor(worldZ / TILE_SIZE),
+    };
+
+    // Spawn at grid position first
+    const unitId = this.devSpawnUnit(unitDef, gridPos, team);
+
+    // Immediately override with exact world position
+    this.unitManager?.setUnitWorldPosition(unitId, worldX, worldZ);
+
+    return unitId;
+  }
+
+  /**
    * Place a building at position for dev testing
    * Uses the DbBuildingDefinition stats from the database
    */
@@ -945,20 +1059,18 @@ export class CombatEngine {
   ): string {
     const buildingId = `dev_building_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    const worldX = position.x * TILE_SIZE + TILE_SIZE / 2;
-    const worldZ = position.z * TILE_SIZE + TILE_SIZE / 2;
+    const tileWidth = buildingDef.width || 1;
+    const tileHeight = buildingDef.height || 1;
+    const worldX = (position.x + tileWidth / 2) * TILE_SIZE;
+    const worldZ = (position.z + tileHeight / 2) * TILE_SIZE;
 
     // Calculate building size based on definition
-    const width = (buildingDef.width || 1) * TILE_SIZE * 0.8;
-    const depth = (buildingDef.height || 1) * TILE_SIZE * 0.8;
+    const width = tileWidth * TILE_SIZE * 0.8;
+    const depth = tileHeight * TILE_SIZE * 0.8;
     const height = 5.0; // Buildings are imposing structures
 
     // Create placeholder building mesh
-    const building = MeshBuilder.CreateBox(
-      buildingId,
-      { width, height, depth },
-      this.scene
-    );
+    const building = MeshBuilder.CreateBox(buildingId, { width, height, depth }, this.scene);
     building.position = new Vector3(worldX, height / 2, worldZ);
 
     // Building material - color based on team
@@ -977,25 +1089,121 @@ export class CombatEngine {
 
     this.devBuildingMeshes.set(buildingId, building);
 
+    // Create health bar for building
+    // Use small fixed sizes positioned just above the turret
+    const buildingHealth = buildingDef.health || 100;
+    const healthBarWidth = 3.2; // Wider bar for visibility
+    const healthBarHeight = 0.32; // Slightly taller bar
+    const barYOffset = height + 0.3; // Just above the building
+
+    // Health bar texture
+    const healthBarTexture = new DynamicTexture(
+      `building_healthbar_tex_${buildingId}`,
+      { width: 128, height: 16 },
+      this.scene,
+      false
+    );
+    const healthBarMaterial = new StandardMaterial(
+      `building_healthbar_mat_${buildingId}`,
+      this.scene
+    );
+    healthBarMaterial.diffuseTexture = healthBarTexture;
+    healthBarMaterial.emissiveTexture = healthBarTexture;
+    healthBarMaterial.disableLighting = true;
+    healthBarMaterial.backFaceCulling = false;
+
+    const healthBarPlane = MeshBuilder.CreatePlane(
+      `building_healthbar_${buildingId}`,
+      { width: healthBarWidth, height: healthBarHeight },
+      this.scene
+    );
+    healthBarPlane.parent = building;
+    healthBarPlane.position.y = barYOffset;
+    healthBarPlane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    healthBarPlane.material = healthBarMaterial;
+    healthBarPlane.isVisible = false; // Hidden until damaged
+
+    // Cooldown bar texture (below health bar)
+    const cooldownBarTexture = new DynamicTexture(
+      `building_cooldownbar_tex_${buildingId}`,
+      { width: 128, height: 16 },
+      this.scene,
+      false
+    );
+    const cooldownBarMaterial = new StandardMaterial(
+      `building_cooldownbar_mat_${buildingId}`,
+      this.scene
+    );
+    cooldownBarMaterial.diffuseTexture = cooldownBarTexture;
+    cooldownBarMaterial.emissiveTexture = cooldownBarTexture;
+    cooldownBarMaterial.disableLighting = true;
+    cooldownBarMaterial.backFaceCulling = false;
+
+    const cooldownBarPlane = MeshBuilder.CreatePlane(
+      `building_cooldownbar_${buildingId}`,
+      { width: healthBarWidth, height: healthBarHeight * 0.65 },
+      this.scene
+    );
+    cooldownBarPlane.parent = building;
+    cooldownBarPlane.position.y = barYOffset - healthBarHeight - 0.3;
+    cooldownBarPlane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    cooldownBarPlane.material = cooldownBarMaterial;
+    // Cooldown bar starts hidden, will show when turret fires and is on cooldown
+    cooldownBarPlane.isVisible = false;
+
     // Store building data for turret rotation and attack handling
     this.buildingData.set(buildingId, {
       x: position.x,
       z: position.z,
+      tileWidth,
+      tileHeight,
       range: buildingDef.range || 0,
       damage: buildingDef.damage || 0,
+      attackSpeed: buildingDef.attackSpeed || 1.0, // Default: 1 attack per second
       attackType: buildingDef.attackType || 'instant_laser',
       laserColor: buildingDef.laserColor || null,
       mesh: building,
-      rotatablePart: null, // Will be set when model loads (yaw)
-      pitchablePart: null, // Will be set when model loads (pitch)
-      barrelTip: null, // Will be set when model loads
-      barrelLocalOffset: new Vector3(0, 0, 4), // Default offset, will be calculated when model loads
-      scaleFactor: 1, // Will be set when model loads
+      yawParts: [], // Will be populated when model loads
+      pitchParts: [], // Will be populated when model loads
+      rootYawParts: [],
+      rootPitchParts: [],
+      yawOnlyParts: [],
+      pitchOnlyParts: [],
+      sharedParts: [],
+      baseRotations: new Map(),
+      barrelLineAnchor: null,
+      barrelLinePositionConfig:
+        (buildingDef.barrelLinePosition as { x: number; y: number; z: number } | null) || null,
+      hasBarrelLine: false,
+      baseBarrelYaw: 0,
+      baseBarrelPitch: 0,
+      modelCenterLocal: null,
+      visualCenterWorld: new Vector3(worldX, height / 2, worldZ),
+      barrelMeshNameConfig: buildingDef.barrelMeshName || null, // Explicit barrel mesh name from definition
+      meshPartFlagsConfig: (buildingDef.meshPartFlags as Record<string, string[]> | null) || null, // Mesh part flags from definition
       currentRotation: 0,
       targetRotation: 0,
       currentPitch: 0,
       targetPitch: 0,
+      // Rotation clamps (in radians)
+      yawClampMin: ((buildingDef.yawClampMin ?? -180) * Math.PI) / 180,
+      yawClampMax: ((buildingDef.yawClampMax ?? 180) * Math.PI) / 180,
+      pitchClampMin: ((buildingDef.pitchClampMin ?? -45) * Math.PI) / 180,
+      pitchClampMax: ((buildingDef.pitchClampMax ?? 45) * Math.PI) / 180,
+      // Health tracking
+      health: buildingHealth,
+      maxHealth: buildingHealth,
+      healthBarPlane,
+      healthBarTexture,
+      // Cooldown tracking
+      cooldownBarPlane,
+      cooldownBarTexture,
+      lastFireTime: 0, // Never fired yet
     });
+
+    // Draw initial bars
+    this.updateBuildingHealthBar(buildingId);
+    this.updateBuildingCooldownBar(buildingId);
 
     // Load 3D model if available, replacing the placeholder
     if (buildingDef.modelPath) {
@@ -1064,7 +1272,7 @@ export class CombatEngine {
 
       // Determine which meshes to use
       let meshesToUse: typeof result.meshes;
-      let rootToUse: typeof result.meshes[0];
+      let rootToUse: (typeof result.meshes)[0];
 
       if (targetMeshName) {
         // Build patterns to match parent/grandparent names
@@ -1083,107 +1291,155 @@ export class CombatEngine {
           (m) => m.name === targetMeshName || m.name === targetMeshName + '_primitive0'
         );
 
-        // If not found, find meshes by parent/grandparent name patterns
-        const meshesToKeep: typeof result.meshes = [];
+        // If not found, find meshes by checking ALL ancestors for model pattern
+        // This handles deeper hierarchies where base/platform meshes might be 3+ levels deep
+        const meshesToKeep: Mesh[] = [];
         if (!targetNode) {
           for (const mesh of result.meshes) {
-            const parentName = mesh.parent?.name || '';
-            const grandparentName = mesh.parent?.parent?.name || '';
+            // Skip __root__
+            if (mesh.name === '__root__') continue;
 
-            const belongsToModel =
-              grandparentPattern.test(grandparentName) ||
-              parentPattern.test(parentName) ||
-              grandparentPattern.test(parentName);
+            // Check all ancestors up to root for the model pattern
+            let belongsToModel = false;
+            let ancestor = mesh.parent;
+            while (ancestor) {
+              const ancestorName = ancestor.name || '';
+              if (grandparentPattern.test(ancestorName) || parentPattern.test(ancestorName)) {
+                belongsToModel = true;
+                break;
+              }
+              ancestor = ancestor.parent;
+            }
 
-            if (belongsToModel) {
+            if (belongsToModel && mesh instanceof Mesh) {
               meshesToKeep.push(mesh);
             }
           }
         }
 
         if (!targetNode && meshesToKeep.length === 0) {
-          console.warn(`Mesh "${targetMeshName}" not found in ${filePath}. Available: ${result.meshes.map(m => m.name).join(', ')}`);
+          console.warn(
+            `Mesh "${targetMeshName}" not found in ${filePath}. Available: ${result.meshes.map((m) => m.name).join(', ')}`
+          );
           result.meshes.forEach((m) => m.dispose());
           return;
         }
 
+        // Get __root__ from the import result - it's always result.meshes[0]
+        // Don't use getTransformNodeByName as it searches the entire scene and __root__ is a Mesh, not TransformNode
+        const rootNode = result.meshes[0];
+
         if (targetNode) {
           // Direct match found - get target and all its descendants
           const descendants = targetNode.getDescendants(false);
-          meshesToUse = [targetNode, ...descendants.filter((d): d is Mesh => d instanceof Mesh)] as typeof result.meshes;
-          rootToUse = targetNode;
+          meshesToUse = [
+            targetNode,
+            ...descendants.filter((d): d is Mesh => d instanceof Mesh),
+          ] as typeof result.meshes;
+          rootToUse = rootNode || targetNode;
         } else {
           // Use meshes found by parent/grandparent pattern matching
-          meshesToUse = meshesToKeep;
+          // Keep hierarchy intact like ModelCalibrationPanel does
+          meshesToUse = meshesToKeep as unknown as typeof result.meshes;
 
-          // Calculate center of all meshes we're keeping (before reparenting)
-          const centerSum = Vector3.Zero();
-          let meshCount = 0;
-          meshesToKeep.forEach((mesh) => {
-            if (mesh instanceof Mesh && mesh.getTotalVertices() > 0) {
-              mesh.computeWorldMatrix(true);
-              const center = mesh.getBoundingInfo().boundingBox.centerWorld;
-              centerSum.addInPlace(center);
-              meshCount++;
-            }
-          });
-          const groupCenter = meshCount > 0 ? centerSum.scale(1 / meshCount) : Vector3.Zero();
-
-          // Create a parent transform node at the group center
-          const containerNode = new TransformNode(`${targetMeshName}_container`, this.scene);
-
-          // Reparent meshes to container, preserving relative positions
-          meshesToKeep.forEach((mesh) => {
-            // Get current world position
-            mesh.computeWorldMatrix(true);
-            const worldPos = mesh.getAbsolutePosition().clone();
-
-            // Detach from old parent
-            mesh.setParent(null);
-            mesh.position = worldPos.subtract(groupCenter);
-            mesh.rotation = Vector3.Zero();
-
-            // Parent to container
-            mesh.setParent(containerNode);
-          });
-
-          // Detect inherited scales from reparenting (Babylon preserves world scale)
-          // We need to counter this when applying our own scale
-          let inheritedScale = 1;
-          meshesToKeep.forEach((mesh) => {
-            const s = mesh.scaling;
-            const maxS = Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z));
-            inheritedScale = Math.max(inheritedScale, maxS);
-          });
-
-          if (inheritedScale > 1.01) {
-            console.log(`Pack meshes have inherited scale ${inheritedScale.toFixed(2)}, will compensate`);
+          // ALWAYS use result.meshes[0] as the root - it's the import root that parents everything
+          // This matches how ModelCalibrationPanel works
+          if (!rootNode) {
+            console.warn('No root node found in import result');
+            return;
           }
+          rootToUse = rootNode;
 
-          // Store the inherited scale on the container for later use in scaling calculation
-          (containerNode as unknown as { _inheritedScale: number })._inheritedScale = inheritedScale;
+          // Verify all kept meshes are descendants of rootNode
+          const rootDescendants = new Set(rootNode.getDescendants(false));
+          const allAreDescendants = meshesToKeep.every((m) => rootDescendants.has(m));
 
-          rootToUse = containerNode as unknown as typeof result.meshes[0];
+          if (!allAreDescendants) {
+            console.warn(
+              'Some kept meshes are not descendants of import root - hierarchy may be broken'
+            );
+          }
         }
 
-        // Dispose meshes we're not using
-        result.meshes.forEach((m) => {
-          if (!meshesToUse.includes(m)) {
-            // Check if this mesh's parent is in our keep list
-            let parentInKeepList = false;
-            let parent = m.parent;
+        // Dispose meshes we're not using (like ModelCalibrationPanel does)
+        // This disposes other models from the pack while keeping our model's hierarchy intact
+        // IMPORTANT: Don't dispose rootNode (result.meshes[0]) even if it's not named __root__
+        for (const m of result.meshes) {
+          if (m === rootNode) continue; // Keep the root
+          if (m.name === '__root__') continue; // Also keep any __root__ by name
+          if (m instanceof Mesh && !meshesToKeep.includes(m) && m !== targetNode) {
+            // Check if this is a descendant of our target node
+            let isDescendant = false;
+            if (targetNode) {
+              let parent = m.parent;
+              while (parent) {
+                if (parent === targetNode) {
+                  isDescendant = true;
+                  break;
+                }
+                parent = parent.parent;
+              }
+            }
+            // Also check if it's an ancestor of any kept mesh (don't dispose parents!)
+            let isAncestorOfKept = false;
+            for (const kept of meshesToKeep) {
+              let ancestor = kept.parent;
+              while (ancestor) {
+                if (ancestor === m) {
+                  isAncestorOfKept = true;
+                  break;
+                }
+                ancestor = ancestor.parent;
+              }
+              if (isAncestorOfKept) break;
+            }
+            if (!isDescendant && !isAncestorOfKept) {
+              m.dispose();
+            }
+          }
+        }
+
+        const importTransformNodes = (result as { transformNodes?: TransformNode[] })
+          .transformNodes;
+        const transformNodesToCheck = importTransformNodes ?? [];
+
+        for (const node of transformNodesToCheck) {
+          if (node === rootNode || node.name === '__root__') continue;
+
+          // Check if this node is an ancestor of any mesh we're keeping
+          let isAncestorOfKept = false;
+          for (const mesh of meshesToKeep) {
+            let ancestor = mesh.parent;
+            while (ancestor) {
+              if (ancestor === node) {
+                isAncestorOfKept = true;
+                break;
+              }
+              ancestor = ancestor.parent;
+            }
+            if (isAncestorOfKept) break;
+          }
+
+          if (!isAncestorOfKept && meshesToKeep.length > 0) {
+            let parent = node.parent;
+            let isUnderRoot = false;
             while (parent) {
-              if (meshesToUse.includes(parent as Mesh)) {
-                parentInKeepList = true;
+              if (parent === rootNode || parent.name === '__root__') {
+                isUnderRoot = true;
                 break;
               }
               parent = parent.parent;
             }
-            if (!parentInKeepList) {
-              m.dispose();
+
+            if (isUnderRoot) {
+              const nodeDescendants = new Set(node.getDescendants(false));
+              const hasKeptMesh = meshesToKeep.some((m) => nodeDescendants.has(m));
+              if (!hasKeptMesh) {
+                node.dispose();
+              }
             }
           }
-        });
+        }
       } else {
         // Use all meshes (original behavior)
         meshesToUse = result.meshes;
@@ -1196,41 +1452,83 @@ export class CombatEngine {
         rootToUse = firstMesh;
       }
 
-      // Force compute world matrices
+      // Reset root position to origin - GLB files may have non-zero initial positions
+      // We'll reposition it properly after calculating bounds
+      rootToUse.position = Vector3.Zero();
+
+      // Handle negative scale (common in GLB files from Blender)
+      // IMPORTANT: Negative Z scale ≠ 180° Y rotation!
+      // - Negative Z scale: (x, y, z) → (x, y, -z) [only Z flipped]
+      // - 180° Y rotation: (x, y, z) → (-x, y, -z) [both X and Z flipped]
+      // To correctly compensate for negative Z scale using rotation:
+      // We need 180° Y rotation PLUS negative X scale to cancel the extra X flip
+      const hasNegativeScale =
+        rootToUse.scaling.x < 0 || rootToUse.scaling.y < 0 || rootToUse.scaling.z < 0;
+      if (hasNegativeScale) {
+        const scaleSignX = Math.sign(rootToUse.scaling.x) || 1;
+        const scaleSignZ = Math.sign(rootToUse.scaling.z) || 1;
+
+        // If Z was negative (common Blender export)
+        if (scaleSignZ < 0) {
+          // Make Z positive and add 180° Y rotation
+          rootToUse.scaling.z = Math.abs(rootToUse.scaling.z);
+          rootToUse.rotation.y += Math.PI;
+          // CRITICAL: Also flip X to cancel the extra X inversion from the Y rotation
+          rootToUse.scaling.x = -Math.abs(rootToUse.scaling.x);
+        } else {
+          // Just normalize other scales
+          rootToUse.scaling.x = Math.abs(rootToUse.scaling.x);
+          rootToUse.scaling.y = Math.abs(rootToUse.scaling.y);
+          rootToUse.scaling.z = Math.abs(rootToUse.scaling.z);
+
+          if (scaleSignX < 0) {
+            rootToUse.rotation.y += Math.PI;
+          }
+        }
+      }
+
+      // STEP 1: Calculate pre-scale bounding box from world bounds (preserving hierarchy)
+      // This is similar to how ModelCalibrationPanel works - don't reset transforms first
       this.scene.updateTransformMatrix();
       meshesToUse.forEach((mesh) => {
-        mesh.computeWorldMatrix(true);
+        if (mesh instanceof Mesh) {
+          mesh.computeWorldMatrix(true);
+        }
       });
 
-      // Calculate combined bounding box from world bounds
       let minVec = new Vector3(Infinity, Infinity, Infinity);
       let maxVec = new Vector3(-Infinity, -Infinity, -Infinity);
+      let hasValidBounds = false;
 
       meshesToUse.forEach((mesh) => {
         if (mesh instanceof Mesh && mesh.getTotalVertices() > 0) {
+          mesh.refreshBoundingInfo();
+          mesh.computeWorldMatrix(true);
           const boundingInfo = mesh.getBoundingInfo();
           const min = boundingInfo.boundingBox.minimumWorld;
           const max = boundingInfo.boundingBox.maximumWorld;
 
-          minVec = Vector3.Minimize(minVec, min);
-          maxVec = Vector3.Maximize(maxVec, max);
+          if (isFinite(min.x) && isFinite(max.x)) {
+            minVec = Vector3.Minimize(minVec, min);
+            maxVec = Vector3.Maximize(maxVec, max);
+            hasValidBounds = true;
+          }
         }
       });
 
-      console.log(`Building bounding box: min=(${minVec.x.toFixed(2)}, ${minVec.y.toFixed(2)}, ${minVec.z.toFixed(2)}), max=(${maxVec.x.toFixed(2)}, ${maxVec.y.toFixed(2)}, ${maxVec.z.toFixed(2)}), meshCount=${meshesToUse.length}`);
+      if (!hasValidBounds) {
+        console.warn('No valid bounding boxes found for building meshes');
+        return;
+      }
 
-      // Calculate scale to fit building within tile footprint
-      const modelHeight = maxVec.y - minVec.y;
-      const modelWidth = maxVec.x - minVec.x;
-      const modelDepth = maxVec.z - minVec.z;
+      // Calculate pre-scale model dimensions
+      const preScaleWidth = maxVec.x - minVec.x;
+      const preScaleDepth = maxVec.z - minVec.z;
 
-      // Target size based on tile dimensions (fill entire authorized grid)
+      // STEP 2: Calculate scale factor to fit tile footprint
       const targetWidth = tileWidth * TILE_SIZE;
       const targetDepth = tileHeight * TILE_SIZE;
-
-      // Scale to fit within the footprint
-      // Use the max dimension of the model's XZ footprint to scale uniformly
-      const modelFootprint = Math.max(modelWidth, modelDepth);
+      const modelFootprint = Math.max(preScaleWidth, preScaleDepth);
       const targetFootprint = Math.max(targetWidth, targetDepth);
 
       let scaleFactor = 1;
@@ -1238,41 +1536,53 @@ export class CombatEngine {
         scaleFactor = targetFootprint / modelFootprint;
       }
 
-      // Check for inherited scale from pack file meshes and compensate
-      const inheritedScale = (rootToUse as unknown as { _inheritedScale?: number })._inheritedScale || 1;
-      if (inheritedScale > 1.01) {
-        scaleFactor = scaleFactor / inheritedScale;
-        console.log(`Compensating for inherited scale ${inheritedScale.toFixed(2)}, adjusted scale=${scaleFactor.toFixed(3)}`);
-      }
-
-      console.log(`Building model scaling: model=${modelWidth.toFixed(2)}x${modelDepth.toFixed(2)}, target=${targetWidth.toFixed(2)}x${targetDepth.toFixed(2)}, scale=${scaleFactor.toFixed(3)}`);
-
-      // Note: Removed minimum height constraint - it was causing models to scale UP
-      // when they should scale down to fit tile footprint
-
-      // Position and scale the model
-      const centerX = (minVec.x + maxVec.x) / 2;
-      const centerZ = (minVec.z + maxVec.z) / 2;
-
-      // Check if root already has transforms that we need to account for
-      console.log(`Root node "${rootToUse.name}" existing transforms - pos: (${rootToUse.position.x.toFixed(2)}, ${rootToUse.position.y.toFixed(2)}, ${rootToUse.position.z.toFixed(2)}), scale: (${rootToUse.scaling.x.toFixed(4)}, ${rootToUse.scaling.y.toFixed(4)}, ${rootToUse.scaling.z.toFixed(4)})`);
-
-      // Reset root transforms first
-      rootToUse.position = Vector3.Zero();
-      rootToUse.scaling = new Vector3(1, 1, 1);
-      rootToUse.rotation = Vector3.Zero();
-
-      // Apply our scale
+      // STEP 3: Apply scale to __root__ (like ModelCalibrationPanel does)
       rootToUse.scaling = new Vector3(scaleFactor, scaleFactor, scaleFactor);
 
-      // Position so model center is at target world position, bottom on ground
-      rootToUse.position = new Vector3(
-        worldX - centerX * scaleFactor,
-        -minVec.y * scaleFactor,
-        worldZ - centerZ * scaleFactor
-      );
+      // STEP 4: Recalculate bounds after scaling
+      this.scene.updateTransformMatrix();
+      let scaledMinVec = new Vector3(Infinity, Infinity, Infinity);
+      let scaledMaxVec = new Vector3(-Infinity, -Infinity, -Infinity);
 
-      console.log(`Final position: (${rootToUse.position.x.toFixed(2)}, ${rootToUse.position.y.toFixed(2)}, ${rootToUse.position.z.toFixed(2)}), Final scaled size: ${(modelWidth * scaleFactor).toFixed(2)}x${(modelDepth * scaleFactor).toFixed(2)}x${(modelHeight * scaleFactor).toFixed(2)}`);
+      meshesToUse.forEach((mesh) => {
+        if (mesh instanceof Mesh && mesh.getTotalVertices() > 0) {
+          mesh.computeWorldMatrix(true);
+          const boundingInfo = mesh.getBoundingInfo();
+          const min = boundingInfo.boundingBox.minimumWorld;
+          const max = boundingInfo.boundingBox.maximumWorld;
+          if (isFinite(min.x) && isFinite(max.x)) {
+            scaledMinVec = Vector3.Minimize(scaledMinVec, min);
+            scaledMaxVec = Vector3.Maximize(scaledMaxVec, max);
+          }
+        }
+      });
+
+      const scaledCenter = scaledMinVec.add(scaledMaxVec).scale(0.5);
+
+      // STEP 5: Position __root__ to place model at target world position with bottom at Y=0
+      // We need to move the root so that:
+      // - Model's XZ center is at (worldX, worldZ)
+      // - Model's bottom (scaledMinVec.y) is at Y=0
+      const offsetX = worldX - scaledCenter.x;
+      const offsetY = -scaledMinVec.y; // Move up so bottom is at Y=0
+      const offsetZ = worldZ - scaledCenter.z;
+
+      // Set position absolutely (root was reset to origin earlier)
+      rootToUse.position = new Vector3(offsetX, offsetY, offsetZ);
+
+      // VERIFY: Check final world bounds
+      this.scene.updateTransformMatrix();
+      let finalMinVec = new Vector3(Infinity, Infinity, Infinity);
+      let finalMaxVec = new Vector3(-Infinity, -Infinity, -Infinity);
+      meshesToUse.forEach((mesh) => {
+        if (mesh instanceof Mesh && mesh.getTotalVertices() > 0) {
+          mesh.computeWorldMatrix(true);
+          const bi = mesh.getBoundingInfo();
+          finalMinVec = Vector3.Minimize(finalMinVec, bi.boundingBox.minimumWorld);
+          finalMaxVec = Vector3.Maximize(finalMaxVec, bi.boundingBox.maximumWorld);
+        }
+      });
+      const finalCenter = finalMinVec.add(finalMaxVec).scale(0.5);
 
       // Add shadows to meshes
       meshesToUse.forEach((mesh) => {
@@ -1281,26 +1591,82 @@ export class CombatEngine {
         }
       });
 
-      // Dispose of the placeholder
+      // Update bar positions based on actual model bounds
+      const buildingDataEntry = this.buildingData.get(buildingId);
+      if (buildingDataEntry) {
+        const healthBarHeight = 0.32; // Same as in devPlaceBuilding
+
+        rootToUse.computeWorldMatrix(true);
+        const invRootMatrix = rootToUse.getWorldMatrix().clone();
+        invRootMatrix.invert();
+
+        const localCenter = Vector3.TransformCoordinates(finalCenter, invRootMatrix);
+
+        buildingDataEntry.modelCenterLocal = localCenter.clone();
+        buildingDataEntry.visualCenterWorld = finalCenter.clone();
+
+        const barWorldY = finalMaxVec.y + 0.3;
+        const cooldownWorldY = barWorldY - healthBarHeight - 0.3;
+
+        const barWorldX = (buildingDataEntry.x + buildingDataEntry.tileWidth / 2) * TILE_SIZE;
+        const barWorldZ = (buildingDataEntry.z + buildingDataEntry.tileHeight / 2) * TILE_SIZE;
+
+        if (buildingDataEntry.healthBarPlane) {
+          buildingDataEntry.healthBarPlane.parent = null;
+          buildingDataEntry.healthBarPlane.scaling = Vector3.One();
+          buildingDataEntry.healthBarPlane.setAbsolutePosition(
+            new Vector3(barWorldX, barWorldY, barWorldZ)
+          );
+        }
+        if (buildingDataEntry.cooldownBarPlane) {
+          buildingDataEntry.cooldownBarPlane.parent = null;
+          buildingDataEntry.cooldownBarPlane.scaling = Vector3.One();
+          buildingDataEntry.cooldownBarPlane.setAbsolutePosition(
+            new Vector3(barWorldX, cooldownWorldY, barWorldZ)
+          );
+        }
+      }
+
+      // Dispose of the placeholder (now safe - bars have been reparented)
       placeholder.dispose();
 
       // Store the root node for cleanup (includes all descendants)
       this.devBuildingMeshes.set(buildingId, rootToUse as TransformNode);
 
-      // Update building data with loaded mesh and find rotatable part
-      const buildingDataEntry = this.buildingData.get(buildingId);
+      // Update building data with loaded mesh and find turret parts
       if (buildingDataEntry) {
         buildingDataEntry.mesh = rootToUse as TransformNode;
-        buildingDataEntry.scaleFactor = scaleFactor;
-        const { rotatablePart, pitchablePart, barrelTip, barrelLocalOffset } = this.findTurretParts(rootToUse as TransformNode);
-        buildingDataEntry.rotatablePart = rotatablePart;
-        buildingDataEntry.pitchablePart = pitchablePart;
-        buildingDataEntry.barrelTip = barrelTip;
-        buildingDataEntry.barrelLocalOffset = barrelLocalOffset;
-        console.log(`Turret parts: rotatable="${rotatablePart?.name || 'none'}", pitchable="${pitchablePart?.name || 'none'}", barrelTip="${barrelTip?.name || 'none'}"`);
-        console.log(`Barrel local offset: (${barrelLocalOffset.x.toFixed(2)}, ${barrelLocalOffset.y.toFixed(2)}, ${barrelLocalOffset.z.toFixed(2)}), scaleFactor=${scaleFactor.toFixed(3)}`);
-      }
 
+        const turretParts = this.findTurretParts(
+          rootToUse as TransformNode,
+          buildingDataEntry.barrelMeshNameConfig,
+          buildingDataEntry.meshPartFlagsConfig,
+          buildingDataEntry.barrelLinePositionConfig,
+          buildingDataEntry.modelCenterLocal
+        );
+
+        buildingDataEntry.yawParts = turretParts.yawParts;
+        buildingDataEntry.pitchParts = turretParts.pitchParts;
+        buildingDataEntry.rootYawParts = turretParts.rootYawParts;
+        buildingDataEntry.rootPitchParts = turretParts.rootPitchParts;
+        buildingDataEntry.yawOnlyParts = turretParts.yawOnlyParts;
+        buildingDataEntry.pitchOnlyParts = turretParts.pitchOnlyParts;
+        buildingDataEntry.sharedParts = turretParts.sharedParts;
+        buildingDataEntry.baseRotations = turretParts.baseRotations;
+        buildingDataEntry.barrelLineAnchor = turretParts.barrelLineAnchor;
+        buildingDataEntry.hasBarrelLine = turretParts.hasBarrelLine;
+        buildingDataEntry.baseBarrelYaw = turretParts.baseBarrelYaw;
+        buildingDataEntry.baseBarrelPitch = turretParts.baseBarrelPitch;
+
+        if (this.selectedBuildingId === buildingId) {
+          const { centerX, centerZ } = this.getBuildingCenterWorld(buildingDataEntry);
+          const ringDiameter = this.getBuildingSelectionDiameter(buildingDataEntry);
+          this.showSelectionRing(centerX, centerZ, ringDiameter);
+          if (buildingDataEntry.range > 0) {
+            this.showRangeCircle(centerX, centerZ, buildingDataEntry.range);
+          }
+        }
+      }
     } catch (error) {
       console.error(`Failed to load building model ${modelPath}:`, error);
     }
@@ -1333,20 +1699,39 @@ export class CombatEngine {
     node.dispose();
   }
 
+  private disposeBuildingBars(
+    building: typeof this.buildingData extends Map<string, infer V> ? V : never
+  ): void {
+    if (building.healthBarPlane) {
+      building.healthBarPlane.material?.dispose();
+      building.healthBarPlane.dispose();
+    }
+    if (building.cooldownBarPlane) {
+      building.cooldownBarPlane.material?.dispose();
+      building.cooldownBarPlane.dispose();
+    }
+    building.healthBarTexture?.dispose();
+    building.cooldownBarTexture?.dispose();
+  }
+
   /**
    * Remove a dev-placed building
    */
   public devRemoveBuilding(buildingId: string): void {
     const node = this.devBuildingMeshes.get(buildingId);
+    const building = this.buildingData.get(buildingId);
+    if (building) {
+      this.disposeBuildingBars(building);
+    }
     if (node) {
       this.disposeBuildingNode(node);
       this.devBuildingMeshes.delete(buildingId);
-      this.buildingData.delete(buildingId);
+    }
+    this.buildingData.delete(buildingId);
 
-      // Clear selection if this building was selected
-      if (this.selectedBuildingId === buildingId) {
-        this.deselectBuilding();
-      }
+    // Clear selection if this building was selected
+    if (this.selectedBuildingId === buildingId) {
+      this.deselectBuilding();
     }
   }
 
@@ -1364,7 +1749,11 @@ export class CombatEngine {
     this.devUnitIds.clear();
 
     // Remove all dev buildings (dispose all descendants)
-    for (const node of this.devBuildingMeshes.values()) {
+    for (const [buildingId, node] of this.devBuildingMeshes) {
+      const building = this.buildingData.get(buildingId);
+      if (building) {
+        this.disposeBuildingBars(building);
+      }
       this.disposeBuildingNode(node);
     }
     this.devBuildingMeshes.clear();
@@ -1379,6 +1768,318 @@ export class CombatEngine {
       units: this.devUnitIds.size,
       buildings: this.devBuildingMeshes.size,
     };
+  }
+
+  /**
+   * Get list of all placed buildings (for UI dropdown)
+   */
+  public getPlacedBuildings(): { id: string; name: string; hasTurret: boolean }[] {
+    const buildings: { id: string; name: string; hasTurret: boolean }[] = [];
+    for (const [id, data] of this.buildingData.entries()) {
+      buildings.push({
+        id,
+        name: id.replace('dev_building_', '').slice(0, 12) + '...',
+        hasTurret: data.yawParts.length > 0 || data.hasBarrelLine,
+      });
+    }
+    return buildings;
+  }
+
+  /**
+   * Get barrel info for a building (for calibration UI)
+   */
+  public getBuildingBarrelInfo(buildingId: string): {
+    hasTurret: boolean;
+    hasBarrelLine: boolean;
+  } | null {
+    const data = this.buildingData.get(buildingId);
+    if (!data) return null;
+    return {
+      hasTurret: data.yawParts.length > 0,
+      hasBarrelLine: data.hasBarrelLine,
+    };
+  }
+
+  /**
+   * Show calibration marker for a building's barrel line origin
+   * Creates a glowing sphere at where the laser will fire from
+   */
+  public showCalibrationMarker(buildingId: string): boolean {
+    const data = this.buildingData.get(buildingId);
+    if (!data || !data.barrelLineAnchor || !data.hasBarrelLine) {
+      console.warn('Building not found or barrel line not configured:', buildingId);
+      return false;
+    }
+
+    // Remove existing marker
+    this.hideCalibrationMarker();
+
+    // Create glowing sphere marker
+    this.calibrationMarker = MeshBuilder.CreateSphere(
+      'calibration_marker',
+      { diameter: 0.5 },
+      this.scene
+    );
+
+    // Bright emissive material
+    const material = new StandardMaterial('calibration_mat', this.scene);
+    material.emissiveColor = new Color3(1, 0.5, 0); // Orange glow
+    material.diffuseColor = new Color3(1, 0.7, 0.3);
+    material.specularColor = new Color3(1, 1, 1);
+    this.calibrationMarker.material = material;
+
+    this.calibrationBuildingId = buildingId;
+
+    // Position the marker
+    this.updateCalibrationMarkerPosition();
+
+    // Select the building for visibility
+    this.selectBuilding(buildingId);
+
+    return true;
+  }
+
+  /**
+   * Hide the calibration marker
+   */
+  public hideCalibrationMarker(): void {
+    if (this.calibrationMarker) {
+      this.calibrationMarker.dispose();
+      this.calibrationMarker = null;
+    }
+    this.calibrationBuildingId = null;
+  }
+
+  /**
+   * Update calibration marker position based on barrel line anchor
+   */
+  private updateCalibrationMarkerPosition(): void {
+    if (!this.calibrationMarker || !this.calibrationBuildingId) return;
+
+    const data = this.buildingData.get(this.calibrationBuildingId);
+    if (!data || !data.barrelLineAnchor || !data.hasBarrelLine) return;
+
+    data.barrelLineAnchor.computeWorldMatrix(true);
+    const markerPos = data.barrelLineAnchor.getAbsolutePosition();
+
+    this.calibrationMarker.position = markerPos.clone();
+  }
+
+  /**
+   * Fire a test laser from calibration marker to see alignment
+   */
+  public fireCalibrationTestLaser(): void {
+    if (!this.calibrationBuildingId) {
+      console.warn('No calibration active');
+      return;
+    }
+
+    const data = this.buildingData.get(this.calibrationBuildingId);
+    if (!data) return;
+
+    const origin = this.getTurretBarrelOrigin(data);
+    const forward = this.getTurretBarrelForward(data);
+    if (!origin || !forward) {
+      console.warn('Calibration test laser skipped - barrel line not configured');
+      return;
+    }
+
+    const targetDist = 3 * TILE_SIZE;
+    const targetPos = origin.add(forward.scale(targetDist));
+
+    this.fireLaser(origin, targetPos, data.laserColor || '#ff3333');
+  }
+
+  /**
+   * Get current calibration building ID
+   */
+  public getCalibrationBuildingId(): string | null {
+    return this.calibrationBuildingId;
+  }
+
+  // ==================== MESH INSPECTION & HIGHLIGHTING ====================
+
+  // Store original materials for mesh highlighting restoration
+  private originalMaterials = new Map<string, Map<string, StandardMaterial | PBRMaterial | null>>();
+
+  /**
+   * Get all mesh names from a building or unit's 3D model
+   */
+  public getEntityMeshNames(entityType: 'building' | 'unit', entityId: string): string[] {
+    if (entityType === 'unit') {
+      // TODO: Implement for units via UnitManager
+      console.warn('getEntityMeshNames for units not yet implemented');
+      return [];
+    }
+
+    const building = this.buildingData.get(entityId);
+    if (!building || !building.mesh) {
+      return [];
+    }
+
+    const meshNames: string[] = [];
+    const collectMeshNames = (node: TransformNode) => {
+      // Only include meshes that are actual geometry (have vertices)
+      if (node instanceof Mesh && node.getTotalVertices() > 0) {
+        meshNames.push(node.name);
+      }
+      for (const child of node.getChildren()) {
+        if (child instanceof TransformNode) {
+          collectMeshNames(child);
+        }
+      }
+    };
+
+    collectMeshNames(building.mesh);
+    return meshNames;
+  }
+
+  /**
+   * Highlight a specific mesh with a color
+   * @param color Object with r, g, b values (0-1 range)
+   */
+  public highlightEntityMesh(
+    entityType: 'building' | 'unit',
+    entityId: string,
+    meshName: string,
+    color: { r: number; g: number; b: number }
+  ): void {
+    if (entityType === 'unit') {
+      // TODO: Implement for units via UnitManager
+      return;
+    }
+
+    const building = this.buildingData.get(entityId);
+    if (!building || !building.mesh) return;
+
+    // Find the mesh by name
+    const targetMesh = this.findMeshByName(building.mesh, meshName);
+    if (!targetMesh) return;
+
+    // Store original material if not already stored
+    const entityKey = `${entityType}:${entityId}`;
+    if (!this.originalMaterials.has(entityKey)) {
+      this.originalMaterials.set(entityKey, new Map());
+    }
+    const entityMaterials = this.originalMaterials.get(entityKey);
+    if (!entityMaterials) return;
+
+    if (!entityMaterials.has(meshName)) {
+      entityMaterials.set(meshName, targetMesh.material as StandardMaterial | PBRMaterial | null);
+    }
+
+    // Create highlight material
+    const highlightMat = new StandardMaterial(`highlight_${meshName}`, this.scene);
+    highlightMat.diffuseColor = new Color3(color.r, color.g, color.b);
+    highlightMat.emissiveColor = new Color3(color.r * 0.3, color.g * 0.3, color.b * 0.3);
+    highlightMat.specularColor = new Color3(0.2, 0.2, 0.2);
+
+    // Apply to mesh
+    targetMesh.material = highlightMat;
+  }
+
+  /**
+   * Clear all mesh highlights and restore original materials
+   */
+  public clearEntityMeshHighlights(entityType: 'building' | 'unit', entityId: string): void {
+    if (entityType === 'unit') {
+      // TODO: Implement for units via UnitManager
+      return;
+    }
+
+    const building = this.buildingData.get(entityId);
+    if (!building || !building.mesh) return;
+
+    const entityKey = `${entityType}:${entityId}`;
+    const entityMaterials = this.originalMaterials.get(entityKey);
+    if (!entityMaterials) return;
+
+    // Restore original materials
+    for (const [meshName, originalMat] of entityMaterials) {
+      const targetMesh = this.findMeshByName(building.mesh, meshName);
+      if (targetMesh) {
+        // Dispose highlight material if it's different from original
+        if (targetMesh.material && targetMesh.material !== originalMat) {
+          targetMesh.material.dispose();
+        }
+        targetMesh.material = originalMat;
+      }
+    }
+
+    // Clear stored materials
+    this.originalMaterials.delete(entityKey);
+  }
+
+  /**
+   * Find a mesh by name in a model hierarchy
+   */
+  private findMeshByName(root: TransformNode, meshName: string): Mesh | null {
+    if (root instanceof Mesh && root.name === meshName) {
+      return root;
+    }
+    for (const child of root.getChildren()) {
+      if (child instanceof TransformNode) {
+        const found = this.findMeshByName(child, meshName);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Update barrel Y offset for a building or unit (runtime adjustment)
+   */
+  public updateEntityBarrelOffsetY(
+    _entityType: 'building' | 'unit',
+    _entityId: string,
+    _offsetY: number
+  ): void {
+    // With the simplified barrel tip approach, manual offset adjustment is no longer needed
+    // The barrel tip position is automatically found using vertex sampling
+  }
+
+  /**
+   * Set barrel mesh name for a building or unit (runtime override)
+   * With the simplified approach, barrel mesh is found via meshPartFlags configuration
+   */
+  public setEntityBarrelMeshName(
+    entityType: 'building' | 'unit',
+    entityId: string,
+    meshName: string
+  ): void {
+    if (entityType === 'unit') {
+      // TODO: Implement for units when needed
+      return;
+    }
+
+    const building = this.buildingData.get(entityId);
+    if (!building) return;
+
+    if (building.barrelLineAnchor) {
+      building.barrelLineAnchor.dispose();
+      building.barrelLineAnchor = null;
+    }
+
+    building.barrelMeshNameConfig = meshName;
+    const turretParts = this.findTurretParts(
+      building.mesh,
+      meshName,
+      building.meshPartFlagsConfig,
+      building.barrelLinePositionConfig,
+      building.modelCenterLocal
+    );
+    building.yawParts = turretParts.yawParts;
+    building.pitchParts = turretParts.pitchParts;
+    building.rootYawParts = turretParts.rootYawParts;
+    building.rootPitchParts = turretParts.rootPitchParts;
+    building.yawOnlyParts = turretParts.yawOnlyParts;
+    building.pitchOnlyParts = turretParts.pitchOnlyParts;
+    building.sharedParts = turretParts.sharedParts;
+    building.baseRotations = turretParts.baseRotations;
+    building.barrelLineAnchor = turretParts.barrelLineAnchor;
+    building.hasBarrelLine = turretParts.hasBarrelLine;
+    building.baseBarrelYaw = turretParts.baseBarrelYaw;
+    building.baseBarrelPitch = turretParts.baseBarrelPitch;
   }
 
   /**
@@ -1448,12 +2149,15 @@ export class CombatEngine {
 
     const building = this.buildingData.get(buildingId);
     if (building) {
+      const { centerX, centerZ } = this.getBuildingCenterWorld(building);
+      const ringDiameter = this.getBuildingSelectionDiameter(building);
+
       // Show selection ring around the building
-      this.showSelectionRing(building.x, building.z);
+      this.showSelectionRing(centerX, centerZ, ringDiameter);
 
       // Show range circle if building has attack range
       if (building.range > 0) {
-        this.showRangeCircle(building.x, building.z, building.range);
+        this.showRangeCircle(centerX, centerZ, building.range);
       }
     }
   }
@@ -1487,20 +2191,37 @@ export class CombatEngine {
 
   // ==================== SELECTION RING ====================
 
-  /**
-   * Show a selection ring around a building position
-   */
-  private showSelectionRing(gridX: number, gridZ: number): void {
-    this.hideSelectionRing();
+  private getBuildingCenterWorld(
+    building: typeof this.buildingData extends Map<string, infer V> ? V : never
+  ): { centerX: number; centerZ: number } {
+    if (building.visualCenterWorld) {
+      return { centerX: building.visualCenterWorld.x, centerZ: building.visualCenterWorld.z };
+    }
 
-    const worldX = gridX * TILE_SIZE + TILE_SIZE / 2;
-    const worldZ = gridZ * TILE_SIZE + TILE_SIZE / 2;
+    return {
+      centerX: (building.x + building.tileWidth / 2) * TILE_SIZE,
+      centerZ: (building.z + building.tileHeight / 2) * TILE_SIZE,
+    };
+  }
+
+  private getBuildingSelectionDiameter(
+    building: typeof this.buildingData extends Map<string, infer V> ? V : never
+  ): number {
+    const footprintTiles = Math.max(building.tileWidth, building.tileHeight);
+    return TILE_SIZE * footprintTiles * 1.3;
+  }
+
+  /**
+   * Show a selection ring around a building world position
+   */
+  private showSelectionRing(worldX: number, worldZ: number, diameter: number): void {
+    this.hideSelectionRing();
 
     // Single thick ring around the building
     this.selectionRing = MeshBuilder.CreateTorus(
       'selectionRing',
       {
-        diameter: TILE_SIZE * 1.3,
+        diameter,
         thickness: 0.6, // Thicker ring
         tessellation: 48,
       },
@@ -1534,7 +2255,7 @@ export class CombatEngine {
   /**
    * Show a range circle around a position
    */
-  public showRangeCircle(gridX: number, gridZ: number, range: number): void {
+  public showRangeCircle(worldX: number, worldZ: number, range: number): void {
     if (this.rangeCircle) {
       this.rangeCircle.dispose();
     }
@@ -1551,9 +2272,7 @@ export class CombatEngine {
       this.scene
     );
 
-    // Position at grid center, slightly above ground
-    const worldX = gridX * TILE_SIZE + TILE_SIZE / 2;
-    const worldZ = gridZ * TILE_SIZE + TILE_SIZE / 2;
+    // Position at building center, slightly above ground
     this.rangeCircle.position = new Vector3(worldX, 0.15, worldZ);
 
     // Semi-transparent cyan material
@@ -1696,7 +2415,11 @@ export class CombatEngine {
     // Merge into single mesh
     const core = Mesh.MergeMeshes(
       [coreCylinder, coreCapStart, coreCapEnd],
-      true, true, undefined, false, true
+      true,
+      true,
+      undefined,
+      false,
+      true
     ) as Mesh;
     core.name = `laser_core_${id}`;
 
@@ -1727,7 +2450,11 @@ export class CombatEngine {
 
     const glow = Mesh.MergeMeshes(
       [glowCylinder, glowCapStart, glowCapEnd],
-      true, true, undefined, false, true
+      true,
+      true,
+      undefined,
+      false,
+      true
     ) as Mesh;
     glow.name = `laser_glow_${id}`;
 
@@ -1766,31 +2493,67 @@ export class CombatEngine {
     coreMat.disableLighting = true;
     core.material = coreMat;
 
-    // Glow material - full color, semi-transparent
+    // Glow material - full color, semi-transparent with proper depth
     const glowMat = new StandardMaterial(`laser_glow_mat_${id}`, this.scene);
     glowMat.emissiveColor = laserColor;
     glowMat.diffuseColor = laserColor;
     glowMat.alpha = 0.5;
     glowMat.disableLighting = true;
+    // Enable depth pre-pass so transparent glow is properly occluded by geometry
+    glowMat.needDepthPrePass = true;
     glow.material = glowMat;
 
-    // Add both to glow layer
-    if (this.glowLayer) {
-      this.glowLayer.addIncludedOnlyMesh(core);
-      this.glowLayer.addIncludedOnlyMesh(glow);
-    }
+    // NOTE: Do NOT add lasers to glow layer - glow layer is a post-process effect
+    // that renders on top of everything and ignores depth testing. This would cause
+    // the laser to be visible through the turret model. The emissive colors still
+    // make the laser look bright without the bloom effect.
 
     return { core, glow };
   }
 
   /**
    * Fire a laser from source to target position with visual effects
+   * Clips laser at ground level (Y=0) to prevent it extending below ground
+   * @param attackIntervalMs - Optional: time between attacks in ms. Laser fades faster for faster attacks.
    */
-  public fireLaser(sourcePos: Vector3, targetPos: Vector3, color = '#ff0000'): void {
+  public fireLaser(
+    sourcePos: Vector3,
+    targetPos: Vector3,
+    color = '#ff0000',
+    attackIntervalMs?: number
+  ): void {
     const id = `laser_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const duration = 2000; // 2 seconds visible
+    // Calculate duration based on attack speed
+    // Fast attacks (short interval): quick fade to clear before next shot
+    // Slow attacks (long interval): can linger a bit longer
+    // Default: 600ms if no interval specified
+    // Duration is 50% of attack interval, clamped between 150ms and 800ms
+    let duration = 600;
+    if (attackIntervalMs) {
+      duration = Math.min(800, Math.max(150, attackIntervalMs * 0.5));
+    }
 
-    const { core, glow } = this.createLaserBeam(sourcePos, targetPos, color);
+    // No offset - laser starts from calculated source position inside the turret
+    // The laser will be properly occluded by the turret geometry via depth testing
+    const offsetSourcePos = sourcePos;
+
+    // Clip laser at ground level if it would go below
+    let clippedTargetPos = targetPos.clone();
+    const groundY = 0.05; // Slightly above ground to avoid z-fighting
+
+    if (targetPos.y < groundY && offsetSourcePos.y > groundY) {
+      // Calculate intersection with ground plane using offset source
+      const dir = targetPos.subtract(offsetSourcePos);
+      const t = (groundY - offsetSourcePos.y) / dir.y;
+      if (t > 0 && t < 1) {
+        clippedTargetPos = offsetSourcePos.add(dir.scale(t));
+      }
+    } else if (targetPos.y < groundY) {
+      // Target is below ground, just clamp Y
+      clippedTargetPos.y = groundY;
+    }
+
+    const { core, glow } = this.createLaserBeam(offsetSourcePos, clippedTargetPos, color);
 
     this.activeLasers.set(id, {
       coreMesh: core,
@@ -1799,8 +2562,8 @@ export class CombatEngine {
       duration,
     });
 
-    // Create impact flash at target
-    this.createImpactFlash(targetPos, color);
+    // Create impact flash at clipped target position
+    this.createImpactFlash(clippedTargetPos, color);
   }
 
   /**
@@ -1866,19 +2629,21 @@ export class CombatEngine {
         laser.glowMesh.dispose();
         this.activeLasers.delete(id);
       } else {
-        // Fade out in the last 30% of duration
-        if (progress > 0.7) {
-          const fadeProgress = (progress - 0.7) / 0.3;
-          const alpha = 1 - fadeProgress;
+        // Start fading at 30% through duration for obvious fade effect
+        if (progress > 0.3) {
+          // Use easeOutQuad for smooth, noticeable fade: starts fast, slows down
+          const fadeProgress = (progress - 0.3) / 0.7;
+          const easedFade = 1 - (1 - fadeProgress) * (1 - fadeProgress); // easeOutQuad
+          const alpha = 1 - easedFade;
 
           const coreMat = laser.coreMesh.material as StandardMaterial;
           const glowMat = laser.glowMesh.material as StandardMaterial;
 
           if (coreMat) coreMat.alpha = alpha;
-          if (glowMat) glowMat.alpha = alpha * 0.4;
+          if (glowMat) glowMat.alpha = alpha * 0.5;
 
-          // Shrink slightly as it fades
-          const scale = 1 - fadeProgress * 0.3;
+          // Shrink more dramatically as it fades (from 1.0 to 0.2)
+          const scale = 1 - easedFade * 0.8;
           laser.coreMesh.scaling.x = scale;
           laser.coreMesh.scaling.z = scale;
           laser.glowMesh.scaling.x = scale;
@@ -1891,218 +2656,250 @@ export class CombatEngine {
   // ==================== TURRET ROTATION ====================
 
   /**
-   * Find the turret parts: the rotatable head (yaw), pitchable barrel (pitch), and barrel tip
-   * Uses mesh hierarchy and naming conventions to identify parts
-   *
-   * For models without proper hierarchy (like flat GLB exports), this will:
-   * 1. Identify the base mesh (lowest Y position)
-   * 2. Create a new parent node for all non-base meshes (turret head)
-   * 3. Return that parent as the rotatable part
-   * 4. Calculate the barrel local offset from the turret head's bounding box
+   * Find turret parts using mesh part flags or naming conventions.
+   * Builds a barrel line anchor from the saved local position.
    */
-  private findTurretParts(root: TransformNode): {
-    rotatablePart: TransformNode | null;
-    pitchablePart: TransformNode | null;
-    barrelTip: TransformNode | null;
-    barrelLocalOffset: Vector3;
+  private findTurretParts(
+    root: TransformNode,
+    barrelMeshName: string | null,
+    meshPartFlags: Record<string, string[]> | null,
+    barrelLinePosition: { x: number; y: number; z: number } | null,
+    modelCenterLocal: Vector3 | null
+  ): {
+    yawParts: TransformNode[];
+    pitchParts: TransformNode[];
+    rootYawParts: TransformNode[];
+    rootPitchParts: TransformNode[];
+    yawOnlyParts: TransformNode[];
+    pitchOnlyParts: TransformNode[];
+    sharedParts: TransformNode[];
+    baseRotations: Map<TransformNode, Vector3>;
+    barrelLineAnchor: TransformNode | null;
+    hasBarrelLine: boolean;
+    baseBarrelYaw: number;
+    baseBarrelPitch: number;
   } {
-    const rotateKeywords = ['turret', 'head', 'top', 'rotate', 'swivel', 'upper'];
-    const pitchKeywords = ['barrel', 'gun', 'cannon', 'weapon', 'arm'];
-    const tipKeywords = ['muzzle', 'tip', 'nozzle', 'end'];
+    const yawKeywords = ['turret', 'head', 'top', 'rotate', 'swivel', 'upper'];
+    const pitchKeywords = ['barrel', 'gun', 'cannon', 'weapon', 'arm', 'tube', 'pipe', 'cylinder'];
 
-    // Get all direct children (meshes)
-    const children = root.getChildren();
-    const meshChildren: TransformNode[] = [];
+    // Helper to find meshes with a specific flag
+    const getMeshesWithFlag = (flag: string): string[] => {
+      if (!meshPartFlags) return [];
+      return Object.entries(meshPartFlags)
+        .filter(([, flags]) => flags.includes(flag))
+        .map(([name]) => name);
+    };
 
-    for (const child of children) {
-      if (child instanceof TransformNode) {
-        meshChildren.push(child);
+    // Collect all descendants for searching
+    const allDescendants: TransformNode[] = [];
+    const collectDescendants = (node: TransformNode) => {
+      for (const child of node.getChildren()) {
+        if (child instanceof TransformNode) {
+          allDescendants.push(child);
+          collectDescendants(child);
+        }
+      }
+    };
+    collectDescendants(root);
+
+    // Also check scene meshes as fallback (for flat hierarchies)
+    const findMeshByName = (name: string): TransformNode | null => {
+      let mesh = allDescendants.find((d) => d.name === name);
+      if (!mesh && this.scene) {
+        const sceneMesh = this.scene.getMeshByName(name);
+        if (sceneMesh) mesh = sceneMesh;
+      }
+      return mesh || null;
+    };
+
+    // Find yaw parts (horizontal rotation)
+    const yawMeshNames = getMeshesWithFlag('yaw');
+    let yawParts: TransformNode[] = [];
+    if (yawMeshNames.length > 0) {
+      yawParts = yawMeshNames.map(findMeshByName).filter((m): m is TransformNode => m !== null);
+    } else {
+      // Fallback: search by keywords
+      for (const mesh of allDescendants) {
+        const nameLower = mesh.name.toLowerCase();
+        if (yawKeywords.some((kw) => nameLower.includes(kw))) {
+          yawParts.push(mesh);
+          break; // Just use first match
+        }
       }
     }
 
-    console.log('Turret mesh hierarchy:', meshChildren.map(d => {
-      const pos = d.position;
-      return `${d.name}(y:${pos?.y?.toFixed(1) || '?'})`;
-    }).join(', '));
-
-    let rotatablePart: TransformNode | null = null;
-    let pitchablePart: TransformNode | null = null;
-    let barrelTip: TransformNode | null = null;
-    let headMeshes: TransformNode[] = [];
-
-    // First, try to find parts by keyword
-    for (const mesh of meshChildren) {
-      const nameLower = mesh.name.toLowerCase();
-
-      // Check for barrel tip/muzzle
-      const isTip = tipKeywords.some(kw => nameLower.includes(kw));
-      if (isTip && !barrelTip) {
-        barrelTip = mesh;
-        console.log(`Found barrel tip: "${mesh.name}"`);
-      }
-
-      // Check for pitchable part (barrel/gun)
-      const isPitchable = pitchKeywords.some(kw => nameLower.includes(kw));
-      if (isPitchable && !pitchablePart) {
-        pitchablePart = mesh;
-        console.log(`Found pitchable part (barrel): "${mesh.name}"`);
-      }
-
-      // Check for rotatable part by keyword (turret head)
-      const isRotatable = rotateKeywords.some(kw => nameLower.includes(kw));
-      if (isRotatable && !rotatablePart) {
-        rotatablePart = mesh;
-        console.log(`Found rotatable part (head): "${mesh.name}"`);
+    // Find pitch parts (vertical rotation)
+    const pitchMeshNames = getMeshesWithFlag('pitch');
+    let pitchParts: TransformNode[] = [];
+    if (pitchMeshNames.length > 0) {
+      pitchParts = pitchMeshNames.map(findMeshByName).filter((m): m is TransformNode => m !== null);
+    } else {
+      // Fallback: search by keywords
+      for (const mesh of allDescendants) {
+        const nameLower = mesh.name.toLowerCase();
+        if (pitchKeywords.some((kw) => nameLower.includes(kw))) {
+          pitchParts.push(mesh);
+          break; // Just use first match
+        }
       }
     }
 
-    // Calculate barrel local offset BEFORE reparenting (need original positions)
-    // The offset will be relative to where we place the turret head pivot
-    let barrelLocalOffset = new Vector3(0, 0, 4); // Default fallback
-    let turretHeadCenterY = 0;
+    if (pitchParts.length === 0 && barrelMeshName) {
+      const explicitMesh = findMeshByName(barrelMeshName);
+      if (explicitMesh) {
+        pitchParts = [explicitMesh];
+      }
+    }
 
-    // If no rotatable part found by keyword, create a turret head group
-    // by separating base (lowest mesh) from the rest
-    if (!rotatablePart && meshChildren.length > 1) {
-      // Sort meshes by Y position to find the base
-      const sortedByY = [...meshChildren].sort((a, b) => {
-        const aY = a.position?.y ?? 0;
-        const bY = b.position?.y ?? 0;
-        return aY - bY;
+    // If no pitch parts, use yaw parts for both
+    if (pitchParts.length === 0 && yawParts.length > 0) {
+      pitchParts = [...yawParts];
+    }
+
+    const getRootParts = (parts: TransformNode[]): TransformNode[] => {
+      const partSet = new Set(parts);
+      return parts.filter((mesh) => {
+        let parent = mesh.parent;
+        while (parent) {
+          if (partSet.has(parent as TransformNode)) {
+            return false;
+          }
+          parent = parent.parent;
+        }
+        return true;
       });
+    };
 
-      // The lowest mesh is likely the base
-      const baseMesh = sortedByY[0];
-      headMeshes = sortedByY.slice(1); // Everything above the base
+    const rootYawParts = getRootParts(yawParts);
+    const rootPitchParts = getRootParts(pitchParts);
 
-      if (baseMesh && headMeshes.length > 0) {
-        console.log(`Identified base mesh: "${baseMesh.name}" (y=${baseMesh.position?.y?.toFixed(1)})`);
-        console.log(`Turret head meshes: ${headMeshes.map(m => m.name).join(', ')}`);
+    const rootYawSet = new Set(rootYawParts);
+    const rootPitchSet = new Set(rootPitchParts);
+    const sharedParts = rootYawParts.filter((mesh) => rootPitchSet.has(mesh));
+    const yawOnlyParts = rootYawParts.filter((mesh) => !rootPitchSet.has(mesh));
+    const pitchOnlyParts = rootPitchParts.filter((mesh) => !rootYawSet.has(mesh));
 
-        // Calculate the center position of head meshes for the pivot point
-        for (const mesh of headMeshes) {
-          turretHeadCenterY += mesh.position?.y ?? 0;
-        }
-        turretHeadCenterY /= headMeshes.length;
+    const baseRotations = new Map<TransformNode, Vector3>();
+    const storeBaseRotation = (mesh: TransformNode) => {
+      if (baseRotations.has(mesh)) return;
+      const baseRotation = mesh.rotationQuaternion
+        ? mesh.rotationQuaternion.toEulerAngles()
+        : mesh.rotation.clone();
+      baseRotations.set(mesh, baseRotation.clone());
+    };
 
-        // Calculate barrel offset BEFORE reparenting using original mesh positions
-        // Find the mesh that extends furthest in Z (that's the barrel tip)
-        let overallMaxZ = -Infinity;
-        let minX = Infinity, maxX = -Infinity;
+    [...rootYawParts, ...rootPitchParts].forEach(storeBaseRotation);
 
-        for (const mesh of headMeshes) {
-          if (mesh instanceof Mesh && mesh.getTotalVertices() > 0) {
-            const boundingInfo = mesh.getBoundingInfo();
-            const min = boundingInfo.boundingBox.minimum;
-            const max = boundingInfo.boundingBox.maximum;
-            const meshPos = mesh.position || Vector3.Zero();
+    let barrelLineAnchor: TransformNode | null = null;
+    let hasBarrelLine = false;
+    let baseBarrelYaw = 0;
+    let baseBarrelPitch = 0;
 
-            const meshMaxZ = max.z + meshPos.z;
-            minX = Math.min(minX, min.x + meshPos.x);
-            maxX = Math.max(maxX, max.x + meshPos.x);
+    if (barrelLinePosition && this.scene) {
+      barrelLineAnchor = new TransformNode('_barrelLineAnchor', this.scene);
 
-            if (meshMaxZ > overallMaxZ) {
-              overallMaxZ = meshMaxZ;
-            }
-          }
-        }
-
-        if (overallMaxZ > -Infinity) {
-          // Barrel tip: centered X, small negative Y offset to align with barrel centerline, max Z (front)
-          const localCenterX = (minX + maxX) / 2;
-          const localBarrelY = -0.22; // Offset down from pivot to barrel centerline
-          barrelLocalOffset = new Vector3(localCenterX, localBarrelY, overallMaxZ);
-          console.log(`Barrel offset: pivotY=${turretHeadCenterY.toFixed(2)}, localOffset=(${barrelLocalOffset.x.toFixed(2)}, ${barrelLocalOffset.y.toFixed(2)}, ${barrelLocalOffset.z.toFixed(2)})`);
-        }
-
-        // Create a new parent node for the turret head parts
-        const turretHeadNode = new TransformNode('_turretHead', this.scene);
-        turretHeadNode.parent = root;
-
-        // Position the turret head node at the center Y of head parts
-        turretHeadNode.position.y = turretHeadCenterY;
-
-        // Reparent head meshes under the turret head node
-        for (const mesh of headMeshes) {
-          const originalY = mesh.position?.y ?? 0;
-          mesh.parent = turretHeadNode;
-          // Adjust position relative to new parent
-          mesh.position.y = originalY - turretHeadCenterY;
-        }
-
-        rotatablePart = turretHeadNode;
-        console.log(`Created turret head group at y=${turretHeadCenterY.toFixed(1)} with ${headMeshes.length} meshes`);
-      }
-    } else if (!rotatablePart && meshChildren.length === 1) {
-      // Only one mesh - use it directly
-      rotatablePart = meshChildren[0] ?? null;
-      headMeshes = meshChildren;
-      console.log(`Single mesh turret, using: "${rotatablePart?.name}"`);
-
-      // Calculate offset for single mesh - use center Y (barrel centerline)
-      if (rotatablePart instanceof Mesh && rotatablePart.getTotalVertices() > 0) {
-        const boundingInfo = rotatablePart.getBoundingInfo();
-        const min = boundingInfo.boundingBox.minimum;
-        const max = boundingInfo.boundingBox.maximum;
-        const meshPos = rotatablePart.position || Vector3.Zero();
-        barrelLocalOffset = new Vector3(
-          (min.x + max.x) / 2,
-          (min.y + max.y) / 2 + meshPos.y, // Use center Y
-          max.z + meshPos.z
+      if (pitchParts[0]) {
+        barrelLineAnchor.parent = pitchParts[0];
+        barrelLineAnchor.position = new Vector3(
+          barrelLinePosition.x,
+          barrelLinePosition.y,
+          barrelLinePosition.z
         );
+        hasBarrelLine = true;
+      } else if (modelCenterLocal) {
+        barrelLineAnchor.parent = root;
+        barrelLineAnchor.position = modelCenterLocal.add(
+          new Vector3(barrelLinePosition.x, barrelLinePosition.y, barrelLinePosition.z)
+        );
+        hasBarrelLine = true;
+      } else {
+        barrelLineAnchor.dispose();
+        barrelLineAnchor = null;
+      }
+
+      if (barrelLineAnchor && hasBarrelLine) {
+        barrelLineAnchor.computeWorldMatrix(true);
+        const forward = barrelLineAnchor.getDirection(new Vector3(0, 0, 1));
+        const horizontal = Math.sqrt(forward.x * forward.x + forward.z * forward.z);
+        baseBarrelYaw = Math.atan2(forward.x, forward.z);
+        baseBarrelPitch = Math.atan2(forward.y, horizontal);
       }
     }
 
-    // If still no pitchable part, use the rotatable part for both
-    if (!pitchablePart && rotatablePart) {
-      console.log('No separate pitchable part found, using rotatable part for pitch');
-      pitchablePart = rotatablePart;
+    return {
+      yawParts,
+      pitchParts,
+      rootYawParts,
+      rootPitchParts,
+      yawOnlyParts,
+      pitchOnlyParts,
+      sharedParts,
+      baseRotations,
+      barrelLineAnchor,
+      hasBarrelLine,
+      baseBarrelYaw,
+      baseBarrelPitch,
+    };
+  }
+
+  private normalizeAngle(angle: number): number {
+    let normalized = angle;
+    while (normalized > Math.PI) normalized -= Math.PI * 2;
+    while (normalized < -Math.PI) normalized += Math.PI * 2;
+    return normalized;
+  }
+
+  private getTurretBarrelOrigin(
+    building: typeof this.buildingData extends Map<string, infer V> ? V : never
+  ): Vector3 | null {
+    if (!building.barrelLineAnchor || !building.hasBarrelLine) return null;
+    building.barrelLineAnchor.computeWorldMatrix(true);
+    return building.barrelLineAnchor.getAbsolutePosition().clone();
+  }
+
+  private getTurretBarrelForward(
+    building: typeof this.buildingData extends Map<string, infer V> ? V : never
+  ): Vector3 | null {
+    if (!building.barrelLineAnchor || !building.hasBarrelLine) return null;
+    building.barrelLineAnchor.computeWorldMatrix(true);
+    const forward = building.barrelLineAnchor.getDirection(new Vector3(0, 0, 1));
+    return forward.normalize();
+  }
+
+  private getTurretAlignmentAngle(
+    building: typeof this.buildingData extends Map<string, infer V> ? V : never,
+    targetWorldX: number,
+    targetWorldZ: number,
+    targetWorldY: number
+  ): number | null {
+    const origin = this.getTurretBarrelOrigin(building);
+    const forward = this.getTurretBarrelForward(building);
+    if (!origin || !forward) return null;
+
+    const toTarget = new Vector3(
+      targetWorldX - origin.x,
+      targetWorldY - origin.y,
+      targetWorldZ - origin.z
+    );
+
+    if (toTarget.lengthSquared() < 0.0001) {
+      return 0;
     }
 
-    // If headMeshes wasn't populated (parts found by keyword), calculate offset from rotatablePart
-    if (headMeshes.length === 0 && rotatablePart) {
-      const rotChildren = rotatablePart.getChildMeshes();
-      if (rotChildren.length > 0) {
-        // Calculate bounding box from children
-        let minX = Infinity, maxX = -Infinity;
-        let minY = Infinity, maxY = -Infinity;
-        let minZ = Infinity, maxZ = -Infinity;
+    const toTargetDir = toTarget.normalize();
+    const dot = Vector3.Dot(forward, toTargetDir);
+    const clampedDot = Math.max(-1, Math.min(1, dot));
+    return Math.acos(clampedDot);
+  }
 
-        for (const mesh of rotChildren) {
-          if (mesh instanceof Mesh && mesh.getTotalVertices() > 0) {
-            const boundingInfo = mesh.getBoundingInfo();
-            const min = boundingInfo.boundingBox.minimum;
-            const max = boundingInfo.boundingBox.maximum;
-            const meshPos = mesh.position || Vector3.Zero();
-
-            minX = Math.min(minX, min.x + meshPos.x);
-            maxX = Math.max(maxX, max.x + meshPos.x);
-            minY = Math.min(minY, min.y + meshPos.y);
-            maxY = Math.max(maxY, max.y + meshPos.y);
-            minZ = Math.min(minZ, min.z + meshPos.z);
-            maxZ = Math.max(maxZ, max.z + meshPos.z);
-          }
-        }
-
-        if (maxZ > -Infinity) {
-          barrelLocalOffset = new Vector3((minX + maxX) / 2, (minY + maxY) / 2, maxZ); // Use center Y
-          console.log(`Barrel offset from keyword-found part: (${barrelLocalOffset.x.toFixed(2)}, ${barrelLocalOffset.y.toFixed(2)}, ${barrelLocalOffset.z.toFixed(2)})`);
-        }
-      } else if (rotatablePart instanceof Mesh && rotatablePart.getTotalVertices() > 0) {
-        const boundingInfo = rotatablePart.getBoundingInfo();
-        const min = boundingInfo.boundingBox.minimum;
-        const max = boundingInfo.boundingBox.maximum;
-        barrelLocalOffset = new Vector3(0, (min.y + max.y) / 2, max.z); // Use center Y
-        console.log(`Barrel offset from single mesh: (${barrelLocalOffset.x.toFixed(2)}, ${barrelLocalOffset.y.toFixed(2)}, ${barrelLocalOffset.z.toFixed(2)})`);
-      }
-    }
-
-    // If still no barrel tip found
-    if (!barrelTip && pitchablePart) {
-      console.log('No barrel tip found, will use calculated offset from pitchable part');
-    }
-
-    return { rotatablePart, pitchablePart, barrelTip, barrelLocalOffset };
+  private isTurretRotationAligned(
+    building: typeof this.buildingData extends Map<string, infer V> ? V : never
+  ): boolean {
+    const yawError = Math.abs(
+      this.normalizeAngle(building.currentRotation - building.targetRotation)
+    );
+    const pitchError = Math.abs(building.currentPitch - building.targetPitch);
+    return yawError <= TURRET_ALIGNMENT_TOLERANCE && pitchError <= TURRET_ALIGNMENT_TOLERANCE;
   }
 
   /**
@@ -2118,6 +2915,69 @@ export class CombatEngine {
   }
 
   /**
+   * Check if a target is within the turret's field of view (yaw and pitch bounds)
+   * Returns { inView: true } if target can be hit, or { inView: false, reason: string } if not
+   */
+  private isTargetInTurretView(
+    building: typeof this.buildingData extends Map<string, infer V> ? V : never,
+    targetWorldX: number,
+    targetWorldZ: number,
+    targetWorldY: number
+  ): { inView: boolean; reason?: string; requiredYaw?: number; requiredPitch?: number } {
+    if (!building.barrelLineAnchor || !building.hasBarrelLine) {
+      return { inView: false, reason: 'Turret barrel line not calibrated' };
+    }
+
+    if (building.yawParts.length === 0 && building.pitchParts.length === 0) {
+      return { inView: false, reason: 'Turret has no rotatable parts' };
+    }
+
+    const origin = this.getTurretBarrelOrigin(building);
+    if (!origin) {
+      return { inView: false, reason: 'Turret barrel line not calibrated' };
+    }
+
+    const requiredYawWorld = this.calculateTargetRotation(
+      origin.x,
+      origin.z,
+      targetWorldX,
+      targetWorldZ
+    );
+    const requiredYaw = this.normalizeAngle(requiredYawWorld - building.baseBarrelYaw);
+
+    if (requiredYaw < building.yawClampMin || requiredYaw > building.yawClampMax) {
+      const yawDeg = (requiredYaw * 180) / Math.PI;
+      const minDeg = (building.yawClampMin * 180) / Math.PI;
+      const maxDeg = (building.yawClampMax * 180) / Math.PI;
+      return {
+        inView: false,
+        reason: `Target yaw ${yawDeg.toFixed(1)}° outside turret view [${minDeg.toFixed(0)}° to ${maxDeg.toFixed(0)}°]`,
+        requiredYaw,
+      };
+    }
+
+    const dx = targetWorldX - origin.x;
+    const dz = targetWorldZ - origin.z;
+    const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
+    const pitchWorld = Math.atan2(targetWorldY - origin.y, horizontalDistance);
+    const requiredPitch = pitchWorld - building.baseBarrelPitch;
+
+    if (requiredPitch < building.pitchClampMin || requiredPitch > building.pitchClampMax) {
+      const pitchDeg = (requiredPitch * 180) / Math.PI;
+      const minDeg = (building.pitchClampMin * 180) / Math.PI;
+      const maxDeg = (building.pitchClampMax * 180) / Math.PI;
+      return {
+        inView: false,
+        reason: `Target pitch ${pitchDeg.toFixed(1)}° outside turret view [${minDeg.toFixed(0)}° to ${maxDeg.toFixed(0)}°]`,
+        requiredYaw,
+        requiredPitch,
+      };
+    }
+
+    return { inView: true, requiredYaw, requiredPitch };
+  }
+
+  /**
    * Update turret rotations (called in render loop)
    * Handles both horizontal (yaw) and vertical (pitch) rotation
    * Yaw is applied to the rotatable part (turret head)
@@ -2125,70 +2985,94 @@ export class CombatEngine {
    * Also checks for pending attacks and fires when rotation is complete
    */
   private updateTurretRotations(deltaTime: number): void {
-    const yawSpeed = 3.0; // Radians per second for horizontal rotation
-    const pitchSpeed = 2.0; // Radians per second for vertical rotation
+    const yawSpeed = 3.0;
+    const pitchSpeed = 2.0;
 
     for (const [buildingId, data] of this.buildingData) {
-      // Yaw rotates the turret head (or whole mesh as fallback)
-      const yawPart = data.rotatablePart || data.mesh;
-      // Pitch rotates the barrel (or same as yaw part if no separate barrel)
-      const pitchPart = data.pitchablePart || yawPart;
-      const samePart = pitchPart === yawPart;
-
-      // Update yaw (horizontal rotation) on the turret head
-      let yawDiff = data.targetRotation - data.currentRotation;
-      while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
-      while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
-
-      const isYawRotating = Math.abs(yawDiff) > 0.05;
-      if (isYawRotating) {
-        const maxYaw = yawSpeed * deltaTime;
-        const yawAmount = Math.sign(yawDiff) * Math.min(maxYaw, Math.abs(yawDiff));
-        data.currentRotation += yawAmount;
+      if (data.yawParts.length === 0 && data.pitchParts.length === 0) {
+        continue;
       }
 
-      // Update pitch (vertical rotation) on the barrel
-      const pitchDiff = data.targetPitch - data.currentPitch;
-      const isPitchRotating = Math.abs(pitchDiff) > 0.02;
-      if (isPitchRotating) {
+      const clampedTargetYaw = Math.max(
+        data.yawClampMin,
+        Math.min(data.yawClampMax, data.targetRotation)
+      );
+      const clampedTargetPitch = Math.max(
+        data.pitchClampMin,
+        Math.min(data.pitchClampMax, data.targetPitch)
+      );
+
+      const yawDiff = this.normalizeAngle(clampedTargetYaw - data.currentRotation);
+      if (Math.abs(yawDiff) > 0.001) {
+        const maxYaw = yawSpeed * deltaTime;
+        const yawAmount = Math.sign(yawDiff) * Math.min(maxYaw, Math.abs(yawDiff));
+        data.currentRotation = this.normalizeAngle(data.currentRotation + yawAmount);
+        data.currentRotation = Math.max(
+          data.yawClampMin,
+          Math.min(data.yawClampMax, data.currentRotation)
+        );
+      }
+
+      const pitchDiff = clampedTargetPitch - data.currentPitch;
+      if (Math.abs(pitchDiff) > 0.001) {
         const maxPitch = pitchSpeed * deltaTime;
         const pitchAmount = Math.sign(pitchDiff) * Math.min(maxPitch, Math.abs(pitchDiff));
         data.currentPitch += pitchAmount;
+        data.currentPitch = Math.max(
+          data.pitchClampMin,
+          Math.min(data.pitchClampMax, data.currentPitch)
+        );
       }
 
-      // Apply rotations - log once when attack starts
-      const hasPendingAttack = this.pendingAttacks.has(buildingId);
+      const applyRotation = (
+        mesh: TransformNode,
+        baseRotation: Vector3,
+        applyYaw: boolean,
+        applyPitch: boolean
+      ) => {
+        mesh.rotationQuaternion = null;
+        mesh.rotation.x = baseRotation.x + (applyPitch ? -data.currentPitch : 0);
+        mesh.rotation.y = baseRotation.y + (applyYaw ? data.currentRotation : 0);
+        mesh.rotation.z = baseRotation.z;
+      };
 
-      if (samePart) {
-        // If we created a _turretHead group, rotate it directly
-        // Otherwise for legacy single-mesh models, try rotating the parent container
-        const partToRotate = yawPart.name === '_turretHead' ? yawPart : (yawPart.parent instanceof TransformNode ? yawPart.parent : yawPart);
-
-        // Apply yaw and pitch using Euler angles
-        // Y = yaw (horizontal), X = pitch (vertical)
-        // Note: Negate pitch because Babylon.js positive X rotation tilts down
-        partToRotate.rotationQuaternion = null;
-        partToRotate.rotation.x = -data.currentPitch;
-        partToRotate.rotation.y = data.currentRotation;
-        partToRotate.rotation.z = 0;
-      } else {
-        // Separate parts - apply yaw and pitch to different nodes
-        yawPart.rotationQuaternion = null;
-        pitchPart.rotationQuaternion = null;
-        yawPart.rotation.y = data.currentRotation;
-        pitchPart.rotation.x = data.currentPitch;
-
-        if (hasPendingAttack) {
-          console.log(`Rotating separate parts - yaw(${yawPart.name}): ${(data.currentRotation * 180 / Math.PI).toFixed(1)}deg, pitch(${pitchPart.name}): ${(data.currentPitch * 180 / Math.PI).toFixed(1)}deg`);
+      for (const mesh of data.yawOnlyParts) {
+        const baseRotation = data.baseRotations.get(mesh);
+        if (baseRotation) {
+          applyRotation(mesh, baseRotation, true, false);
         }
       }
 
-      // Check if both rotations are complete
-      const isFullyAimed = !isYawRotating && !isPitchRotating;
-      if (isFullyAimed) {
-        // Rotation complete - check for pending attack
-        const pendingAttack = this.pendingAttacks.get(buildingId);
-        if (pendingAttack) {
+      for (const mesh of data.pitchOnlyParts) {
+        const baseRotation = data.baseRotations.get(mesh);
+        if (baseRotation) {
+          applyRotation(mesh, baseRotation, false, true);
+        }
+      }
+
+      for (const mesh of data.sharedParts) {
+        const baseRotation = data.baseRotations.get(mesh);
+        if (baseRotation) {
+          applyRotation(mesh, baseRotation, true, true);
+        }
+      }
+
+      if (this.calibrationBuildingId === buildingId) {
+        this.updateCalibrationMarkerPosition();
+      }
+
+      const pendingAttack = this.pendingAttacks.get(buildingId);
+      if (pendingAttack) {
+        const alignmentAngle = this.getTurretAlignmentAngle(
+          data,
+          pendingAttack.targetWorldX,
+          pendingAttack.targetWorldZ,
+          pendingAttack.targetWorldY
+        );
+        const aligned =
+          (alignmentAngle !== null && alignmentAngle <= TURRET_ALIGNMENT_TOLERANCE) ||
+          this.isTurretRotationAligned(data);
+        if (aligned) {
           this.pendingAttacks.delete(buildingId);
           this.executeAttack(buildingId, data, pendingAttack);
         }
@@ -2198,141 +3082,233 @@ export class CombatEngine {
 
   /**
    * Execute the actual attack (fire laser) after rotation is complete
+   *
+   * SIMPLIFIED APPROACH: The barrel tip TransformNode is parented to the barrel mesh
+   * and automatically inherits all rotations from the scene graph. We just call
+   * getAbsolutePosition() to get the world-space laser origin.
    */
   private executeAttack(
-    buildingId: string,
+    _buildingId: string,
     data: typeof this.buildingData extends Map<string, infer V> ? V : never,
     attack: { targetWorldX: number; targetWorldZ: number; targetWorldY: number; color: string }
   ): void {
-    let sourcePos: Vector3;
-
-    // Try to get barrel tip world position
-    if (data.barrelTip) {
-      data.barrelTip.computeWorldMatrix(true);
-      sourcePos = data.barrelTip.getAbsolutePosition().clone();
-      console.log(`Firing from barrel tip at (${sourcePos.x.toFixed(1)}, ${sourcePos.y.toFixed(1)}, ${sourcePos.z.toFixed(1)})`);
-    } else if (data.rotatablePart) {
-      // Get the rotatable part (turret head)
-      const turretHead = data.rotatablePart;
-      turretHead.computeWorldMatrix(true);
-      const turretPos = turretHead.getAbsolutePosition();
-
-      // Use pre-calculated barrel offset (in local model units), scaled by the building's scale factor
-      const scaledOffset = data.barrelLocalOffset.scale(data.scaleFactor);
-
-      // Create rotation matrix from current yaw and pitch
-      // Note: pitch is negated because Babylon.js positive X rotation tilts down
-      const yawMatrix = Matrix.RotationY(data.currentRotation);
-      const pitchMatrix = Matrix.RotationX(-data.currentPitch);
-      const rotationMatrix = pitchMatrix.multiply(yawMatrix);
-
-      // Transform the scaled local barrel offset by the rotation
-      const rotatedOffset = Vector3.TransformCoordinates(scaledOffset, rotationMatrix);
-
-      // Add to turret position to get barrel tip world position
-      sourcePos = turretPos.add(rotatedOffset);
-
-      console.log(`Firing from turret head + offset: turret=(${turretPos.x.toFixed(1)}, ${turretPos.y.toFixed(1)}, ${turretPos.z.toFixed(1)}), ` +
-        `localOffset=(${data.barrelLocalOffset.x.toFixed(1)}, ${data.barrelLocalOffset.y.toFixed(1)}, ${data.barrelLocalOffset.z.toFixed(1)}), ` +
-        `scale=${data.scaleFactor.toFixed(3)}, source=(${sourcePos.x.toFixed(1)}, ${sourcePos.y.toFixed(1)}, ${sourcePos.z.toFixed(1)})`);
-    } else {
-      // Fallback: calculate from building grid position
-      const buildingWorldX = data.x * TILE_SIZE + TILE_SIZE / 2;
-      const buildingWorldZ = data.z * TILE_SIZE + TILE_SIZE / 2;
-      const buildingHeight = 6.0;
-
-      const barrelLength = TILE_SIZE * 0.5;
-      const horizontalLength = barrelLength * Math.cos(data.currentPitch);
-      const verticalOffset = barrelLength * Math.sin(data.currentPitch);
-
-      const barrelTipX = buildingWorldX + Math.sin(data.currentRotation) * horizontalLength;
-      const barrelTipZ = buildingWorldZ + Math.cos(data.currentRotation) * horizontalLength;
-      const barrelTipY = buildingHeight + verticalOffset;
-
-      sourcePos = new Vector3(barrelTipX, barrelTipY, barrelTipZ);
-      console.log(`Firing from fallback position at (${sourcePos.x.toFixed(1)}, ${sourcePos.y.toFixed(1)}, ${sourcePos.z.toFixed(1)})`);
+    const sourcePos = this.getTurretBarrelOrigin(data);
+    if (!sourcePos) {
+      console.warn('Skipping attack - barrel line not configured');
+      return;
     }
 
-    const targetPos = new Vector3(attack.targetWorldX, attack.targetWorldY, attack.targetWorldZ);
+    const groundY = 0.05;
+    const laserEndPos = new Vector3(
+      attack.targetWorldX,
+      Math.max(attack.targetWorldY, groundY),
+      attack.targetWorldZ
+    );
 
-    // Fire the laser with improved visuals
-    this.fireLaser(sourcePos, targetPos, attack.color);
+    const attackIntervalMs = data.attackSpeed > 0 ? 1000 / data.attackSpeed : undefined;
+    this.fireLaser(sourcePos, laserEndPos, attack.color, attackIntervalMs);
 
-    // Show target ring at attack location
-    this.showTargetRing('ground', attack.targetWorldX, attack.targetWorldZ, 2.0);
+    data.lastFireTime = performance.now();
 
-    // Hide target ring after laser duration
+    this.showTargetRing('ground', laserEndPos.x, laserEndPos.z, 2.0);
+
+    const laserDuration = attackIntervalMs
+      ? Math.min(800, Math.max(150, attackIntervalMs * 0.5))
+      : 600;
     setTimeout(() => {
       if (this.targetRingTargetId === 'ground') {
         this.hideTargetRing();
       }
-    }, 2500);
+    }, laserDuration + 200);
+  }
 
-    console.log(`Turret ${buildingId} fired at (${attack.targetWorldX.toFixed(1)}, ${attack.targetWorldZ.toFixed(1)})`);
+  // ==================== BUILDING HEALTH/COOLDOWN BARS ====================
+
+  /**
+   * Update building health bar texture and visibility
+   * Health bar is only visible when HP < 100%
+   */
+  private updateBuildingHealthBar(buildingId: string): void {
+    const building = this.buildingData.get(buildingId);
+    if (!building || !building.healthBarTexture || !building.healthBarPlane) return;
+
+    const healthPercent = building.health / building.maxHealth;
+
+    // Only show health bar when damaged
+    building.healthBarPlane.isVisible = healthPercent < 1.0;
+
+    // Only update texture if visible
+    if (!building.healthBarPlane.isVisible) return;
+
+    const ctx = building.healthBarTexture.getContext();
+    const width = 128;
+    const height = 16;
+
+    // Clear
+    ctx.clearRect(0, 0, width, height);
+
+    // Background
+    ctx.fillStyle = '#0b1120';
+    ctx.fillRect(0, 0, width, height);
+
+    // Health fill
+    const fillWidth = Math.max(0, (width - 4) * healthPercent);
+
+    // Color based on health percentage
+    if (healthPercent > 0.6) {
+      ctx.fillStyle = '#22c55e';
+    } else if (healthPercent > 0.3) {
+      ctx.fillStyle = '#facc15';
+    } else {
+      ctx.fillStyle = '#ef4444';
+    }
+
+    ctx.fillRect(2, 2, fillWidth, height - 4);
+
+    // Border
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, width - 2, height - 2);
+
+    building.healthBarTexture.update();
+  }
+
+  /**
+   * Update building cooldown bar texture
+   * Shows progress from 0% (just fired) to 100% (ready to fire)
+   */
+  private updateBuildingCooldownBar(buildingId: string): void {
+    const building = this.buildingData.get(buildingId);
+    if (!building || !building.cooldownBarTexture || !building.cooldownBarPlane) return;
+
+    // Don't show cooldown bar for buildings that can't attack
+    if (building.attackSpeed <= 0) {
+      building.cooldownBarPlane.isVisible = false;
+      return;
+    }
+
+    const now = performance.now();
+    const attackIntervalMs = 1000 / building.attackSpeed;
+    const timeSinceLastFire = now - building.lastFireTime;
+    const cooldownPercent = Math.min(1.0, timeSinceLastFire / attackIntervalMs);
+
+    // Show cooldown bar when on cooldown (not ready to fire), hide when ready
+    // Only show after the turret has fired at least once
+    building.cooldownBarPlane.isVisible = building.lastFireTime > 0 && cooldownPercent < 1.0;
+
+    const ctx = building.cooldownBarTexture.getContext();
+    const width = 128;
+    const height = 16;
+
+    // Clear
+    ctx.clearRect(0, 0, width, height);
+
+    // Background
+    ctx.fillStyle = '#0b1120';
+    ctx.fillRect(0, 0, width, height);
+
+    // Cooldown fill
+    const fillWidth = Math.max(0, (width - 4) * cooldownPercent);
+
+    // Color: bright cyan when charging
+    if (cooldownPercent >= 1.0) {
+      ctx.fillStyle = '#22d3ee';
+    } else {
+      ctx.fillStyle = '#38bdf8';
+    }
+
+    ctx.fillRect(2, 2, fillWidth, height - 4);
+
+    // Border
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, width - 2, height - 2);
+
+    building.cooldownBarTexture.update();
+  }
+
+  /**
+   * Update all building cooldown bars (called each frame)
+   */
+  private updateAllBuildingCooldownBars(): void {
+    for (const [buildingId] of this.buildingData) {
+      this.updateBuildingCooldownBar(buildingId);
+    }
+  }
+
+  /**
+   * Damage a building and update its health bar
+   */
+  public damageBuilding(
+    buildingId: string,
+    damage: number
+  ): { alive: boolean; remainingHealth: number } | null {
+    const building = this.buildingData.get(buildingId);
+    if (!building) return null;
+
+    building.health = Math.max(0, building.health - damage);
+    this.updateBuildingHealthBar(buildingId);
+
+    if (building.health <= 0) {
+      // Building destroyed - could add visual feedback here
+      return { alive: false, remainingHealth: 0 };
+    }
+
+    return { alive: true, remainingHealth: building.health };
   }
 
   // ==================== FORCE ATTACK ====================
 
   /**
    * Force attack a ground position (Ctrl+Click or Right-Click)
+   * Accepts exact world coordinates for precise targeting
    * Queues the attack to fire after turret finishes rotating
    */
-  public forceAttackGround(buildingId: string, targetPos: ArenaPosition): boolean {
+  public forceAttackGroundWorld(
+    buildingId: string,
+    targetWorldX: number,
+    targetWorldZ: number
+  ): boolean {
     const building = this.buildingData.get(buildingId);
     if (!building) {
-      console.log('Building not found:', buildingId);
       return false;
     }
 
     if (building.range <= 0 || building.damage <= 0) {
-      console.log('Building cannot attack (no range or damage)');
       return false;
     }
 
-    // Get building world position
-    const buildingWorldX = building.x * TILE_SIZE + TILE_SIZE / 2;
-    const buildingWorldZ = building.z * TILE_SIZE + TILE_SIZE / 2;
+    if (!building.hasBarrelLine) {
+      return false;
+    }
 
     // Target world position (ground level)
-    const targetWorldX = targetPos.x * TILE_SIZE + TILE_SIZE / 2;
-    const targetWorldZ = targetPos.z * TILE_SIZE + TILE_SIZE / 2;
     const targetWorldY = 0.1; // Ground level
 
-    // Calculate horizontal distance
-    const dx = targetWorldX - buildingWorldX;
-    const dz = targetWorldZ - buildingWorldZ;
-    const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
-
-    // Check if in range
+    // Check if in range (use building center for range check)
+    const { centerX: buildingCenterX, centerZ: buildingCenterZ } =
+      this.getBuildingCenterWorld(building);
+    const distFromCenter = Math.sqrt(
+      Math.pow(targetWorldX - buildingCenterX, 2) + Math.pow(targetWorldZ - buildingCenterZ, 2)
+    );
     const rangeInMeters = building.range * TILE_SIZE;
-    if (horizontalDistance > rangeInMeters) {
-      console.log('Target out of range:', horizontalDistance.toFixed(1), '>', rangeInMeters.toFixed(1));
+    if (distFromCenter > rangeInMeters) {
       return false;
     }
 
-    // Set turret horizontal rotation (yaw) toward target
-    building.targetRotation = this.calculateTargetRotation(
-      buildingWorldX,
-      buildingWorldZ,
-      targetWorldX,
-      targetWorldZ
-    );
-
-    // Calculate turret barrel height (approximate from building position)
-    // Get actual turret height from mesh if available
-    let turretHeight = 6.0; // Default building height
-    const pitchPart = building.pitchablePart || building.rotatablePart;
-    if (pitchPart) {
-      pitchPart.computeWorldMatrix(true);
-      turretHeight = pitchPart.getAbsolutePosition().y;
+    // Check if target is within turret's field of view (yaw and pitch bounds)
+    const viewCheck = this.isTargetInTurretView(building, targetWorldX, targetWorldZ, targetWorldY);
+    if (!viewCheck.inView) {
+      return false;
     }
 
-    // Calculate vertical pitch angle (negative because we're aiming down at ground)
-    // Pitch = arctan(heightDiff / horizontalDistance)
-    const heightDiff = turretHeight - targetWorldY;
-    building.targetPitch = -Math.atan2(heightDiff, horizontalDistance);
+    if (viewCheck.requiredYaw === undefined || viewCheck.requiredPitch === undefined) {
+      return false;
+    }
 
-    console.log(`Turret pitch: height=${turretHeight.toFixed(1)}, targetY=${targetWorldY}, hDist=${horizontalDistance.toFixed(1)}, pitch=${(building.targetPitch * 180 / Math.PI).toFixed(1)}deg`);
+    // Set turret rotation to the calculated values
+    building.targetRotation = viewCheck.requiredYaw;
+    building.targetPitch = viewCheck.requiredPitch;
 
     // Queue the attack - it will fire when rotation completes
     this.pendingAttacks.set(buildingId, {
@@ -2342,7 +3318,256 @@ export class CombatEngine {
       color: building.laserColor || '#ff0000',
     });
 
-    console.log(`Attack queued for turret ${buildingId}, rotating to target...`);
     return true;
+  }
+
+  /**
+   * Force attack a ground position using grid coordinates (snaps to tile center)
+   * For precise targeting, use forceAttackGroundWorld instead
+   */
+  public forceAttackGround(buildingId: string, targetPos: ArenaPosition): boolean {
+    const targetWorldX = targetPos.x * TILE_SIZE + TILE_SIZE / 2;
+    const targetWorldZ = targetPos.z * TILE_SIZE + TILE_SIZE / 2;
+    return this.forceAttackGroundWorld(buildingId, targetWorldX, targetWorldZ);
+  }
+
+  /**
+   * Force attack a unit by ID
+   * Uses the unit's actual visual position (interpolated) for pinpoint accuracy
+   * The laser will hit exactly where the unit model appears on screen
+   */
+  public forceAttackUnit(buildingId: string, targetUnitId: string): boolean {
+    if (!this.unitManager) {
+      return false;
+    }
+
+    // Get the unit's actual visual position
+    const unitPos = this.unitManager.getUnitWorldPosition(targetUnitId);
+    if (!unitPos) {
+      return false;
+    }
+
+    // Get building data
+    const building = this.buildingData.get(buildingId);
+    if (!building) {
+      return false;
+    }
+
+    if (building.range <= 0 || building.damage <= 0) {
+      return false;
+    }
+
+    if (!building.hasBarrelLine) {
+      return false;
+    }
+
+    // Target is the unit's current visual position
+    const targetWorldX = unitPos.x;
+    const targetWorldZ = unitPos.z;
+    // Target the unit's center height (half its size above ground)
+    const unit = this.unitManager.getUnit(targetUnitId);
+    const unitTileSize = unit?.tileSize ?? 1;
+    const targetWorldY = TILE_SIZE * unitTileSize * 0.4; // Target center mass
+
+    // Check if in range (use building center for range check)
+    const { centerX: buildingCenterX, centerZ: buildingCenterZ } =
+      this.getBuildingCenterWorld(building);
+    const distFromCenter = Math.sqrt(
+      Math.pow(targetWorldX - buildingCenterX, 2) + Math.pow(targetWorldZ - buildingCenterZ, 2)
+    );
+    const rangeInMeters = building.range * TILE_SIZE;
+    if (distFromCenter > rangeInMeters) {
+      return false;
+    }
+
+    // Check if target is within turret's field of view (yaw and pitch bounds)
+    const viewCheck = this.isTargetInTurretView(building, targetWorldX, targetWorldZ, targetWorldY);
+    if (!viewCheck.inView) {
+      return false;
+    }
+
+    if (viewCheck.requiredYaw === undefined || viewCheck.requiredPitch === undefined) {
+      return false;
+    }
+
+    // Set turret rotation to the calculated values
+    building.targetRotation = viewCheck.requiredYaw;
+    building.targetPitch = viewCheck.requiredPitch;
+
+    // Queue the attack - it will fire when rotation completes
+    this.pendingAttacks.set(buildingId, {
+      targetWorldX,
+      targetWorldZ,
+      targetWorldY,
+      color: building.laserColor || '#ff0000',
+    });
+
+    return true;
+  }
+
+  /**
+   * Get the current visual world position of a unit
+   * Useful for external systems that need to track unit positions
+   */
+  public getUnitWorldPosition(unitId: string): { x: number; y: number; z: number } | null {
+    if (!this.unitManager) return null;
+    const pos = this.unitManager.getUnitWorldPosition(unitId);
+    if (!pos) return null;
+    return { x: pos.x, y: pos.y, z: pos.z };
+  }
+
+  /**
+   * Get all unit IDs currently in the arena
+   */
+  public getAllUnitIds(): string[] {
+    if (!this.unitManager) return [];
+    return this.unitManager.getAllUnitIds();
+  }
+
+  // ==================== KILL COMMANDS ====================
+
+  /**
+   * Issue a kill command - turret will track and attack the unit until dead
+   * Follows the turret's attackSpeed and damage stats
+   */
+  public issueKillCommand(buildingId: string, targetUnitId: string): boolean {
+    const building = this.buildingData.get(buildingId);
+    if (!building) {
+      return false;
+    }
+
+    if (!this.unitManager) {
+      return false;
+    }
+
+    if (!this.unitManager.isUnitAlive(targetUnitId)) {
+      return false;
+    }
+
+    if (building.damage <= 0) {
+      return false;
+    }
+
+    if (!building.hasBarrelLine) {
+      return false;
+    }
+
+    // Start tracking this target
+    this.activeKillCommands.set(buildingId, {
+      targetUnitId,
+      nextFireTime: performance.now(), // Fire immediately
+      attackSpeed: building.attackSpeed,
+      damage: building.damage,
+    });
+
+    return true;
+  }
+
+  /**
+   * Cancel a kill command
+   */
+  public cancelKillCommand(buildingId: string): void {
+    this.activeKillCommands.delete(buildingId);
+  }
+
+  /**
+   * Cancel all kill commands
+   */
+  public cancelAllKillCommands(): void {
+    this.activeKillCommands.clear();
+  }
+
+  /**
+   * Check if a building has an active kill command
+   */
+  public hasKillCommand(buildingId: string): boolean {
+    return this.activeKillCommands.has(buildingId);
+  }
+
+  /**
+   * Process active kill commands (called each frame)
+   */
+  private updateKillCommands(now: number): void {
+    if (!this.unitManager) return;
+
+    for (const [buildingId, command] of this.activeKillCommands) {
+      if (!this.unitManager.isUnitAlive(command.targetUnitId)) {
+        this.activeKillCommands.delete(buildingId);
+        continue;
+      }
+
+      const targetPos = this.unitManager.getUnitWorldPosition(command.targetUnitId);
+      if (!targetPos) {
+        this.activeKillCommands.delete(buildingId);
+        continue;
+      }
+
+      const building = this.buildingData.get(buildingId);
+      if (!building) {
+        this.activeKillCommands.delete(buildingId);
+        continue;
+      }
+
+      const unit = this.unitManager.getUnit(command.targetUnitId);
+      const unitTileSize = unit?.tileSize ?? 1;
+      const targetWorldY = TILE_SIZE * unitTileSize * 0.4;
+
+      const { centerX: buildingCenterX, centerZ: buildingCenterZ } =
+        this.getBuildingCenterWorld(building);
+      const distFromCenter = Math.sqrt(
+        Math.pow(targetPos.x - buildingCenterX, 2) + Math.pow(targetPos.z - buildingCenterZ, 2)
+      );
+      const rangeInMeters = building.range * TILE_SIZE;
+
+      if (distFromCenter > rangeInMeters) {
+        continue;
+      }
+
+      const viewCheck = this.isTargetInTurretView(building, targetPos.x, targetPos.z, targetWorldY);
+      if (!viewCheck.inView) {
+        continue;
+      }
+
+      if (viewCheck.requiredYaw === undefined || viewCheck.requiredPitch === undefined) {
+        continue;
+      }
+
+      building.targetRotation = viewCheck.requiredYaw;
+      building.targetPitch = viewCheck.requiredPitch;
+
+      const alignmentAngle = this.getTurretAlignmentAngle(
+        building,
+        targetPos.x,
+        targetPos.z,
+        targetWorldY
+      );
+      const aligned =
+        (alignmentAngle !== null && alignmentAngle <= TURRET_ALIGNMENT_TOLERANCE) ||
+        this.isTurretRotationAligned(building);
+      if (!aligned) {
+        continue;
+      }
+
+      if (now < command.nextFireTime) {
+        continue;
+      }
+
+      this.executeAttack(buildingId, building, {
+        targetWorldX: targetPos.x,
+        targetWorldZ: targetPos.z,
+        targetWorldY,
+        color: building.laserColor || '#ff0000',
+      });
+
+      building.lastFireTime = now;
+
+      const result = this.unitManager.damageUnit(command.targetUnitId, command.damage);
+      if (result && !result.alive) {
+        this.activeKillCommands.delete(buildingId);
+      }
+
+      const fireInterval = 1000 / command.attackSpeed;
+      command.nextFireTime = now + fireInterval;
+    }
   }
 }

@@ -16,7 +16,7 @@ export interface NodeData {
 /**
  * Generate a human-readable tooltip for a behavior tree node
  */
-export function generateNodeTooltip(data: NodeData, childCount: number = 0): string {
+export function generateNodeTooltip(data: NodeData, childCount = 0): string {
   const type = data.type;
 
   // Composite nodes

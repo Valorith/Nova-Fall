@@ -38,6 +38,9 @@ export interface TransferData {
   completesAt: string;
 }
 
+// Progress callback for loading state
+export type LoadProgressCallback = (stage: string, progress: number) => void;
+
 // Neutral color for unclaimed nodes
 const NEUTRAL_NODE_COLOR = 0x505050;
 
@@ -348,10 +351,14 @@ export class WorldRenderer {
   }
 
   // Main entry point for loading map data
-  setMapData(nodes: MapNode[], connections: ConnectionData[]): void {
+  setMapData(nodes: MapNode[], connections: ConnectionData[], onProgress?: LoadProgressCallback): void {
+    onProgress?.('Generating map data...', 5);
+
     // Generate terrain and grid bounds from node positions
     const mapData = this.generateMapData(nodes, connections);
     this.mapData = mapData;
+
+    onProgress?.('Preparing render state...', 15);
 
     // Clear existing state first (before building new lookups)
     this.clearAll();
@@ -365,9 +372,17 @@ export class WorldRenderer {
       this.nodesById.set(node.id, node);
     }
 
+    onProgress?.('Rendering terrain...', 25);
     this.renderTerrain();
+
+    onProgress?.('Rendering connections...', 50);
     this.renderConnections();
+
+    onProgress?.('Rendering nodes...', 70);
     this.renderNodes(); // Also renders nameplates
+
+    onProgress?.('Finalizing...', 95);
+    onProgress?.('Complete', 100);
   }
 
   // Generate terrain for the grid using flood-fill to match GameView approach

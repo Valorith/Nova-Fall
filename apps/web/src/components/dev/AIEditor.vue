@@ -437,7 +437,11 @@ async function loadTreeIntoCanvas(tree: BehaviorTree, source = 'unknown') {
   // Chain Sequence edges for visual display:
   // Instead of Sequence → [A, B, C], show Sequence → A → B → C
   // This makes the execution flow more intuitive
-  const vfEdges = chainEdgesForDisplay(vfNodes, rawEdges);
+  // Cast is safe because we always create nodes with data and position
+  const vfEdges = chainEdgesForDisplay(
+    vfNodes as { id: string; data: { type: string }; position: { x: number; y: number } }[],
+    rawEdges
+  );
 
   console.log(`[AIEditor:${instanceId}] LoadTree - setting ${vfNodes.length} nodes, ${vfEdges.length} edges`);
 
@@ -993,7 +997,11 @@ async function saveTreePositionsWithNodes(nodeList: Node[], edgeList: Edge[]) {
 
     // Unchain Sequence edges before saving to database
     // Display uses chained format (A → B → C), but DB stores standard format (Parent → [A, B, C])
-    const unchainedEdges = unchainEdgesForSave(nodeList, edgeList);
+    // Cast is safe because we always create nodes with data
+    const unchainedEdges = unchainEdgesForSave(
+      nodeList as { id: string; data: { type: string } }[],
+      edgeList
+    );
 
     const treeData: BehaviorTree = {
       version: 1,

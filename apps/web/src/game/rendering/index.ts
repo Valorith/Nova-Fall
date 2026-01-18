@@ -1,1 +1,1 @@
-export { WorldRenderer, type TransferData } from './WorldRenderer';
+export { WorldRenderer, type TransferData, type LoadProgressCallback } from './WorldRenderer';

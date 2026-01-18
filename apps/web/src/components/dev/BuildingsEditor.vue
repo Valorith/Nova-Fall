@@ -116,6 +116,7 @@ const form = ref({
   damage: 0,
   range: 0,
   attackSpeed: 0,
+  barrelOffsetY: 0,
   category: 'structure' as BuildingCategory,
   aiPresetId: null as string | null,
 });
@@ -191,6 +192,7 @@ function startEdit() {
     damage: selectedBuilding.value.damage,
     range: selectedBuilding.value.range,
     attackSpeed: selectedBuilding.value.attackSpeed,
+    barrelOffsetY: selectedBuilding.value.barrelOffsetY,
     category: selectedBuilding.value.category as BuildingCategory,
     aiPresetId: selectedBuilding.value.aiPresetId,
   };
@@ -213,6 +215,7 @@ function startCreate() {
     damage: 0,
     range: 0,
     attackSpeed: 0,
+    barrelOffsetY: 0,
     category: 'structure',
     aiPresetId: null,
   };
@@ -237,6 +240,7 @@ async function save() {
       damage: form.value.damage,
       range: form.value.range,
       attackSpeed: form.value.attackSpeed,
+      barrelOffsetY: form.value.barrelOffsetY,
       category: form.value.category,
       aiPresetId: form.value.aiPresetId,
     };
@@ -679,6 +683,10 @@ onMounted(fetchBuildings);
                   <span class="stat-label">Attack Speed</span>
                   <span class="stat-value">{{ selectedBuilding.attackSpeed }}/s</span>
                 </div>
+                <div v-if="selectedBuilding.barrelOffsetY !== 0" class="stat-item">
+                  <span class="stat-label">Barrel Offset Y</span>
+                  <span class="stat-value">{{ selectedBuilding.barrelOffsetY.toFixed(3) }}</span>
+                </div>
               </div>
             </template>
             <div v-else class="no-combat">
@@ -801,6 +809,11 @@ onMounted(fetchBuildings);
               <div class="form-group">
                 <label>Attack Speed (/s)</label>
                 <input v-model.number="form.attackSpeed" type="number" min="0" step="0.1" class="form-input" />
+              </div>
+              <div class="form-group">
+                <label>Barrel Offset Y</label>
+                <input v-model.number="form.barrelOffsetY" type="number" step="0.01" class="form-input" />
+                <span class="hint">Adjust laser/projectile origin point (use calibration tool in Combat view)</span>
               </div>
             </div>
           </div>

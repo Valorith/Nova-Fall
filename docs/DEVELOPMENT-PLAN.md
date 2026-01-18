@@ -1073,6 +1073,7 @@ Nodes are rendered as hexagons with 6 connection faces for visual clarity:
 ```
 
 **Visual Structure:**
+
 - **Shape**: Flat-top hexagon (pointy sides)
 - **Size**: ~36px radius at node zoom level, scales with zoom
 - **Layers** (inside to outside):
@@ -1082,6 +1083,7 @@ Nodes are rendered as hexagons with 6 connection faces for visual clarity:
   4. Connection anchors: Small dots on active faces
 
 **Connection Rendering:**
+
 - Lines connect from face center to face center
 - Road type determines line style:
   - Dirt: Brown dashed (#8b7355)
@@ -1091,6 +1093,7 @@ Nodes are rendered as hexagons with 6 connection faces for visual clarity:
 - Danger level adds red overlay (0-100 → 0%-50% alpha)
 
 **Map Layout:**
+
 - Nodes are placed on a hex grid with terrain tiles filling gaps
 - ~100 nodes randomly distributed across ~170 hex cells (14x12 grid)
 - Non-node hexes are terrain (plains, forest, mountain, water, etc.)
@@ -1098,6 +1101,7 @@ Nodes are rendered as hexagons with 6 connection faces for visual clarity:
 - Each node can have 1-6 connections to neighboring nodes
 
 **Face Calculation:**
+
 ```typescript
 function getConnectionFace(fromNode, toNode): number {
   const angle = Math.atan2(
@@ -1105,11 +1109,12 @@ function getConnectionFace(fromNode, toNode): number {
     toNode.positionX - fromNode.positionX
   );
   // Convert angle to face (0-5), 0 = North
-  return Math.round(((angle + Math.PI) / Math.PI * 3) + 3) % 6;
+  return Math.round(((angle + Math.PI) / Math.PI) * 3 + 3) % 6;
 }
 ```
 
 **Implementation Priority:**
+
 1. [x] Update node graphics from circle to hexagon
 2. [x] Add face anchor points for connections
 3. [x] Update connection lines to use anchors
@@ -1172,6 +1177,7 @@ function getConnectionFace(fromNode, toNode): number {
 Transform Nova Fall from a single shared world to a multi-session game with lobby system.
 
 **Key Requirements:**
+
 - One active game per player at a time
 - Anyone can create new game sessions
 - 2 player minimum to start a game
@@ -1179,6 +1185,7 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
 - Post-login landing: Lobby (not game)
 
 **Game Types:**
+
 1. **King of the Hill** - Claim and hold central "Crown Node" for 48 hours to win
 2. **Domination** - Conquer all opponent HQs to win (last player standing)
 
@@ -1519,17 +1526,33 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
 ### 2.5.4 Node Core System
 
 - [x] **Define node core types**
+
   ```typescript
   // packages/shared/src/config/nodeCores.ts
   export const NODE_CORES = {
     solar_farm: { id: 'solar_farm', name: 'Solar Farm', targetNode: 'POWER_PLANT', cost: 100 },
     laboratory: { id: 'laboratory', name: 'Laboratory', targetNode: 'RESEARCH', cost: 100 },
     refinery: { id: 'refinery', name: 'Refinery', targetNode: 'REFINERY', cost: 100 },
-    greenhouse_biome: { id: 'greenhouse_biome', name: 'Greenhouse Biome', targetNode: 'AGRICULTURAL', cost: 100 },
+    greenhouse_biome: {
+      id: 'greenhouse_biome',
+      name: 'Greenhouse Biome',
+      targetNode: 'AGRICULTURAL',
+      cost: 100,
+    },
     strip_miner: { id: 'strip_miner', name: 'Strip Miner', targetNode: 'MINING', cost: 100 },
-    trading_complex: { id: 'trading_complex', name: 'Trading Complex', targetNode: 'TRADE_HUB', cost: 100 },
+    trading_complex: {
+      id: 'trading_complex',
+      name: 'Trading Complex',
+      targetNode: 'TRADE_HUB',
+      cost: 100,
+    },
     factory: { id: 'factory', name: 'Factory', targetNode: 'MANUFACTURING_PLANT', cost: 100 },
-    training_facility: { id: 'training_facility', name: 'Training Facility', targetNode: 'BARRACKS', cost: 100 },
+    training_facility: {
+      id: 'training_facility',
+      name: 'Training Facility',
+      targetNode: 'BARRACKS',
+      cost: 100,
+    },
   };
   ```
 
@@ -1580,16 +1603,17 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
 ### 2.5.5 Crafting System
 
 - [x] **Define blueprint system**
+
   ```typescript
   // packages/shared/src/config/blueprints.ts
   export interface Blueprint {
     id: string;
     name: string;
     category: 'refinement' | 'manufacturing' | 'training';
-    craftingNode: NodeType[];  // Which node types can craft this
+    craftingNode: NodeType[]; // Which node types can craft this
     inputs: { itemId: string; quantity: number }[];
     outputs: { itemId: string; quantity: number }[];
-    craftTime: number;  // seconds
+    craftTime: number; // seconds
   }
 
   export const BLUEPRINTS = {
@@ -1696,20 +1720,22 @@ Transform Nova Fall from a single shared world to a multi-session game with lobb
   - [x] Regenerate Prisma client
 
 - [x] **Define BuildingStats interface**
+
   ```typescript
   // packages/shared/src/config/buildings.ts
   export interface BuildingStats {
     health: number;
-    shield: number;      // Shield hit points (absorbs damage before health)
+    shield: number; // Shield hit points (absorbs damage before health)
     shieldRange: number; // 0 = personal shield, >0 = AOE radius protecting allies
-    damage: number;      // For defense buildings (turrets)
+    damage: number; // For defense buildings (turrets)
     armor: number;
-    range: number;       // Attack/effect range
+    range: number; // Attack/effect range
     attackSpeed: number; // For defense buildings
   }
   ```
 
 - [x] **Define building types**
+
   ```typescript
   export const BUILDING_TYPES: Record<string, BuildingTypeDefinition> = {
     // Defense
@@ -1931,8 +1957,8 @@ The following combat prerequisites were completed in Phase 2.5:
 
 > Corresponds to Phase C in COMBAT-MODE-DESIGN.md
 
-- [ ] **A* manual orders**
-  - [ ] Implement A* pathfinding for player-issued moves
+- [ ] **A\* manual orders**
+  - [ ] Implement A\* pathfinding for player-issued moves
   - [ ] Click-to-move with path preview
   - [ ] Order queue (shift-click waypoints)
   - [ ] Order completion → AI behavior reverts
@@ -1947,7 +1973,18 @@ The following combat prerequisites were completed in Phase 2.5:
   - [x] Turret pitch rotation (barrel tilts to aim at ground)
   - [x] Laser beam visual effect with glow
   - [x] Force attack via Ctrl+Click/Right-Click
-  - [ ] Add `barrelOffsetY` field to BuildingDefinition schema for per-turret barrel offset configuration
+  - [x] Add `barrelOffsetY` field to BuildingDefinition schema (replaced by barrel line system)
+
+- [~] **Turret Barrel Line System** (rework for reliable laser alignment)
+  - [x] Add barrel line positioning to ModelCalibrationPanel (draggable/positionable line)
+  - [x] Parent barrel line to pitch mesh so it rotates with barrel
+  - [x] Save barrel line local position (Vector3) to definition
+  - [x] Add `barrelLinePosition` field to BuildingDefinition and UnitDefinition schemas
+  - [x] Create runtime TransformNode from saved position, parented to barrel mesh
+  - [x] Refactor CombatEngine.executeAttack() to use barrel line getAbsolutePosition() for origin
+  - [x] Use barrel line direction for laser trajectory (not calculated from rotation matrices)
+  - [x] Remove old barrelOffsetY-based laser origin calculations
+  - [ ] Test laser alignment at various yaw/pitch angles
 
 - [ ] **Projectile system**
   - [ ] Create ProjectileManager class

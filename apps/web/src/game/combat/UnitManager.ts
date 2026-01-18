@@ -43,6 +43,8 @@ interface UnitVisual {
   mesh: Mesh;
   healthBarPlane: Mesh;
   healthBarTexture: DynamicTexture;
+  cooldownBarPlane: Mesh;
+  cooldownBarTexture: DynamicTexture;
   container: TransformNode;
 
   // State for interpolation
@@ -59,6 +61,13 @@ interface UnitVisual {
 
   // Size
   tileSize: number;
+
+  // Attack capabilities (for cooldown bar)
+  attackSpeed: number;
+  lastFireTime: number;
+
+  // Spawn animation progress (0 to 1)
+  spawnProgress: number;
 }
 
 export class UnitManager {
@@ -103,7 +112,11 @@ export class UnitManager {
    * - "model.glb" - loads entire file
    * - "pack.glb#MeshName" - loads specific mesh from pack
    */
-  private async replaceWithModel(visual: UnitVisual, modelPath: string, tileSize = 1): Promise<void> {
+  private async replaceWithModel(
+    visual: UnitVisual,
+    modelPath: string,
+    tileSize = 1
+  ): Promise<void> {
     try {
       // Parse modelPath for optional mesh name (e.g., "pack.glb#TurretA")
       let filePath = modelPath;
@@ -142,7 +155,9 @@ export class UnitManager {
         );
 
         if (!targetNode) {
-          console.warn(`Mesh "${targetMeshName}" not found in ${filePath}. Available: ${result.meshes.map(m => m.name).join(', ')}`);
+          console.warn(
+            `Mesh "${targetMeshName}" not found in ${filePath}. Available: ${result.meshes.map((m) => m.name).join(', ')}`
+          );
           // Dispose all loaded meshes since we're not using them
           result.meshes.forEach((m) => m.dispose());
           return;
@@ -150,7 +165,12 @@ export class UnitManager {
 
         // Get the target and all its descendants
         const descendants = targetNode.getDescendants(false);
-        meshesToUse = [targetNode, ...descendants.filter((d): d is Mesh => d instanceof Mesh || d.getClassName() === 'TransformNode')] as typeof result.meshes;
+        meshesToUse = [
+          targetNode,
+          ...descendants.filter(
+            (d): d is Mesh => d instanceof Mesh || d.getClassName() === 'TransformNode'
+          ),
+        ] as typeof result.meshes;
 
         // Dispose meshes we're not using
         result.meshes.forEach((m) => {
@@ -176,26 +196,25 @@ export class UnitManager {
         loadedRoot.position = Vector3.Zero();
       }
 
-      // Force compute all world matrices
+      // Get the root node for bounds calculation
+      const rootNode = modelContainer.getChildren()[0] as TransformNode | undefined;
+      if (!rootNode) {
+        console.warn('No root node found in model container');
+        return;
+      }
+
+      // Force compute world matrices before bounds calculation
       this.scene.updateTransformMatrix();
+      rootNode.computeWorldMatrix(true);
       meshesToUse.forEach((mesh) => {
         mesh.computeWorldMatrix(true);
       });
 
-      // Calculate bounding info for the meshes we're using
-      let minVec = new Vector3(Infinity, Infinity, Infinity);
-      let maxVec = new Vector3(-Infinity, -Infinity, -Infinity);
-
-      meshesToUse.forEach((mesh) => {
-        if (mesh instanceof Mesh && mesh.getTotalVertices() > 0) {
-          const boundingInfo = mesh.getBoundingInfo();
-          const min = boundingInfo.boundingBox.minimumWorld;
-          const max = boundingInfo.boundingBox.maximumWorld;
-
-          minVec = Vector3.Minimize(minVec, min);
-          maxVec = Vector3.Maximize(maxVec, max);
-        }
-      });
+      // Use getHierarchyBoundingVectors to get proper bounds for entire model hierarchy
+      // This correctly accounts for all child transforms
+      const bounds = rootNode.getHierarchyBoundingVectors(true);
+      const minVec = bounds.min;
+      const maxVec = bounds.max;
 
       // Calculate model dimensions
       const modelHeight = maxVec.y - minVec.y;
@@ -207,18 +226,32 @@ export class UnitManager {
       const targetSize = TILE_SIZE * tileSize * 0.8; // 80% of tile footprint
       const scaleFactor = maxDimension > 0 ? targetSize / maxDimension : 1;
 
-      modelContainer.scaling = new Vector3(scaleFactor, scaleFactor, scaleFactor);
+      // Store base scale for spawn animation to use
+      modelContainer.metadata = { baseScale: scaleFactor };
 
-      // Center the model and place on ground
-      const centerX = (minVec.x + maxVec.x) / 2;
-      const centerZ = (minVec.z + maxVec.z) / 2;
+      // If unit is still spawning, apply spawn progress to scale
+      const spawnScale = visual.spawnProgress;
+      modelContainer.scaling = new Vector3(
+        scaleFactor * spawnScale,
+        scaleFactor * spawnScale,
+        scaleFactor * spawnScale
+      );
 
-      const rootToAdjust = modelContainer.getChildren()[0] as TransformNode | undefined;
-      if (rootToAdjust) {
-        rootToAdjust.position.x = -centerX;
-        rootToAdjust.position.z = -centerZ;
-        rootToAdjust.position.y = -minVec.y;
-      }
+      // Recalculate bounds after scaling
+      this.scene.updateTransformMatrix();
+      rootNode.computeWorldMatrix(true);
+      const scaledBounds = rootNode.getHierarchyBoundingVectors(true);
+
+      // Calculate center offset relative to container position
+      // We want the model's center (in XZ) to be at the container's position
+      const containerWorldPos = visual.container.absolutePosition;
+      const modelCenterX = (scaledBounds.min.x + scaledBounds.max.x) / 2;
+      const modelCenterZ = (scaledBounds.min.z + scaledBounds.max.z) / 2;
+
+      // Offset the root to center the model on the container
+      rootNode.position.x -= modelCenterX - containerWorldPos.x;
+      rootNode.position.z -= modelCenterZ - containerWorldPos.z;
+      rootNode.position.y -= scaledBounds.min.y; // Place on ground
 
       // Remove the old placeholder mesh
       visual.mesh.dispose();
@@ -228,7 +261,6 @@ export class UnitManager {
       if (firstMesh) {
         visual.mesh = firstMesh;
       }
-
     } catch (error) {
       console.error(`Failed to load model ${modelPath}:`, error);
     }
@@ -249,7 +281,7 @@ export class UnitManager {
    * Get a random spawn position on the perimeter
    */
   getRandomSpawnPosition(side?: 'north' | 'south' | 'east' | 'west'): ArenaPosition {
-    const sides = side ? [side] : ['north', 'south', 'east', 'west'] as const;
+    const sides = side ? [side] : (['north', 'south', 'east', 'west'] as const);
     const chosenSide = sides[Math.floor(Math.random() * sides.length)];
 
     switch (chosenSide) {
@@ -323,6 +355,32 @@ export class UnitManager {
     healthBarPlane.billboardMode = Mesh.BILLBOARDMODE_ALL;
     healthBarPlane.material = healthBarMaterial;
 
+    // Create cooldown bar (below health bar)
+    const cooldownBarTexture = new DynamicTexture(
+      `cooldownbar_tex_${unitState.id}`,
+      { width: 128, height: 16 },
+      this.scene,
+      false
+    );
+
+    const cooldownBarMaterial = new StandardMaterial(`cooldownbar_mat_${unitState.id}`, this.scene);
+    cooldownBarMaterial.diffuseTexture = cooldownBarTexture;
+    cooldownBarMaterial.emissiveTexture = cooldownBarTexture;
+    cooldownBarMaterial.disableLighting = true;
+    cooldownBarMaterial.backFaceCulling = false;
+
+    const cooldownBarPlane = MeshBuilder.CreatePlane(
+      `cooldownbar_${unitState.id}`,
+      { width: healthBarWidth, height: healthBarHeight * 0.6 },
+      this.scene
+    );
+    cooldownBarPlane.parent = container;
+    cooldownBarPlane.position.y = healthBarOffset - healthBarHeight - TILE_SIZE * 0.05;
+    cooldownBarPlane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    cooldownBarPlane.material = cooldownBarMaterial;
+    // Cooldown bar hidden by default (shown when unit can attack and is on cooldown)
+    cooldownBarPlane.isVisible = false;
+
     // Set initial position
     const worldPos = this.gridToWorld(unitState.position);
     container.position = worldPos;
@@ -332,6 +390,8 @@ export class UnitManager {
       mesh,
       healthBarPlane,
       healthBarTexture,
+      cooldownBarPlane,
+      cooldownBarTexture,
       container,
       currentPosition: worldPos.clone(),
       targetPosition: worldPos.clone(),
@@ -342,6 +402,9 @@ export class UnitManager {
       maxHealth: unitState.maxHealth,
       ownerId: unitState.ownerId,
       tileSize,
+      attackSpeed: 0, // Will be set from unit definition
+      lastFireTime: 0,
+      spawnProgress: unitState.state === UnitState.SPAWNING ? 0.1 : 1.0,
     };
 
     // Draw initial health bar
@@ -351,9 +414,21 @@ export class UnitManager {
   }
 
   /**
-   * Update health bar texture
+   * Update health bar texture and visibility
+   * Health bar is only visible when HP < 100%
    */
   private updateHealthBar(visual: UnitVisual): void {
+    const healthPercent = visual.health / visual.maxHealth;
+
+    // Only show health bar when damaged (not at 100%)
+    // Don't interfere with spawning/dead states which control visibility elsewhere
+    if (visual.state !== UnitState.SPAWNING && visual.state !== UnitState.DEAD) {
+      visual.healthBarPlane.isVisible = healthPercent < 1.0;
+    }
+
+    // Only update texture if visible
+    if (!visual.healthBarPlane.isVisible) return;
+
     const ctx = visual.healthBarTexture.getContext();
     const width = 128;
     const height = 16;
@@ -366,7 +441,6 @@ export class UnitManager {
     ctx.fillRect(0, 0, width, height);
 
     // Health fill
-    const healthPercent = visual.health / visual.maxHealth;
     const fillWidth = Math.max(0, (width - 4) * healthPercent);
 
     // Color based on health percentage
@@ -386,6 +460,89 @@ export class UnitManager {
     ctx.strokeRect(1, 1, width - 2, height - 2);
 
     visual.healthBarTexture.update();
+  }
+
+  /**
+   * Update cooldown bar texture for a unit
+   * Shows progress from 0% (just fired) to 100% (ready to fire)
+   */
+  private updateCooldownBar(visual: UnitVisual): void {
+    // Don't show cooldown bar for units that can't attack
+    if (visual.attackSpeed <= 0) {
+      visual.cooldownBarPlane.isVisible = false;
+      return;
+    }
+
+    // Don't show during spawning or when dead
+    if (visual.state === UnitState.SPAWNING || visual.state === UnitState.DEAD) {
+      visual.cooldownBarPlane.isVisible = false;
+      return;
+    }
+
+    const now = performance.now();
+    const attackIntervalMs = 1000 / visual.attackSpeed;
+    const timeSinceLastFire = now - visual.lastFireTime;
+    const cooldownPercent = Math.min(1.0, timeSinceLastFire / attackIntervalMs);
+
+    // Only show cooldown bar when on cooldown (not ready)
+    visual.cooldownBarPlane.isVisible = cooldownPercent < 1.0;
+
+    if (!visual.cooldownBarPlane.isVisible) return;
+
+    const ctx = visual.cooldownBarTexture.getContext();
+    const width = 128;
+    const height = 16;
+
+    // Clear
+    ctx.clearRect(0, 0, width, height);
+
+    // Background
+    ctx.fillStyle = '#1a1a24';
+    ctx.fillRect(0, 0, width, height);
+
+    // Cooldown fill
+    const fillWidth = Math.max(0, (width - 4) * cooldownPercent);
+
+    // Color: cyan when charging
+    ctx.fillStyle = '#006064'; // Dark cyan - charging
+
+    ctx.fillRect(2, 2, fillWidth, height - 4);
+
+    // Border
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, width - 2, height - 2);
+
+    visual.cooldownBarTexture.update();
+  }
+
+  /**
+   * Update all unit cooldown bars (call each frame from CombatEngine)
+   */
+  public updateAllCooldownBars(): void {
+    for (const [, visual] of this.units) {
+      this.updateCooldownBar(visual);
+    }
+  }
+
+  /**
+   * Set attack speed for a unit (for cooldown bar)
+   */
+  public setUnitAttackSpeed(unitId: string, attackSpeed: number): void {
+    const visual = this.units.get(unitId);
+    if (visual) {
+      visual.attackSpeed = attackSpeed;
+    }
+  }
+
+  /**
+   * Record that a unit fired (for cooldown bar)
+   */
+  public recordUnitFire(unitId: string): void {
+    const visual = this.units.get(unitId);
+    if (visual) {
+      visual.lastFireTime = performance.now();
+    }
   }
 
   /**
@@ -447,8 +604,9 @@ export class UnitManager {
 
     // Handle state transitions
     if (previousState === UnitState.SPAWNING && unitState.state !== UnitState.SPAWNING) {
-      // Finished spawning
-      visual.healthBarPlane.isVisible = true;
+      // Finished spawning - only show health bar if damaged
+      const healthPercent = visual.health / visual.maxHealth;
+      visual.healthBarPlane.isVisible = healthPercent < 1.0;
     }
 
     if (unitState.state === UnitState.DEAD && previousState !== UnitState.DEAD) {
@@ -475,6 +633,8 @@ export class UnitManager {
     // Dispose of all visual components
     visual.healthBarTexture.dispose();
     visual.healthBarPlane.dispose();
+    visual.cooldownBarTexture.dispose();
+    visual.cooldownBarPlane.dispose();
     visual.mesh.dispose();
     visual.container.dispose();
 
@@ -511,10 +671,37 @@ export class UnitManager {
 
       // Animate spawning units
       if (visual.state === UnitState.SPAWNING) {
-        const currentScale = visual.mesh.scaling.x;
-        if (currentScale < 1) {
-          const newScale = Math.min(1, currentScale + deltaTime * 2);
-          visual.mesh.scaling = new Vector3(newScale, newScale, newScale);
+        if (visual.spawnProgress < 1) {
+          visual.spawnProgress = Math.min(1, visual.spawnProgress + deltaTime * 2);
+
+          // Scale placeholder mesh
+          visual.mesh.scaling = new Vector3(
+            visual.spawnProgress,
+            visual.spawnProgress,
+            visual.spawnProgress
+          );
+
+          // Also scale any loaded model container
+          const modelContainer = visual.container
+            .getChildren()
+            .find((c) => c.name.startsWith('model_container_')) as TransformNode | undefined;
+          if (modelContainer) {
+            // Model container has its own scale for sizing, multiply with spawn progress
+            const baseScale = (modelContainer.metadata as { baseScale?: number })?.baseScale ?? 1;
+            modelContainer.scaling = new Vector3(
+              baseScale * visual.spawnProgress,
+              baseScale * visual.spawnProgress,
+              baseScale * visual.spawnProgress
+            );
+          }
+
+          // Auto-transition to IDLE when spawn animation completes
+          if (visual.spawnProgress >= 1) {
+            visual.state = UnitState.IDLE;
+            // Show health bar if damaged
+            const healthPercent = visual.health / visual.maxHealth;
+            visual.healthBarPlane.isVisible = healthPercent < 1.0;
+          }
         }
       }
     }
@@ -524,7 +711,7 @@ export class UnitManager {
    * Sync all units from server state
    */
   syncUnits(units: CombatUnitState[]): void {
-    const serverUnitIds = new Set(units.map(u => u.id));
+    const serverUnitIds = new Set(units.map((u) => u.id));
 
     // Remove units that no longer exist on server
     for (const id of this.units.keys()) {
@@ -556,10 +743,109 @@ export class UnitManager {
   }
 
   /**
+   * Get the actual visual world position of a unit by ID
+   * Returns the interpolated position (where the unit model actually appears)
+   */
+  getUnitWorldPosition(unitId: string): Vector3 | null {
+    const visual = this.units.get(unitId);
+    if (!visual) return null;
+    return visual.currentPosition.clone();
+  }
+
+  /**
+   * Get unit by ID
+   */
+  getUnit(unitId: string): UnitVisual | undefined {
+    return this.units.get(unitId);
+  }
+
+  /**
+   * Get all unit IDs
+   */
+  getAllUnitIds(): string[] {
+    return Array.from(this.units.keys());
+  }
+
+  /**
+   * Set a unit's world position directly (bypasses grid snapping)
+   * Used for dev mode precise placement
+   */
+  setUnitWorldPosition(unitId: string, worldX: number, worldZ: number): void {
+    const visual = this.units.get(unitId);
+    if (!visual) {
+      console.warn(`[setUnitWorldPosition] Unit ${unitId} not found!`);
+      return;
+    }
+
+    const newPos = new Vector3(worldX, 0, worldZ);
+    visual.currentPosition = newPos;
+    visual.targetPosition = newPos.clone();
+    visual.container.position = newPos;
+  }
+
+  /**
+   * Damage a unit and update its health bar
+   * Returns true if the unit is still alive, false if dead
+   */
+  damageUnit(unitId: string, damage: number): { alive: boolean; remainingHealth: number } | null {
+    const visual = this.units.get(unitId);
+    if (!visual) return null;
+
+    // Apply damage
+    visual.health = Math.max(0, visual.health - damage);
+
+    // Update health bar
+    this.updateHealthBar(visual);
+
+    // Check if dead
+    if (visual.health <= 0) {
+      visual.state = UnitState.DEAD;
+      visual.healthBarPlane.isVisible = false;
+      visual.cooldownBarPlane.isVisible = false;
+
+      // Apply dead material to all meshes in the container
+      visual.container.getChildMeshes().forEach((mesh) => {
+        if (mesh.material) {
+          mesh.material = this.deadMaterial;
+        }
+      });
+      // Also apply to placeholder mesh if it's still visible
+      visual.mesh.material = this.deadMaterial;
+
+      // Schedule removal after 2 seconds
+      setTimeout(() => {
+        this.removeUnit(unitId);
+      }, 2000);
+
+      return { alive: false, remainingHealth: 0 };
+    }
+
+    return { alive: true, remainingHealth: visual.health };
+  }
+
+  /**
+   * Check if a unit is alive
+   */
+  isUnitAlive(unitId: string): boolean {
+    const visual = this.units.get(unitId);
+    if (!visual) return false;
+    return visual.state !== UnitState.DEAD && visual.health > 0;
+  }
+
+  /**
+   * Get unit health info
+   */
+  getUnitHealth(unitId: string): { health: number; maxHealth: number } | null {
+    const visual = this.units.get(unitId);
+    if (!visual) return null;
+    return { health: visual.health, maxHealth: visual.maxHealth };
+  }
+
+  /**
    * Get all units for a player
    */
   getUnitsForPlayer(playerId: string): UnitVisual[] {
-    return Array.from(this.units.values()).filter(v => v.ownerId === playerId);
+    return Array.from(this.units.values()).filter((v) => v.ownerId === playerId);
   }
 
   /**

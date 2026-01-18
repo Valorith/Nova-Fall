@@ -245,7 +245,7 @@ export function unchainSequenceEdges(
  * Simple version: Transform Vue Flow edges for display (chaining Sequences)
  */
 export function chainEdgesForDisplay<T extends SimpleEdge>(
-  nodes: { id: string; data: { type: string }; position: { x: number } }[],
+  nodes: { id: string; data: { type: string }; position: { x: number; y: number } }[],
   edges: T[]
 ): T[] {
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));

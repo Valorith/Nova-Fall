@@ -27,14 +27,19 @@ const {
   initDevArena,
   hasArena,
   screenToArena,
-  devSpawnUnit,
+  devSpawnUnitAtWorld,
   devPlaceBuilding,
   devClearAll,
   getDevEntityCount,
   selectBuilding,
   deselectBuilding,
   getSelectedBuildingId,
-  forceAttackGround,
+  forceAttackGroundWorld,
+  screenToWorld,
+  issueKillCommand,
+  cancelAllKillCommands,
+  getUnitWorldPosition,
+  getAllUnitIds,
 } = useCombatEngine();
 
 // State
@@ -55,8 +60,17 @@ const placementMode = ref(false);
 // Maps grid position "x,z" to building info (ID and definition)
 const placedBuildings = ref<Map<string, { id: string; def: DbBuildingDefinition }>>(new Map());
 
+// Track spawned units for kill commands
+// Maps unit ID to unit info
+const spawnedUnits = ref<
+  Map<string, { id: string; def: DbUnitDefinition; team: 'attacker' | 'defender' }>
+>(new Map());
+
 // Currently selected placed building (for force attack)
 const selectedPlacedBuildingId = ref<string | null>(null);
+
+// Hover state for unit targeting
+const hoveredUnitId = ref<string | null>(null);
 
 // Panel visibility
 const isCollapsed = ref(false);
@@ -116,19 +130,28 @@ function selectItem(type: 'unit' | 'building', item: DbUnitDefinition | DbBuildi
 function handleArenaClick(event: MouseEvent) {
   if (!placementMode.value || !selectedItem.value) return;
 
-  const position = screenToArena(event.clientX, event.clientY);
-  if (!position) return;
-
   if (selectedItem.value.type === 'unit') {
-    devSpawnUnit(selectedItem.value.item as DbUnitDefinition, position, selectedTeam.value);
+    // For units, use exact world coordinates (no grid snapping)
+    const worldPos = screenToWorld(event.clientX, event.clientY);
+    if (!worldPos) return;
+
+    const unitDef = selectedItem.value.item as DbUnitDefinition;
+    const unitId = devSpawnUnitAtWorld(unitDef, worldPos.x, worldPos.z, selectedTeam.value);
+    // Track spawned unit for kill commands
+    if (unitId) {
+      spawnedUnits.value.set(unitId, { id: unitId, def: unitDef, team: selectedTeam.value });
+    }
   } else {
+    // For buildings, snap to grid (they occupy discrete tiles)
+    const position = screenToArena(event.clientX, event.clientY);
+    if (!position) return;
+
     const buildingDef = selectedItem.value.item as DbBuildingDefinition;
     const buildingId = devPlaceBuilding(buildingDef, position, selectedTeam.value);
     // Track placed building for click-to-select
     if (buildingId) {
       const key = `${position.x},${position.z}`;
       placedBuildings.value.set(key, { id: buildingId, def: buildingDef });
-      console.log(`Placed building at key "${key}" with ID: ${buildingId}`);
     }
   }
 
@@ -139,8 +162,6 @@ function handleArenaClick(event: MouseEvent) {
 // Handle selection click (when not in placement mode)
 function handleSelectionClick(event: MouseEvent) {
   const position = screenToArena(event.clientX, event.clientY);
-  console.log('Selection click at position:', position);
-  console.log('Placed buildings:', Array.from(placedBuildings.value.entries()));
 
   if (!position) {
     // Clicked outside arena - deselect
@@ -153,18 +174,14 @@ function handleSelectionClick(event: MouseEvent) {
   // Check if there's a building at this position
   const key = `${position.x},${position.z}`;
   const buildingInfo = placedBuildings.value.get(key);
-  console.log(`Looking for building at key "${key}":`, buildingInfo);
 
   if (buildingInfo) {
     // Select this building
     selectBuilding(buildingInfo.id);
     selectedPlacedBuildingId.value = buildingInfo.id;
-    console.log(`Selected building: ${buildingInfo.id}`);
-
     // Check if building can attack (has range and damage)
     const canAttack = buildingInfo.def.range > 0 && buildingInfo.def.damage > 0;
     emit('attackableSelectionChange', canAttack);
-    console.log(`Building can attack: ${canAttack} (range: ${buildingInfo.def.range}, damage: ${buildingInfo.def.damage})`);
   } else {
     // Clicked empty space - deselect
     deselectBuilding();
@@ -173,31 +190,23 @@ function handleSelectionClick(event: MouseEvent) {
   }
 }
 
-// Handle force attack (Ctrl+Click)
+// Handle force attack (Ctrl+Click) - uses precise world coordinates
 function handleForceAttack(event: MouseEvent) {
-  console.log('Force attack triggered');
   const currentSelection = getSelectedBuildingId();
-  console.log('Current selection:', currentSelection);
 
   if (!currentSelection) {
-    console.log('No building selected for force attack');
     return;
   }
 
-  const position = screenToArena(event.clientX, event.clientY);
-  console.log('Target position:', position);
+  // Use screenToWorld for precise targeting (no tile snapping)
+  const worldPos = screenToWorld(event.clientX, event.clientY);
 
-  if (!position) {
-    console.log('Click outside arena');
+  if (!worldPos) {
     return;
   }
 
-  // Execute force attack
-  const success = forceAttackGround(currentSelection, position);
-  console.log('Force attack result:', success);
-  if (success) {
-    console.log(`Force attack at (${position.x}, ${position.z})`);
-  }
+  // Execute force attack with precise world coordinates
+  forceAttackGroundWorld(currentSelection, worldPos.x, worldPos.z);
 }
 
 // Cancel placement mode
@@ -211,7 +220,10 @@ function cancelPlacement() {
 function handleClearAll() {
   devClearAll();
   placedBuildings.value.clear();
+  spawnedUnits.value.clear();
   selectedPlacedBuildingId.value = null;
+  hoveredUnitId.value = null;
+  cancelAllKillCommands();
   emit('attackableSelectionChange', false);
   updateEntityCounts();
 }
@@ -219,6 +231,70 @@ function handleClearAll() {
 // Update entity counts
 function updateEntityCounts() {
   entityCounts.value = getDevEntityCount();
+}
+
+// ========== Unit Targeting ==========
+
+// Find unit near world position (within click tolerance)
+function findUnitAtWorldPosition(worldX: number, worldZ: number): string | null {
+  const CLICK_TOLERANCE = 8; // meters - how close click needs to be to unit center
+  const unitIds = getAllUnitIds();
+
+  for (const unitId of unitIds) {
+    const unitPos = getUnitWorldPosition(unitId);
+    if (!unitPos) continue;
+
+    const dist = Math.sqrt(Math.pow(unitPos.x - worldX, 2) + Math.pow(unitPos.z - worldZ, 2));
+
+    if (dist <= CLICK_TOLERANCE) {
+      return unitId;
+    }
+  }
+  return null;
+}
+
+// Handle mouse move for unit hover detection
+function handleMouseMove(event: MouseEvent) {
+  // Only show targeting cursor when a turret is selected and not in placement mode
+  if (!selectedPlacedBuildingId.value || placementMode.value) {
+    hoveredUnitId.value = null;
+    return;
+  }
+
+  const worldPos = screenToWorld(event.clientX, event.clientY);
+  if (!worldPos) {
+    hoveredUnitId.value = null;
+    return;
+  }
+
+  hoveredUnitId.value = findUnitAtWorldPosition(worldPos.x, worldPos.z);
+}
+
+// Handle click to issue kill command on hovered unit
+function handleUnitTargetClick(_event: MouseEvent) {
+  if (!selectedPlacedBuildingId.value || !hoveredUnitId.value) return;
+
+  issueKillCommand(selectedPlacedBuildingId.value, hoveredUnitId.value);
+}
+
+// Try to attack a unit at click position (more reliable than hover-based)
+// Returns true if a unit was targeted, false otherwise
+function tryAttackAtClick(event: MouseEvent): boolean {
+  if (!selectedPlacedBuildingId.value) return false;
+
+  const worldPos = screenToWorld(event.clientX, event.clientY);
+  if (!worldPos) return false;
+
+  const targetUnitId = findUnitAtWorldPosition(worldPos.x, worldPos.z);
+  if (!targetUnitId) return false;
+
+  issueKillCommand(selectedPlacedBuildingId.value, targetUnitId);
+  return true; // We handled the click (targeted a unit), even if the command failed
+}
+
+// Stop all active commands
+function handleStopAll() {
+  cancelAllKillCommands();
 }
 
 // Handle escape key
@@ -233,14 +309,25 @@ defineExpose({
   handleArenaClick,
   handleSelectionClick,
   handleForceAttack,
+  handleMouseMove,
+  handleUnitTargetClick,
+  tryAttackAtClick,
+  hoveredUnitId,
 });
+
+// Track if we've already initialized in this component instance
+let hasInitializedArena = false;
 
 // Watch for engine to be ready, then initialize dev arena
 watch(
   engine,
   (newEngine) => {
     if (newEngine && !hasArena()) {
+      if (hasInitializedArena) {
+        console.warn('CombatDevPanel: Arena was cleared unexpectedly, reinitializing...');
+      }
       initDevArena();
+      hasInitializedArena = true;
     }
   },
   { immediate: true }
@@ -271,9 +358,7 @@ const totalEntities = computed(() => entityCounts.value.units + entityCounts.val
         <button type="button" class="btn-collapse" @click="isCollapsed = !isCollapsed">
           {{ isCollapsed ? '+' : '-' }}
         </button>
-        <button type="button" class="btn-close" @click="emit('close')">
-          &times;
-        </button>
+        <button type="button" class="btn-close" @click="emit('close')">&times;</button>
       </div>
     </div>
 
@@ -332,9 +417,7 @@ const totalEntities = computed(() => entityCounts.value.units + entityCounts.val
                 :style="{ backgroundColor: unitCategoryColors[unit.category] || '#888' }"
               ></span>
               <span class="item-name">{{ unit.name }}</span>
-              <span class="item-stats">
-                HP:{{ unit.health }} DMG:{{ unit.damage }}
-              </span>
+              <span class="item-stats"> HP:{{ unit.health }} DMG:{{ unit.damage }} </span>
             </button>
           </div>
         </div>
@@ -362,6 +445,13 @@ const totalEntities = computed(() => entityCounts.value.units + entityCounts.val
               </span>
             </button>
           </div>
+        </div>
+
+        <!-- Combat Controls -->
+        <div class="section combat-controls-section">
+          <div class="section-header">Combat Controls</div>
+          <div class="combat-hint">Select a turret, then click on enemy units to attack</div>
+          <button type="button" class="btn-stop" @click="handleStopAll">⏹ Stop All</button>
         </div>
       </template>
 
@@ -658,5 +748,37 @@ const totalEntities = computed(() => entityCounts.value.units + entityCounts.val
 .btn-clear:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Combat Controls Section */
+.combat-controls-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.combat-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.btn-stop {
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: #f87171;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-stop:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
 }
 </style>

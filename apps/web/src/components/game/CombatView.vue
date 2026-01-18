@@ -10,7 +10,7 @@
  * <CombatView v-show="inCombat" ref="combatView" />
  */
 
-import { ref, onMounted, onUnmounted, defineExpose } from 'vue';
+import { ref, computed, onMounted, onUnmounted, defineExpose } from 'vue';
 import { useCombatEngine } from '../../composables/useCombatEngine';
 import CombatDevPanel from './CombatDevPanel.vue';
 import type { CombatResult } from '@nova-fall/shared';
@@ -75,6 +75,18 @@ const handleAttackableSelectionChange = (hasSelection: boolean) => {
   hasAttackableSelection.value = hasSelection;
 };
 
+// Track if hovering over a unit (for targeting cursor)
+const isTargetingUnit = computed(() => {
+  return devPanelRef.value?.hoveredUnitId != null;
+});
+
+// Handle mouse move for unit hover detection
+const handleMouseMove = (event: MouseEvent) => {
+  if (devPanelRef.value) {
+    devPanelRef.value.handleMouseMove(event);
+  }
+};
+
 // Handle right-click (Ctrl+Click on macOS) for force attack
 const handleRightClick = (event: MouseEvent) => {
   if (devPanelRef.value && hasAttackableSelection.value) {
@@ -94,6 +106,13 @@ const handleCanvasClick = (event: MouseEvent) => {
   if (event.ctrlKey && devPanelRef.value) {
     devPanelRef.value.handleForceAttack(event);
     return;
+  }
+
+  // If a turret is selected, try to attack a unit at click position
+  // This is more reliable than hover-based targeting
+  if (hasAttackableSelection.value && devPanelRef.value) {
+    const handled = devPanelRef.value.tryAttackAtClick(event);
+    if (handled) return;
   }
 
   // Regular click - try to select a building
@@ -161,9 +180,11 @@ const handleRotateRight = () => rotateCamera('right');
       class="combat-canvas"
       :class="{
         'placement-mode': isPlacementMode,
-        'force-attack-mode': isCtrlHeld && !isPlacementMode && hasAttackableSelection
+        'force-attack-mode': isCtrlHeld && !isPlacementMode && hasAttackableSelection,
+        'target-mode': isTargetingUnit && !isPlacementMode
       }"
       @click="handleCanvasClick"
+      @mousemove="handleMouseMove"
       @contextmenu.prevent="handleRightClick"
     />
 
@@ -253,6 +274,11 @@ const handleRotateRight = () => rotateCamera('right');
 }
 
 .combat-canvas.force-attack-mode {
+  cursor: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="none" stroke="%23ff3333" stroke-width="2"/><line x1="16" y1="2" x2="16" y2="10" stroke="%23ff3333" stroke-width="2"/><line x1="16" y1="22" x2="16" y2="30" stroke="%23ff3333" stroke-width="2"/><line x1="2" y1="16" x2="10" y2="16" stroke="%23ff3333" stroke-width="2"/><line x1="22" y1="16" x2="30" y2="16" stroke="%23ff3333" stroke-width="2"/><circle cx="16" cy="16" r="2" fill="%23ff3333"/></svg>') 16 16, crosshair;
+}
+
+/* Target mode - hovering over an attackable unit */
+.combat-canvas.target-mode {
   cursor: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="none" stroke="%23ff3333" stroke-width="2"/><line x1="16" y1="2" x2="16" y2="10" stroke="%23ff3333" stroke-width="2"/><line x1="16" y1="22" x2="16" y2="30" stroke="%23ff3333" stroke-width="2"/><line x1="2" y1="16" x2="10" y2="16" stroke="%23ff3333" stroke-width="2"/><line x1="22" y1="16" x2="30" y2="16" stroke="%23ff3333" stroke-width="2"/><circle cx="16" cy="16" r="2" fill="%23ff3333"/></svg>') 16 16, crosshair;
 }
 

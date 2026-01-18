@@ -7,13 +7,13 @@
 
 ## Project Status Overview
 
-| Metric                 | Value                      |
-| ---------------------- | -------------------------- |
-| **Project Start Date** | 2026-01-04                 |
-| **Current Phase**      | Phase 4 - Combat System    |
-| **Overall Progress**   | Phases 0-3 complete        |
-| **MVP Target Date**    | 2026-04-04 (3 months)      |
-| **Total Sessions**     | 52                         |
+| Metric                 | Value                   |
+| ---------------------- | ----------------------- |
+| **Project Start Date** | 2026-01-04              |
+| **Current Phase**      | Phase 4 - Combat System |
+| **Overall Progress**   | Phases 0-3 complete     |
+| **MVP Target Date**    | 2026-04-04 (3 months)   |
+| **Total Sessions**     | 53                      |
 
 ---
 
@@ -87,6 +87,7 @@ Copy this template and fill it in at the end of each session.
 ### Completed Tasks
 
 **Section 0.1 - Project Setup:**
+
 - [x] Initialize monorepo with pnpm workspaces
 - [x] Create workspace structure (all 6 packages)
 - [x] Configure TypeScript with strict settings
@@ -94,6 +95,7 @@ Copy this template and fill it in at the end of each session.
 - [x] Install all dependencies
 
 **Section 0.2 - Frontend Setup:**
+
 - [x] Initialize Vue 3 project with Vite
 - [x] Install core dependencies (Vue Router, Pinia, PixiJS, Socket.io-client, Axios, TailwindCSS)
 - [x] Configure Vite (dev proxy, env vars, build optimization)
@@ -104,13 +106,13 @@ Copy this template and fill it in at the end of each session.
 
 ### Decisions Made
 
-| Decision                  | Rationale                                       |
-| ------------------------- | ----------------------------------------------- |
-| Use pnpm 9.15.4           | Matches packageManager field, stable version    |
-| ESLint flat config format | Modern approach, better TypeScript integration  |
-| Husky + lint-staged       | Industry standard for pre-commit hooks          |
-| vue-tsc 2.2.0             | Compatible with TypeScript 5.9+                 |
-| Disable pre-commit hook   | Windows/WSL environment mismatch with GH Desktop|
+| Decision                  | Rationale                                        |
+| ------------------------- | ------------------------------------------------ |
+| Use pnpm 9.15.4           | Matches packageManager field, stable version     |
+| ESLint flat config format | Modern approach, better TypeScript integration   |
+| Husky + lint-staged       | Industry standard for pre-commit hooks           |
+| vue-tsc 2.2.0             | Compatible with TypeScript 5.9+                  |
+| Disable pre-commit hook   | Windows/WSL environment mismatch with GH Desktop |
 
 ### Notes
 
@@ -136,6 +138,7 @@ Copy this template and fill it in at the end of each session.
 ### Completed Tasks
 
 **Section 0.3 - Backend Setup:**
+
 - [x] Initialize Fastify project with all dependencies
 - [x] Configure Prisma with full database schema
 - [x] Set up module-based architecture (config, lib, plugins, modules)
@@ -199,6 +202,7 @@ Copy this template and fill it in at the end of each session.
 ### Completed Tasks
 
 **Section 0.4 - Authentication:**
+
 - [x] Implement OAuth2 with Discord (strategy, routes, callback)
 - [x] Implement OAuth2 with Google (strategy, routes, callback)
 - [x] Create unified auth handling (findOrCreateUser, account linking)
@@ -218,6 +222,7 @@ Copy this template and fill it in at the end of each session.
 ### Files Created
 
 **Backend (apps/api):**
+
 - `src/lib/jwt.ts` - JWT token creation/verification with jose
 - `src/types/passport-discord.d.ts` - TypeScript declarations
 - `src/plugins/passport.ts` - Passport plugin with strategies
@@ -228,6 +233,7 @@ Copy this template and fill it in at the end of each session.
 - `src/modules/auth/strategies/google.ts` - Google strategy
 
 **Frontend (apps/web):**
+
 - `src/services/api.ts` - Axios instance with interceptors
 - `src/views/AuthCallbackView.vue` - OAuth callback handler
 - Updated `src/stores/auth.ts` - Full auth state management
@@ -240,16 +246,16 @@ Copy this template and fill it in at the end of each session.
 
 ### API Endpoints Created
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | /auth/discord | Initiate Discord OAuth |
-| GET | /auth/discord/callback | Discord OAuth callback |
-| GET | /auth/google | Initiate Google OAuth |
-| GET | /auth/google/callback | Google OAuth callback |
-| POST | /auth/refresh | Refresh access token |
-| POST | /auth/logout | Revoke session |
-| GET | /auth/me | Get current user |
-| PATCH | /auth/username | Update username |
+| Method | Route                  | Description            |
+| ------ | ---------------------- | ---------------------- |
+| GET    | /auth/discord          | Initiate Discord OAuth |
+| GET    | /auth/discord/callback | Discord OAuth callback |
+| GET    | /auth/google           | Initiate Google OAuth  |
+| GET    | /auth/google/callback  | Google OAuth callback  |
+| POST   | /auth/refresh          | Refresh access token   |
+| POST   | /auth/logout           | Revoke session         |
+| GET    | /auth/me               | Get current user       |
+| PATCH  | /auth/username         | Update username        |
 
 ### Notes
 
@@ -277,6 +283,7 @@ Copy this template and fill it in at the end of each session.
 ### Completed Tasks
 
 **Section 0.5 - Railway Deployment:**
+
 - [x] Create railway.toml configuration
 - [x] Create nixpacks.toml for build configuration
 - [x] Create Dockerfile as alternative deployment
@@ -295,6 +302,7 @@ Copy this template and fill it in at the end of each session.
 ### Manual Steps Required
 
 The following require manual action on railway.app:
+
 1. Create Railway project and link GitHub repo
 2. Add PostgreSQL service
 3. Add Redis service
@@ -324,6 +332,7 @@ All code for Phase 0 is complete. Manual Railway setup steps remain.
 ### Completed Tasks
 
 **Section 0.5 - Railway Deployment (Fixes):**
+
 - [x] Debugged Railway deployment failures
 - [x] Removed problematic deployment files (Dockerfile, nixpacks.toml, railway.toml)
 - [x] Configured services via Railway dashboard instead
@@ -342,12 +351,14 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 ### Railway Dashboard Configuration
 
 **API Service:**
-- Root Directory: *(empty)*
+
+- Root Directory: _(empty)_
 - Build Command: `pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm --filter @nova-fall/game-logic build && pnpm --filter @nova-fall/api db:generate && pnpm --filter @nova-fall/api build`
 - Start Command: `pnpm --filter @nova-fall/api db:migrate && pnpm --filter @nova-fall/api start`
 
 **Frontend Service:**
-- Root Directory: *(empty)*
+
+- Root Directory: _(empty)_
 - Build Command: `pnpm install --frozen-lockfile && pnpm --filter @nova-fall/web build`
 - Start Command: `npx serve apps/web/dist -s -l ${PORT:-3000}`
 
@@ -374,18 +385,21 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 ### Completed Tasks
 
 **Section 1.1 - World Map Data:**
+
 - [x] Created shared types for MapNode, NodeTypeConfig, RegionDefinition
 - [x] Created node configuration with bonuses and colors
 - [x] Created 6 region definitions with bounds and modifiers
 - [x] Created map seed script with 100 nodes
 
 **Section 1.2 - PixiJS Integration:**
+
 - [x] Created GameEngine class with canvas management
 - [x] Created Camera system with pan/zoom controls
 - [x] Implemented smooth camera interpolation
 - [x] Added zoom levels (strategic, regional, node, combat)
 
 **Section 1.3 - Map Rendering:**
+
 - [x] Created WorldRenderer with layered rendering
 - [x] Implemented background grid and region coloring
 - [x] Implemented node connections with road types
@@ -393,32 +407,36 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 - [x] Added LOD support and view culling
 
 **Authentication Fixes:**
+
 - [x] Fixed OAuth callback - added req.query for Passport compatibility with Fastify
 - [x] Fixed session store - proper callback-based interface for @fastify/session
 - [x] Fixed reply.hijack() for direct response handling
 - [x] Tested Discord and Google OAuth - both working
 
 **Database:**
+
 - [x] Created initial Prisma migration
 - [x] Applied migration to Railway PostgreSQL
 
 **Local Development:**
+
 - [x] Added dotenv for local .env loading
 - [x] Created unified `pnpm dev` command for API + web
 - [x] Fixed REDIS_URL validation (startsWith instead of url())
 
 ### Issues Resolved
 
-| Issue | Resolution |
-|-------|------------|
-| OAuth callback loop | Added req.query to raw request for Passport |
-| Session plugin hanging | Fixed callback-based store interface |
-| Fastify double response | Used reply.hijack() for OAuth routes |
-| Database tables missing | Created and applied init migration |
+| Issue                   | Resolution                                  |
+| ----------------------- | ------------------------------------------- |
+| OAuth callback loop     | Added req.query to raw request for Passport |
+| Session plugin hanging  | Fixed callback-based store interface        |
+| Fastify double response | Used reply.hijack() for OAuth routes        |
+| Database tables missing | Created and applied init migration          |
 
 ### Files Created/Modified
 
 **New Files:**
+
 - `packages/shared/src/types/enums.ts` - Shared enums
 - `packages/shared/src/types/node.ts` - Node types
 - `packages/shared/src/types/map.ts` - Map seed types
@@ -432,6 +450,7 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 - `apps/api/prisma/migrations/20260106000000_init/migration.sql` - DB migration
 
 **Modified Files:**
+
 - `apps/api/src/plugins/session.ts` - Fixed callback interface
 - `apps/api/src/modules/auth/routes.ts` - Fixed OAuth with Fastify
 - `apps/api/src/config/env.ts` - Added dotenv, fixed REDIS_URL validation
@@ -464,6 +483,7 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 ### Completed Tasks
 
 **Section 1.4 - Node Interaction:**
+
 - [x] Implemented node click selection with visual feedback (green ring)
 - [x] Implemented deselection when clicking empty space
 - [x] Implemented multi-select with shift-click
@@ -474,6 +494,7 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 - [x] Focus on Node button to pan and zoom
 
 **Node API Endpoints:**
+
 - [x] `GET /nodes` - List all nodes (with optional pagination)
 - [x] `GET /nodes/connections` - All connections for map rendering
 - [x] `GET /nodes/:id` - Full node details with connections
@@ -481,17 +502,20 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 - [x] `POST /nodes/:id/claim` - Claim neutral node (with adjacency check)
 
 **Design Update:**
+
 - [x] Added hexagon node design note to DEVELOPMENT-PLAN.md
 
 ### Files Created/Modified
 
 **New Files:**
+
 - `apps/api/src/modules/nodes/index.ts` - Module exports
 - `apps/api/src/modules/nodes/types.ts` - Node API types
 - `apps/api/src/modules/nodes/service.ts` - Node business logic
 - `apps/api/src/modules/nodes/routes.ts` - Node HTTP routes
 
 **Modified Files:**
+
 - `apps/api/src/app.ts` - Registered node routes
 - `apps/web/src/game/engine/GameEngine.ts` - Selection management
 - `apps/web/src/game/rendering/WorldRenderer.ts` - Selection ring graphics
@@ -523,6 +547,7 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 ### Completed Tasks
 
 **Section 1.4 - Real-time Updates:**
+
 - [x] Created WebSocket server (`apps/ws-server/src/index.ts`) with Socket.IO
 - [x] Implemented Redis pub/sub for event broadcasting
 - [x] Created event publisher utility (`apps/api/src/lib/events.ts`)
@@ -537,12 +562,14 @@ The original Dockerfile failed because it tried to copy `packages/` directory bu
 ### Files Created/Modified
 
 **New Files:**
+
 - `apps/ws-server/src/index.ts` - WebSocket server with Socket.IO and Redis
 - `apps/api/src/lib/events.ts` - Redis event publisher functions
 - `apps/web/src/services/socket.ts` - Frontend WebSocket service
 - `apps/web/src/stores/game.ts` - Pinia game state store
 
 **Modified Files:**
+
 - `apps/api/src/modules/nodes/service.ts` - Added publishNodeClaimed call
 - `apps/web/src/views/GameView.vue` - Integrated game store and WebSocket
 
@@ -555,6 +582,7 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 ```
 
 **Event Flow:**
+
 1. API performs action (e.g., node claimed)
 2. API publishes event to Redis channel
 3. WS server receives Redis message
@@ -587,6 +615,7 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 ### Completed Tasks
 
 **Production Deployment Fixes:**
+
 - [x] Fixed OAuth redirecting to localhost after authentication
 - [x] Made `FRONTEND_URL` and `API_URL` required in production (fail-fast)
 - [x] Fixed Discord OAuth `reply.hijack()` ordering (must be before passport.authenticate)
@@ -595,9 +624,9 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 
 ### Issues Resolved
 
-| Issue | Root Cause | Resolution |
-|-------|------------|------------|
-| OAuth redirects to localhost (frontend) | `VITE_API_URL` not set on Railway frontend | Added env var, documented in `.env.example` |
+| Issue                                        | Root Cause                                              | Resolution                                                                  |
+| -------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------- |
+| OAuth redirects to localhost (frontend)      | `VITE_API_URL` not set on Railway frontend              | Added env var, documented in `.env.example`                                 |
 | Discord OAuth still redirecting to localhost | `reply.hijack()` called after `passport.authenticate()` | Moved `reply.hijack()` before passport call, matching Google implementation |
 
 ### Files Modified
@@ -632,6 +661,7 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 ### Completed Tasks
 
 **Performance Fixes:**
+
 - [x] Fixed severe lag when zooming with 1000 nodes
 - [x] Implemented RenderTexture caching for terrain (1 sprite instead of 1500+ graphics)
 - [x] Implemented RenderTexture caching for nodes (1 sprite instead of 1000+ containers)
@@ -641,11 +671,13 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 - [x] Fixed TypeScript error with RoadType import removal
 
 **Visual Improvements:**
+
 - [x] Made terrain hexes more muted (40% alpha, subtle dark border)
 - [x] Added bright border/glow to capturable nodes (white outer glow + light gray edge)
 - [x] Clear visual distinction between capturable nodes and terrain
 
 **Terrain Distribution Fix:**
+
 - [x] Rewrote map generation algorithm to distribute terrain evenly
 - [x] Phase 1: Flood-fill entire square grid (~1500+ hexes)
 - [x] Phase 2: Shuffle all positions, pick 1000 for nodes, rest become terrain
@@ -654,17 +686,20 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 ### Technical Details
 
 **Before optimization:**
+
 - 1000+ Container objects for nodes
 - 1500+ Graphics objects for terrain
 - Individual display objects caused massive GPU overhead on zoom
 
 **After optimization:**
+
 - 1 Sprite for terrain (cached RenderTexture)
 - 1 Sprite for nodes (cached RenderTexture)
 - 1 Graphics for selection overlay (dynamic)
 - Smooth zooming and panning
 
 **Race condition fix:**
+
 - `setNode()` was triggering `markNodeAsUpdated()` for each of 1000 nodes
 - Each update triggered Vue watcher which called `updateNode()`
 - Each `updateNode()` re-rendered all 1000 nodes to texture
@@ -674,15 +709,18 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 ### Files Modified
 
 **Performance & Visual:**
+
 - `apps/web/src/game/rendering/WorldRenderer.ts` - Texture caching, visual styling, HQ star
 - `apps/web/src/game/engine/GameEngine.ts` - Ready state, pending data queue
 - `apps/web/src/views/GameView.vue` - Terrain distribution, HQ mock data, HQ badge in panel
 - `apps/web/src/stores/game.ts` - Added `loadNodesBatch()` method
 
 **HQ Feature (Section 1.5):**
+
 - `packages/shared/src/types/node.ts` - Added `isHQ` optional field to MapNode
 
 ### HQ Visual Indicator Tasks
+
 - [x] Added `isHQ` field to MapNode shared type
 - [x] Added golden star indicator for HQ nodes on map
 - [x] Added HQ badge in node detail panel
@@ -714,6 +752,7 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 ### Completed Tasks
 
 **Landing Page Animation:**
+
 - [x] Created looping 18-second spaceship landing animation
 - [x] Implemented starfield background with twinkling stars
 - [x] SVG spaceship with engine thrust effects descending to planet
@@ -730,6 +769,7 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 - [x] Enemy ships move at reasonable speed
 
 **Bug Fixes:**
+
 - [x] Fixed TypeScript error in socket.ts (`delete` instead of `undefined` assignment)
 - [x] Fixed turret rotation direction (positive = clockwise = upward aim)
 - [x] Fixed laser beam origin to match cannon barrel
@@ -743,15 +783,15 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 
 ### Animation Timeline (18 seconds)
 
-| Time | Event |
-|------|-------|
-| 0-44% | Spaceship descends through starfield |
-| 44% | Ship lands on pad |
-| 50-85% | Complex buildings construct progressively (7 rings) |
-| 85-87% | Defense systems appear |
-| 78-98% | Left enemy ship approaches, laser fires, ship flees |
-| 79-99% | Right enemy ship approaches, missiles launch, ship flees |
-| 93-100% | Animation fades, loop restarts |
+| Time    | Event                                                    |
+| ------- | -------------------------------------------------------- |
+| 0-44%   | Spaceship descends through starfield                     |
+| 44%     | Ship lands on pad                                        |
+| 50-85%  | Complex buildings construct progressively (7 rings)      |
+| 85-87%  | Defense systems appear                                   |
+| 78-98%  | Left enemy ship approaches, laser fires, ship flees      |
+| 79-99%  | Right enemy ship approaches, missiles launch, ship flees |
+| 93-100% | Animation fades, loop restarts                           |
 
 ### Notes
 
@@ -780,6 +820,7 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 ### Completed Tasks
 
 **Section 1.5 - Node Claiming UI:**
+
 - [x] Added `isHQ` to MapNodeResponse API type
 - [x] Updated `getAllNodes()` to include isHQ (checks owner.hqNodeId === node.id)
 - [x] Updated `getNodes()` to include isHQ for paginated responses
@@ -793,10 +834,12 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 ### Files Modified
 
 **Backend:**
+
 - `apps/api/src/modules/nodes/types.ts` - Added `isHQ?: boolean` to MapNodeResponse
 - `apps/api/src/modules/nodes/service.ts` - Updated getAllNodes and getNodes to check owner.hqNodeId
 
 **Frontend:**
+
 - `apps/web/src/services/api.ts` - Added nodesApi with CRUD operations
 - `apps/web/src/views/GameView.vue` - Added claim button, error handling, loading states
 
@@ -824,6 +867,7 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 ### Completed Tasks
 
 **Map System Design:**
+
 - [x] Node coloring changed to ownership-based (not type-based)
 - [x] Neutral nodes display gray, owned nodes display player's unique color
 - [x] Player colors generated via golden ratio hash (ensures distinct colors for similar IDs)
@@ -832,6 +876,7 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 - [x] Terrain now fills entire map area including corners
 
 **4-Player Map Template:**
+
 - [x] Capital (CAPITAL type) nodes placed at 4 corners of map
 - [x] Corner detection uses actual grid extremes (not theoretical pixel corners)
 - [x] 4 mock factions with thematic sci-fi colonization names
@@ -847,6 +892,7 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 | Void Syndicate | Shadowport | Mysterious traders |
 
 **Visual Improvements:**
+
 - [x] Fixed player color generation - golden ratio prime hash for distinct colors
 - [x] Golden angle (137.5°) hue spacing ensures visually separated colors
 - [x] Default zoom changed from 0.1 to 0.55 (map fills viewport on load)
@@ -854,15 +900,15 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 
 ### Design Decisions
 
-| Decision | Rationale |
-|----------|-----------|
-| Default map is 4-player | Corner-based HQ placement, balanced starting positions |
-| Node color = ownership only | Clear visual territory control, type shown in details panel |
-| Capitals at grid corners | Fair starting positions, maximum distance between players |
-| ~15 starting nodes per player | Enough territory to develop, room to expand |
-| Future: variable map sizes | Different player counts will need different map configurations |
-| Default zoom 0.55 | Map fills viewport nicely, shows full board on load |
-| Golden ratio color hash | Similar player IDs (player-1, player-2) get distinct colors |
+| Decision                      | Rationale                                                      |
+| ----------------------------- | -------------------------------------------------------------- |
+| Default map is 4-player       | Corner-based HQ placement, balanced starting positions         |
+| Node color = ownership only   | Clear visual territory control, type shown in details panel    |
+| Capitals at grid corners      | Fair starting positions, maximum distance between players      |
+| ~15 starting nodes per player | Enough territory to develop, room to expand                    |
+| Future: variable map sizes    | Different player counts will need different map configurations |
+| Default zoom 0.55             | Map fills viewport nicely, shows full board on load            |
+| Golden ratio color hash       | Similar player IDs (player-1, player-2) get distinct colors    |
 
 ### Files Modified
 
@@ -873,6 +919,7 @@ Browser <--Socket.IO--> WS Server <--Redis PubSub--> API
 ### Technical Details
 
 **Player Color Generation (improved):**
+
 ```typescript
 function getPlayerColor(ownerId: string): number {
   // Golden ratio prime (2654435769) for better hash distribution
@@ -883,6 +930,7 @@ function getPlayerColor(ownerId: string): number {
 ```
 
 **Corner Detection:**
+
 - Finds actual min/max x and y in the hex grid
 - Top/bottom rows identified with 50px tolerance for hex staggering
 - Leftmost/rightmost hexes in those rows become capitals
@@ -912,12 +960,14 @@ function getPlayerColor(ownerId: string): number {
 ### Completed Tasks
 
 **API Unit Tests:**
+
 - [x] Created vitest configuration for API package
 - [x] Added test setup with Redis/events mocking
 - [x] Created comprehensive node claiming service tests
 - [x] All 7 tests passing
 
 **Section 1.5 Verification (All Complete):**
+
 - [x] Claim first node as new player → becomes HQ
 - [x] Claim second node → must be adjacent to owned node
 - [x] Attempt non-adjacent claim → fails with error
@@ -927,15 +977,15 @@ function getPlayerColor(ownerId: string): number {
 
 ### Test Coverage
 
-| Test | Description |
-|------|-------------|
-| first node claim becomes HQ | First claim sets player.hqNodeId |
-| second node claim requires adjacency | Non-first claims check connection to owned nodes |
-| non-adjacent claim fails with error | Returns "Node must be adjacent to one of your nodes" |
-| cannot claim already owned node | Returns "Node is not neutral" |
-| cannot abandon HQ | Returns "Cannot abandon your headquarters" |
-| can abandon non-HQ owned node | Successfully resets to NEUTRAL |
-| cannot abandon node you do not own | Returns "You do not own this node" |
+| Test                                 | Description                                          |
+| ------------------------------------ | ---------------------------------------------------- |
+| first node claim becomes HQ          | First claim sets player.hqNodeId                     |
+| second node claim requires adjacency | Non-first claims check connection to owned nodes     |
+| non-adjacent claim fails with error  | Returns "Node must be adjacent to one of your nodes" |
+| cannot claim already owned node      | Returns "Node is not neutral"                        |
+| cannot abandon HQ                    | Returns "Cannot abandon your headquarters"           |
+| can abandon non-HQ owned node        | Successfully resets to NEUTRAL                       |
+| cannot abandon node you do not own   | Returns "You do not own this node"                   |
 
 ### Files Created
 
@@ -944,11 +994,13 @@ function getPlayerColor(ownerId: string): number {
 - `apps/api/src/modules/nodes/service.test.ts` - Node claiming tests
 
 **Bug Fix:**
+
 - [x] Fixed horizontal panning not working at low zoom levels
 - [x] Expanded MAP_BOUNDS from 2000x2000 to 6000x6000 (-2000 to 4000)
 - [x] Camera no longer locks horizontally on wide viewports
 
 **Phase 2.1 - Resource System:**
+
 - [x] Created `packages/shared/src/config/resources.ts` with full resource system
 - [x] Defined 6 resource types: credits, iron, minerals, energy, composites, techComponents
 - [x] Added ResourceDefinition interface with tier, stackSize, color, description
@@ -957,6 +1009,7 @@ function getPlayerColor(ownerId: string): number {
 - [x] Updated old references (alloys→composites, crystals→minerals) in nodes.ts and regions.ts
 
 **Resource UI Components:**
+
 - [x] Created `ResourceDisplay.vue` - reusable resource list with capacity bar
 - [x] Created `PlayerResourcesPanel.vue` - compact resource display for top bar
 - [x] Added player resources to GameView top bar
@@ -981,11 +1034,13 @@ function getPlayerColor(ownerId: string): number {
 ### Completed Tasks
 
 **Windows Development Environment:**
+
 - [x] Fixed pnpm binaries not found on Windows (tsx, vite not recognized)
 - [x] Solution: `pnpm install --shamefully-hoist` for flat node_modules structure
 - [x] All package.json scripts reverted to simple commands (no npx/pnpm exec needed)
 
 **Resource UI Polish:**
+
 - [x] Created reusable `Tooltip.vue` component with Vue Teleport
 - [x] Tooltips render at body level (not clipped by overflow containers)
 - [x] Fixed positioning uses getBoundingClientRect for accurate placement
@@ -1005,6 +1060,7 @@ function getPlayerColor(ownerId: string): number {
 ### Technical Details
 
 **Tooltip Component Features:**
+
 - Uses Vue 3 `<Teleport to="body">` to escape overflow containers
 - `position: fixed` with calculated coordinates from element bounds
 - Transition component for smooth fade animation
@@ -1013,6 +1069,7 @@ function getPlayerColor(ownerId: string): number {
 - Max-width 300px with word wrap for long descriptions
 
 **pnpm Windows Issue:**
+
 - pnpm's default isolated node_modules structure doesn't expose binaries on Windows PATH
 - `--shamefully-hoist` creates flat structure like npm, making binaries accessible
 - Alternative solutions tried but failed: `pnpm exec`, `npx` prefix
@@ -1040,6 +1097,7 @@ function getPlayerColor(ownerId: string): number {
 ### Completed Tasks
 
 **BullMQ Worker Setup:**
+
 - [x] Created `apps/worker/src/config.ts` - Environment configuration
 - [x] Created `apps/worker/src/lib/prisma.ts` - Database client
 - [x] Created `apps/worker/src/lib/redis.ts` - Redis client for BullMQ
@@ -1048,6 +1106,7 @@ function getPlayerColor(ownerId: string): number {
 - [x] Rewrote `apps/worker/src/index.ts` - BullMQ queue/worker with repeating job
 
 **Resource Production System:**
+
 - [x] Added `BASE_PRODUCTION_PER_TICK` config to shared resources
 - [x] Iron: 2/tick (1440/hour), Energy: 1/tick (720/hour)
 - [x] Node type bonuses multiply base production rates
@@ -1055,12 +1114,14 @@ function getPlayerColor(ownerId: string): number {
 - [x] Database batch updates using Prisma transactions
 
 **WebSocket Integration:**
+
 - [x] Added `resources:update` channel to WS server
 - [x] Added `ResourcesUpdateEvent` type to frontend socket service
 - [x] Added `handleResourcesUpdate` handler to game store
 - [x] Added `nodeStorage` and `currentTick` state to game store
 
 **Dependencies:**
+
 - [x] Added `dotenv` and `prisma` to worker package
 - [x] Added `db:generate` script referencing API's Prisma schema
 
@@ -1105,6 +1166,7 @@ function getPlayerColor(ownerId: string): number {
 ### Completed Tasks
 
 **Hex Grid Map Generator:**
+
 - [x] Rewrote `apps/api/prisma/map-data.ts` to use proper hex grid coordinates
 - [x] Added hex grid utility functions (hexToPixel, hexNeighbors, hexKey)
 - [x] Flood-fill generation within square pixel bounds
@@ -1113,12 +1175,14 @@ function getPlayerColor(ownerId: string): number {
 - [x] Node IDs now use 4-digit padding (node-0000 format)
 
 **Database Re-seeding:**
+
 - [x] Fixed esbuild platform mismatch (Windows vs WSL)
 - [x] Reinstalled packages with `pnpm install --force`
 - [x] Successfully seeded 1000 nodes with 2304 connections
 - [x] Average 4.6 connections per node (proper hex adjacency)
 
 **Frontend Configuration:**
+
 - [x] Switched `useMockData` from `true` to `false` in GameView.vue
 - [x] Created `apps/web/.env` with local dev API/WS URLs
 
@@ -1166,12 +1230,14 @@ function getPlayerColor(ownerId: string): number {
 ### Completed Tasks
 
 **Section 1.5 - HQ Placement & Special Rules:**
+
 - [x] Auto-assign corner capital as HQ when new player registers
 - [x] Auto-assign HQ to existing players without one on login
 - [x] HQ assignment uses transaction to claim node + set player.hqNodeId
 - [x] Publishes node:claimed event for WebSocket broadcast
 
 **UI Improvements:**
+
 - [x] Added Sign Out button (top-right, replaces Hide Controls)
 - [x] Created toast notification system (Pinia store + component)
 - [x] Toast types: success (green), error (red), warning (yellow), info (blue)
@@ -1179,6 +1245,7 @@ function getPlayerColor(ownerId: string): number {
 - [x] Replaced raw JSON error messages with formatted toast notifications
 
 **Node Tooltip System:**
+
 - [x] Added hover detection to GameEngine with `onNodeHover` callback
 - [x] Node highlighting on hover (white outline)
 - [x] Created performant NodeTooltip component (DOM-based, not PixiJS)
@@ -1188,6 +1255,7 @@ function getPlayerColor(ownerId: string): number {
 - [x] Displays: name, type (with emoji), tier, status, upkeep cost, owner, HQ badge, resource bonuses
 
 **Map Generation Improvements:**
+
 - [x] Node tiers now based on distance from center:
   - Tier 3: Center (0-33% from center)
   - Tier 2: Middle ring (33-66%)
@@ -1233,6 +1301,7 @@ function getPlayerColor(ownerId: string): number {
 ### Completed Tasks
 
 **Section 2.3 - Upkeep System:**
+
 - [x] Created upkeep calculation function in game-logic package
   - `calculateNodeUpkeep()` - base cost, tier multiplier, distance modifier, region modifier, building costs
   - `calculateDistanceFromHQ()` - BFS graph traversal
@@ -1255,6 +1324,7 @@ function getPlayerColor(ownerId: string): number {
   - Abandonment (48h+) - node reverts to neutral
 
 **UI Indicators:**
+
 - [x] Added upkeepStatus to API responses (getAllNodes, getNodeById)
 - [x] Updated NodeTooltip to show upkeep warnings
   - Warning: Yellow background with warning icon
@@ -1284,6 +1354,7 @@ function getPlayerColor(ownerId: string): number {
 ### Key Implementation Details
 
 **Upkeep Formula:**
+
 ```
 totalUpkeep = (baseUpkeep * tierMultiplier * distanceMultiplier * regionMultiplier) + buildingCosts
 
@@ -1293,6 +1364,7 @@ regionMultiplier = region.upkeepModifier  // 1.0-1.5 based on region
 ```
 
 **Failure Phase Timeline:**
+
 - 0-12h: WARNING status (no damage)
 - 12-36h: DECAY status (2% damage/hour)
 - 36-48h: COLLAPSE status (5% damage/hour)
@@ -1321,6 +1393,7 @@ regionMultiplier = region.upkeepModifier  // 1.0-1.5 based on region
 ### Completed Tasks
 
 **Cross-Platform Development Fixes:**
+
 - [x] Fixed Prisma binary targets for Windows (added "windows" to binaryTargets)
 - [x] Added dotenv loading to ws-server (import 'dotenv/config')
 - [x] Added dotenv and pino-pretty dependencies to ws-server package
@@ -1329,12 +1402,12 @@ regionMultiplier = region.upkeepModifier  // 1.0-1.5 based on region
 
 ### Issues Resolved
 
-| Issue | Root Cause | Resolution |
-|-------|------------|------------|
-| 'tsx' not recognized | Dependencies installed from WSL, Windows needs .cmd binaries | User ran `pnpm install` from Windows PowerShell |
-| Prisma binary mismatch | Generated for debian-openssl-3.0.x, Windows needs native | Added `binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]` to schema.prisma |
-| Redis ECONNREFUSED in ws-server | ws-server not loading .env file | Added `import 'dotenv/config'` and dotenv dependency |
-| Production crash: shared module not found | Railway build didn't build workspace packages | Updated build command to include shared and game-logic builds |
+| Issue                                     | Root Cause                                                   | Resolution                                                                             |
+| ----------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| 'tsx' not recognized                      | Dependencies installed from WSL, Windows needs .cmd binaries | User ran `pnpm install` from Windows PowerShell                                        |
+| Prisma binary mismatch                    | Generated for debian-openssl-3.0.x, Windows needs native     | Added `binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]` to schema.prisma |
+| Redis ECONNREFUSED in ws-server           | ws-server not loading .env file                              | Added `import 'dotenv/config'` and dotenv dependency                                   |
+| Production crash: shared module not found | Railway build didn't build workspace packages                | Updated build command to include shared and game-logic builds                          |
 
 ### Files Modified
 
@@ -1349,6 +1422,7 @@ regionMultiplier = region.upkeepModifier  // 1.0-1.5 based on region
 - All services now connect to Railway Redis and PostgreSQL from Windows
 
 **Railway API Build Command (updated):**
+
 ```
 pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm --filter @nova-fall/game-logic build && pnpm --filter @nova-fall/api db:generate && pnpm --filter @nova-fall/api build
 ```
@@ -1370,6 +1444,7 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 ### Completed Tasks
 
 **Backend Database Optimizations:**
+
 - [x] Added 4 database indexes (status, upkeepStatus, ownerId+upkeepStatus, attackCooldownUntil)
 - [x] Redis caching for getAllConnections() with 1hr TTL
 - [x] Fixed claimNode() N+1 query (findFirst instead of fetching all player nodes)
@@ -1378,6 +1453,7 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 - [x] Filtered connections query to only owned nodes
 
 **Frontend Rendering Optimizations:**
+
 - [x] Cache player colors to avoid hash recalculation per render
 - [x] Added nodesById Map for O(1) lookups instead of .find()
 - [x] Batch node re-renders using requestAnimationFrame
@@ -1386,21 +1462,21 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ### Performance Audit Summary
 
-| Area | Issue | Impact |
-|------|-------|--------|
-| DB Indexes | Missing indexes on status, upkeepStatus | -50% table scans |
-| Connections | No caching, full query every map load | -95% queries (cache) |
-| claimNode | N+1 fetching all player nodes | O(1) vs O(n) |
-| Upkeep | Individual UPDATE per node | 1-3 batch queries |
-| WorldRenderer | Full re-render on every node update | RAF batching |
-| Selection | Array.find() for node lookup | O(1) Map lookup |
+| Area          | Issue                                   | Impact               |
+| ------------- | --------------------------------------- | -------------------- |
+| DB Indexes    | Missing indexes on status, upkeepStatus | -50% table scans     |
+| Connections   | No caching, full query every map load   | -95% queries (cache) |
+| claimNode     | N+1 fetching all player nodes           | O(1) vs O(n)         |
+| Upkeep        | Individual UPDATE per node              | 1-3 batch queries    |
+| WorldRenderer | Full re-render on every node update     | RAF batching         |
+| Selection     | Array.find() for node lookup            | O(1) Map lookup      |
 
 ### Bug Fixes
 
-| Bug | Cause | Fix |
-|-----|-------|-----|
-| Node claim not updating map | nodesById cleared after population | Call clearAll() before building lookups |
-| Selection indicator not showing | Same as above | Same fix |
+| Bug                             | Cause                              | Fix                                     |
+| ------------------------------- | ---------------------------------- | --------------------------------------- |
+| Node claim not updating map     | nodesById cleared after population | Call clearAll() before building lookups |
+| Selection indicator not showing | Same as above                      | Same fix                                |
 
 ### Files Modified
 
@@ -1456,12 +1532,12 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Multi-session game architecture | Transform from shared world to session-based games |
+| Decision                            | Rationale                                          |
+| ----------------------------------- | -------------------------------------------------- |
+| Multi-session game architecture     | Transform from shared world to session-based games |
 | Two game types: KOTH and Domination | KOTH: 48h crown hold; Domination: last HQ standing |
-| 2 player minimum to start games | Prevents single-player games, ensures competition |
-| One active game per player | Simplifies resource/state management |
+| 2 player minimum to start games     | Prevents single-player games, ensures competition  |
+| One active game per player          | Simplifies resource/state management               |
 
 ### Files Created
 
@@ -1486,16 +1562,16 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 
 ### New API Endpoints
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/sessions` | List sessions (filterable) |
-| GET | `/sessions/:id` | Session details |
-| POST | `/sessions` | Create new session |
-| POST | `/sessions/:id/join` | Join as player |
-| POST | `/sessions/:id/spectate` | Join as spectator |
-| POST | `/sessions/:id/leave` | Leave session |
-| POST | `/sessions/:id/start` | Start game (creator only) |
-| GET | `/sessions/my` | Get user's active session |
+| Method | Route                    | Description                |
+| ------ | ------------------------ | -------------------------- |
+| GET    | `/sessions`              | List sessions (filterable) |
+| GET    | `/sessions/:id`          | Session details            |
+| POST   | `/sessions`              | Create new session         |
+| POST   | `/sessions/:id/join`     | Join as player             |
+| POST   | `/sessions/:id/spectate` | Join as spectator          |
+| POST   | `/sessions/:id/leave`    | Leave session              |
+| POST   | `/sessions/:id/start`    | Start game (creator only)  |
+| GET    | `/sessions/my`           | Get user's active session  |
 
 ### Next Steps
 
@@ -1579,6 +1655,7 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 ### Completed Tasks
 
 **Session Viewer Tracking:**
+
 - [x] Added Redis-based viewer counting to WebSocket server
 - [x] Created `session:{id}:viewers` keys with INCR/DECR operations
 - [x] Added `join:session` and `leave:session` socket events
@@ -1589,6 +1666,7 @@ pnpm install --frozen-lockfile && pnpm --filter @nova-fall/shared build && pnpm 
 - [x] Added `joinSession()` and `leaveSession()` methods to frontend socket service
 
 **Lobby UI Enhancements:**
+
 - [x] Added economy tick countdown to lobby navbar (centered)
 - [x] Countdown updates every second with reactive ref
 - [x] Auto-refreshes timing when tick occurs
@@ -1605,11 +1683,13 @@ None - all modifications to existing files.
 ### Files Modified
 
 **Backend:**
+
 - `apps/ws-server/src/index.ts` - Redis viewer tracking, session join/leave handlers
 - `apps/api/src/modules/sessions/types.ts` - Added activeViewers to both response types
 - `apps/api/src/modules/sessions/service.ts` - Fetch viewer counts for getSessions and getSessionById
 
 **Frontend:**
+
 - `apps/web/src/services/socket.ts` - Added joinSession/leaveSession methods
 - `apps/web/src/stores/session.ts` - Added activeViewers to SessionListItem and SessionDetail
 - `apps/web/src/stores/game.ts` - Updated connectSocket/disconnectSocket for session rooms
@@ -1618,6 +1698,7 @@ None - all modifications to existing files.
 ### Technical Details
 
 **Viewer Tracking Architecture:**
+
 ```
 Player enters GameView → connectSocket(sessionId)
   → gameSocket.joinSession(sessionId)
@@ -1631,6 +1712,7 @@ Player leaves GameView → disconnectSocket()
 ```
 
 **Economy Tick Display:**
+
 - Uses reactive `currentTime` ref updated every second
 - Computed `nextTickDisplay` formats remaining time (e.g., "45m 23s")
 - Positioned center of navbar with absolute positioning
@@ -1638,11 +1720,11 @@ Player leaves GameView → disconnectSocket()
 
 ### Design Decisions
 
-| Decision | Rationale |
-|----------|-----------|
-| Redis INCR/DECR for viewer counts | Simple atomic operations, no race conditions |
+| Decision                             | Rationale                                              |
+| ------------------------------------ | ------------------------------------------------------ |
+| Redis INCR/DECR for viewer counts    | Simple atomic operations, no race conditions           |
 | Global economy tick for all sessions | Simpler than per-session timers, consistent experience |
-| Viewer count in gray when 0 | Clear visual distinction, not distracting |
+| Viewer count in gray when 0          | Clear visual distinction, not distracting              |
 
 ### Notes
 
@@ -1669,6 +1751,7 @@ Player leaves GameView → disconnectSocket()
 ### Completed Tasks
 
 **Crown Tooltip Countdown:**
+
 - [x] Added `claimedAt` field to `MapNodeResponse` API type
 - [x] Updated `getAllNodes()` to return `claimedAt` for crown nodes when owned
 - [x] Added reactive countdown timer with 1-second interval updates
@@ -1680,6 +1763,7 @@ Player leaves GameView → disconnectSocket()
 - [x] Proper cleanup on component unmount
 
 **Bug Fixes:**
+
 - [x] Fixed TypeScript error in GameView for DevPanel `selectedNodeName` prop
 - [x] Rebuilt shared package to expose `claimedAt` type to frontend
 - [x] Fixed nameplates showing "Unknown" for bot players
@@ -1695,6 +1779,7 @@ Player leaves GameView → disconnectSocket()
   - Checks node is adjacent to player's owned territory
 
 **Section 2.3 Verification (Upkeep System):**
+
 - [x] Fixed critical bug: upkeep worker now uses session-scoped `GameSessionPlayer.resources` instead of global `Player.resources`
 - [x] Verified distance from HQ increases upkeep cost (15% per node)
 - [x] Verified UI shows base upkeep per node type in tooltip
@@ -1704,12 +1789,14 @@ Player leaves GameView → disconnectSocket()
 ### Files Modified
 
 **Backend:**
+
 - `apps/api/src/modules/nodes/types.ts` - Added `claimedAt?: string | null` to MapNodeResponse
 - `apps/api/src/modules/nodes/service.ts` - Crown detection fix, claimedAt for crown nodes
 - `apps/api/src/modules/sessions/service.ts` - CROWN cleanup on end, skip CROWN on start
 - `apps/worker/src/jobs/upkeep.ts` - **Major fix:** Refactored to use session-scoped GameSessionPlayer resources
 
 **Frontend:**
+
 - `apps/web/src/components/game/NodeTooltip.vue` - Full countdown timer implementation
 - `apps/web/src/views/GameView.vue` - Fixed DevPanel prop, claim button validation with adjacency check
 - `apps/web/src/game/rendering/WorldRenderer.ts` - Use node.ownerName for nameplates
@@ -1717,6 +1804,7 @@ Player leaves GameView → disconnectSocket()
 ### Technical Details
 
 **Crown Countdown Implementation:**
+
 ```typescript
 const CROWN_HOLD_DURATION = 48 * 60 * 60 * 1000; // 48 hours in ms
 
@@ -1730,6 +1818,7 @@ crownProgress = (elapsed / CROWN_HOLD_DURATION) * 100;
 ```
 
 **Crown Node Detection Fix:**
+
 ```typescript
 // Only use session's crownNodeId when querying with a session
 const isCrown = crownNodeId ? node.id === crownNodeId : node.type === 'CROWN';
@@ -1764,6 +1853,7 @@ const isCrown = crownNodeId ? node.id === crownNodeId : node.type === 'CROWN';
 **Section 2.4 - Basic Market Implementation:**
 
 **Backend (API):**
+
 - [x] Added market prices config to `packages/shared/src/config/resources.ts`:
   - `NPC_MARKET_PRICES` with buy/sell prices for all tradeable resources
   - `MARKET_TRANSACTION_FEE = 0.15` (15%)
@@ -1777,6 +1867,7 @@ const isCrown = crownNodeId ? node.id === crownNodeId : node.type === 'CROWN';
 - [x] Registered market module in `apps/api/src/app.ts`
 
 **Frontend (Web):**
+
 - [x] Added market API to `apps/web/src/services/api.ts`:
   - MarketPriceInfo, BuyResourceRequest, SellResourceRequest interfaces
   - BuyTransactionResponse, SellTransactionResponse interfaces
@@ -1806,9 +1897,11 @@ const isCrown = crownNodeId ? node.id === crownNodeId : node.type === 'CROWN';
 ### Files Modified
 
 **Shared Package:**
+
 - `packages/shared/src/config/resources.ts` - Added market prices and calculation helpers
 
 **Backend:**
+
 - `apps/api/src/modules/market/types.ts` - New file
 - `apps/api/src/modules/market/service.ts` - New file
 - `apps/api/src/modules/market/routes.ts` - New file
@@ -1816,6 +1909,7 @@ const isCrown = crownNodeId ? node.id === crownNodeId : node.type === 'CROWN';
 - `apps/api/src/app.ts` - Registered marketRoutes
 
 **Frontend:**
+
 - `apps/web/src/services/api.ts` - Added marketApi
 - `apps/web/src/components/game/MarketPanel.vue` - New file
 - `apps/web/src/views/GameView.vue` - Added Market button and panel integration
@@ -1843,6 +1937,7 @@ const isCrown = crownNodeId ? node.id === crownNodeId : node.type === 'CROWN';
 ### Additional Work (Session 26 continued)
 
 **Trade Hub Enhancements:**
+
 - [x] Moved Market button from top bar to Node Details panel
 - [x] Market only accessible from owned Trade Hub nodes
 - [x] Added Trade Hub money bag icon on map (rendered in WorldRenderer)
@@ -1852,6 +1947,7 @@ const isCrown = crownNodeId ? node.id === crownNodeId : node.type === 'CROWN';
 - [x] Fixed credits UI not updating after economy tick without refresh
 
 **NodeTooltip.vue Updates:**
+
 - Added `.node-tooltip__feature` styling for special node features
 - Trade Hub tooltip now shows shopping cart icon with "Unlocks Market" text
 - Fixed border-radius to only apply to last child element
@@ -1867,6 +1963,7 @@ Section 2.5 - Resource Transfer implementation.
 ### Tasks Completed
 
 **Backend:**
+
 - [x] Added ResourceTransfer model to Prisma schema
 - [x] Created TransferStatus enum (PENDING, COMPLETED, CANCELLED)
 - [x] Created transfers API module (types, service, routes)
@@ -1877,6 +1974,7 @@ Section 2.5 - Resource Transfer implementation.
 - [x] Added minute-based transfer job to worker (processes every minute)
 
 **Frontend:**
+
 - [x] Added transfers API to services/api.ts
 - [x] Created TransferPanel.vue component
 - [x] Integrated into GameView with modal overlay
@@ -1884,8 +1982,9 @@ Section 2.5 - Resource Transfer implementation.
 - [x] Added Transfer Resources button for owned nodes with resources
 
 **Key Files:**
+
 - apps/api/prisma/schema.prisma - ResourceTransfer model
-- apps/api/src/modules/transfers/* - New API module
+- apps/api/src/modules/transfers/\* - New API module
 - apps/worker/src/jobs/transfers.ts - Transfer completion processing
 - apps/worker/src/index.ts - Minute-based transfer job
 - apps/web/src/components/game/TransferPanel.vue - New component
@@ -1925,6 +2024,7 @@ Section 2.5 - Resource Transfer implementation.
 ### Completed Tasks
 
 **Transfer Time Formula:**
+
 - [x] Transfer time now includes both distance AND quantity factors
 - [x] Base time: 1 minute per node in the path (distance factor)
 - [x] Quantity time: 1 second per resource unit transferred
@@ -1933,10 +2033,12 @@ Section 2.5 - Resource Transfer implementation.
 - [x] Added `TRANSFER_TIME_PER_RESOURCE_MS = 1000` (1 second per unit)
 
 **Transfer UX Improvements:**
+
 - [x] Clicking destination node during transfer mode now selects it in Node Details panel
 - [x] Updated `completeTransferSelection()` to set `selectedNodeIds`
 
 **Animated Transfer Flow Lines:**
+
 - [x] Added `findPath()` BFS function to `hexGrid.ts` for calculating actual node path
 - [x] Added `TransferData` interface for transfer visualization data
 - [x] Added `transferLayer` and `transferGraphics` to WorldRenderer
@@ -1948,12 +2050,14 @@ Section 2.5 - Resource Transfer implementation.
 - [x] Updated GameView `loadPendingTransfers()` to pass transfer data to renderer
 
 **Bug Fixes:**
+
 - [x] Fixed transfer path going through neutral nodes (path now only through owned nodes)
 - [x] Fixed countdown timer stopping early (now uses reactive `transferTimerNow` ref)
 - [x] Fixed double resource transfer bug (upkeep job was also calling processCompletedTransfers)
 - [x] Fixed UI not updating after transfer completion (added WebSocket notifications)
 
 **Real-time Transfer Updates:**
+
 - [x] Added `TransferCompletedEvent` to worker events
 - [x] Worker now publishes `transfer:completed` via Redis after processing
 - [x] WebSocket server subscribes to and broadcasts `transfer:completed` to session
@@ -1962,6 +2066,7 @@ Section 2.5 - Resource Transfer implementation.
 - [x] GameView reloads transfers and node data on completion
 
 **Performance Optimizations:**
+
 - [x] Added composite index `@@index([status, completesAt])` on ResourceTransfer
 - [x] Worker: Batch fetches all nodes in single query
 - [x] Worker: Single transaction for all DB updates
@@ -1973,22 +2078,27 @@ Section 2.5 - Resource Transfer implementation.
 ### Files Modified
 
 **Database:**
+
 - `apps/api/prisma/schema.prisma` - Added composite index for transfers
 
 **Worker:**
+
 - `apps/worker/src/jobs/transfers.ts` - Optimized batch processing, WebSocket events
 - `apps/worker/src/jobs/upkeep.ts` - Removed duplicate processCompletedTransfers call
 - `apps/worker/src/lib/events.ts` - Added TransferCompletedEvent
 
 **API:**
+
 - `apps/api/src/modules/transfers/service.ts` - Removed unused processCompletedTransfers
 - `apps/api/src/modules/transfers/index.ts` - Updated exports
 - `apps/api/src/modules/transfers/types.ts` - Updated constants
 
 **WebSocket Server:**
+
 - `apps/ws-server/src/index.ts` - Subscribe to and broadcast transfer:completed
 
 **Frontend:**
+
 - `apps/web/src/services/socket.ts` - Added TransferCompletedEvent handler
 - `apps/web/src/stores/game.ts` - Added transfer completed callback
 - `apps/web/src/views/GameView.vue` - Reactive timer, callback registration, parallel API calls
@@ -1999,6 +2109,7 @@ Section 2.5 - Resource Transfer implementation.
 ### Technical Details
 
 **Transfer Time Formula:**
+
 ```
 totalTime = (distance × 60 seconds) + (quantity × 1 second)
 
@@ -2008,6 +2119,7 @@ Examples:
 ```
 
 **Worker Query Optimization:**
+
 ```
 Before: N transfers × 3 queries each = 3N queries
 After:  2 queries + 1 transaction = ~3 queries total
@@ -2015,13 +2127,13 @@ After:  2 queries + 1 transaction = ~3 queries total
 
 ### Design Decisions
 
-| Decision | Rationale |
-|----------|-----------|
-| 1 minute per node (minimum) | Ensures non-trivial transfer time for strategy |
-| 1 second per resource unit | Large transfers take significantly longer |
-| Path through owned nodes only | Resources can't traverse enemy territory |
+| Decision                             | Rationale                                         |
+| ------------------------------------ | ------------------------------------------------- |
+| 1 minute per node (minimum)          | Ensures non-trivial transfer time for strategy    |
+| 1 second per resource unit           | Large transfers take significantly longer         |
+| Path through owned nodes only        | Resources can't traverse enemy territory          |
 | Single transfers job (not in upkeep) | Prevents race condition causing double processing |
-| WebSocket scoped to session | Only notify players in same game session |
+| WebSocket scoped to session          | Only notify players in same game session          |
 
 ### Notes
 
@@ -2126,15 +2238,16 @@ After:  2 queries + 1 transaction = ~3 queries total
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Epoch-based tick alignment | Eliminates clock drift between API and worker services |
-| 30-second transfer job interval | Balances responsiveness with performance |
-| Storage in WebSocket event | Eliminates extra API call and race condition |
+| Decision                        | Rationale                                              |
+| ------------------------------- | ------------------------------------------------------ |
+| Epoch-based tick alignment      | Eliminates clock drift between API and worker services |
+| 30-second transfer job interval | Balances responsiveness with performance               |
+| Storage in WebSocket event      | Eliminates extra API call and race condition           |
 
 ### Technical Details
 
 **Epoch-based tick alignment:**
+
 ```typescript
 // Both API and worker calculate ticks identically
 const remainder = timestamp % TRANSFER_JOB_INTERVAL_MS;
@@ -2142,10 +2255,17 @@ const nextTick = timestamp + (TRANSFER_JOB_INTERVAL_MS - remainder);
 ```
 
 **WebSocket event with storage:**
+
 ```typescript
 publishTransferCompleted({
-  transferId, playerId, sourceNodeId, destNodeId, status, sessionId,
-  sourceStorage, destStorage  // Fresh values from DB
+  transferId,
+  playerId,
+  sourceNodeId,
+  destNodeId,
+  status,
+  sessionId,
+  sourceStorage,
+  destStorage, // Fresh values from DB
 });
 ```
 
@@ -2188,14 +2308,15 @@ publishTransferCompleted({
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
+| Decision                   | Rationale                                                     |
+| -------------------------- | ------------------------------------------------------------- |
 | Event-based victory system | Eliminates unnecessary polling; only check on relevant events |
-| HQ-only credit income | Makes trading meaningful; credits become strategic resource |
+| HQ-only credit income      | Makes trading meaningful; credits become strategic resource   |
 
 ### Technical Details
 
 **Victory Event Flow:**
+
 ```
 API: Node claimed → Check if crown node → Publish crown:changed
 Worker: Receives event → Schedule 48h delayed KOTH victory job
@@ -2203,6 +2324,7 @@ Worker: Receives event → Schedule 48h delayed KOTH victory job
 ```
 
 **Credit Economy:**
+
 ```typescript
 // Only HQ produces passive credits now
 CAPITAL: { credits: 20, iron: 25, energy: 25 },
@@ -2307,12 +2429,14 @@ CAPITAL: { credits: 20, iron: 25, energy: 25 },
 ### Completed Tasks
 
 **Section 2.5.1 - New Resources:**
+
 - [x] Added 3 new resources to ResourceType: coal, grain, steelBar
 - [x] Added market prices for new resources
 - [x] Updated production rates (Agricultural: +25 coal/hr, +50 grain/hr; Mining: 50 iron/hr)
 - [x] Updated TRADEABLE_RESOURCES array
 
 **Section 2.5.2 - New Node Type:**
+
 - [x] Added MANUFACTURING_PLANT to NodeType enum in Prisma schema
 - [x] Added to shared types and configs (NODE_TYPE_CONFIGS)
 - [x] Configured base stats (storage: 30000, upkeep: 65)
@@ -2320,6 +2444,7 @@ CAPITAL: { credits: 20, iron: 25, energy: 25 },
 - [x] Created migration: `20260109031813_add_manufacturing_plant_node_type`
 
 **Section 2.5.3 - Flexible Node Storage:**
+
 - [x] Created `packages/shared/src/config/items.ts` - Unified item system
 - [x] Changed storage from ResourceStorage to flexible ItemStorage type
 - [x] Added helper functions: getStorageItems, getTotalItemCount, addItems, removeItems
@@ -2329,15 +2454,16 @@ CAPITAL: { credits: 20, iron: 25, energy: 25 },
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Unified item system | Single storage type for resources, cores, equipment - extensible |
-| ItemStorage = Partial<Record<string, number>> | Generic enough for any item type |
-| getStorageItems() returns sorted array with definitions | Consistent display across all UI components |
+| Decision                                                | Rationale                                                        |
+| ------------------------------------------------------- | ---------------------------------------------------------------- |
+| Unified item system                                     | Single storage type for resources, cores, equipment - extensible |
+| ItemStorage = Partial<Record<string, number>>           | Generic enough for any item type                                 |
+| getStorageItems() returns sorted array with definitions | Consistent display across all UI components                      |
 
 ### Technical Details
 
 **New Item System:**
+
 ```typescript
 // packages/shared/src/config/items.ts
 export type ItemStorage = Partial<Record<string, number>>;
@@ -2346,10 +2472,11 @@ export function getStorageItems(storage: ItemStorage): Array<{
   itemId: string;
   amount: number;
   definition: ItemDefinition | undefined;
-}>
+}>;
 ```
 
 **Manufacturing Plant Config:**
+
 ```typescript
 [NodeType.MANUFACTURING_PLANT]: {
   displayName: 'Manufacturing Plant',
@@ -2397,6 +2524,7 @@ export function getStorageItems(storage: ItemStorage): Array<{
 ### Completed Tasks
 
 **Section 2.5.4 - Node Core System:**
+
 - [x] Created `packages/shared/src/config/nodeCores.ts` - 8 core types defined
 - [x] Added `installedCoreId` field to Node model in Prisma schema
 - [x] Created migration: `20260109034817_add_installed_core_id`
@@ -2420,11 +2548,11 @@ export function getStorageItems(storage: ItemStorage): Array<{
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| HQ Planetary Drop Terminal modal | Separates shop from node details, thematic naming |
-| Core names with "(Core)" suffix | Clear distinction from node types in UI |
-| Immediate state updates from API response | No second API call needed, instant feedback |
+| Decision                                  | Rationale                                         |
+| ----------------------------------------- | ------------------------------------------------- |
+| HQ Planetary Drop Terminal modal          | Separates shop from node details, thematic naming |
+| Core names with "(Core)" suffix           | Clear distinction from node types in UI           |
+| Immediate state updates from API response | No second API call needed, instant feedback       |
 
 ### Files Created
 
@@ -2469,6 +2597,7 @@ export function getStorageItems(storage: ItemStorage): Array<{
 ### Completed Tasks
 
 **Section 2.5.4 - Verification Complete:**
+
 - [x] Verified active/inactive node production logic in backend code
 - [x] Traced through economy tick logic confirming inactive nodes produce nothing
 - [x] Added `HOURLY_PRODUCTION` constant to shared package (moved from worker)
@@ -2487,9 +2616,9 @@ export function getStorageItems(storage: ItemStorage): Array<{
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Refinery has no passive production | Only serves as crafting facility, no passive output |
+| Decision                            | Rationale                                                     |
+| ----------------------------------- | ------------------------------------------------------------- |
+| Refinery has no passive production  | Only serves as crafting facility, no passive output           |
 | HOURLY_PRODUCTION in shared package | Single source of truth for frontend display and backend logic |
 
 ### Files Modified
@@ -2522,6 +2651,7 @@ export function getStorageItems(storage: ItemStorage): Array<{
 ### Completed Tasks
 
 **Blueprint Editor Enhancements:**
+
 - [x] Added NODE_CORE to BlueprintCategory enum for node core blueprints
 - [x] Added BLUEPRINT to DbItemCategory enum (replaces isBlueprint toggle)
 - [x] Created "Create Items" button that generates all 5 quality variants
@@ -2536,16 +2666,19 @@ export function getStorageItems(storage: ItemStorage): Array<{
 - [x] Added color styling to item names in dropdowns based on quality
 
 **Backend Fixes:**
+
 - [x] Fixed validation to allow empty outputs array (blueprints disabled until defined)
 - [x] Updated both create and update routes for empty outputs
 
 **Items Editor Cleanup:**
+
 - [x] Removed "Seed Defaults" button and auto-seeding logic
 - [x] Removed unused `seeding` ref and `seedDefaults()` function
 
 ### Technical Details
 
 **Create Items Flow:**
+
 1. Creates 5 Blueprint Items (category: BLUEPRINT, linkedBlueprintId set)
 2. Creates 5 Output Items (category: NODE_CORE or CRAFTED, linkedBlueprintId set)
 3. Finds all Blueprint entities with same name
@@ -2553,15 +2686,24 @@ export function getStorageItems(storage: ItemStorage): Array<{
 5. Refreshes items and blueprints lists
 
 **Quality Mappings:**
+
 ```typescript
 // Efficiency for node cores
 const qualityEfficiencyMap = {
-  COMMON: 1, UNCOMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5
+  COMMON: 1,
+  UNCOMMON: 2,
+  RARE: 3,
+  EPIC: 4,
+  LEGENDARY: 5,
 };
 
 // Required node tier
 const qualityTierMap = {
-  COMMON: 1, UNCOMMON: 1, RARE: 1, EPIC: 2, LEGENDARY: 3
+  COMMON: 1,
+  UNCOMMON: 1,
+  RARE: 1,
+  EPIC: 2,
+  LEGENDARY: 3,
 };
 ```
 
@@ -2598,6 +2740,7 @@ const qualityTierMap = {
 ### Completed Tasks
 
 **Blueprint Learning Feature:**
+
 - [x] Made blueprint items clickable in ResourceDisplay component
 - [x] Created BlueprintLearnModal.vue for learning confirmation
 - [x] Updated items store `getStorageItems` to include `isBlueprint` and `linkedBlueprintId`
@@ -2607,16 +2750,19 @@ const qualityTierMap = {
 - [x] Fixed `isBlueprintLearned` to return output item name instead of blueprint name
 
 **Node Core UI Improvements:**
+
 - [x] Added quality-based color to installed core name in CoreSlotPanel
 - [x] Added efficiency display (e.g., "Efficiency: 2 (+10%)")
 - [x] Created `getQualityColorClass()` function for quality-based colors
 
 **Node Core Efficiency Verification:**
+
 - [x] Verified crafting efficiency already correct (divides craft time by multiplier)
 - [x] Fixed harvesting efficiency to use chance-based bonus instead of direct multiplier
 - [x] 10% chance per efficiency point above 1 for +1 extra resource per type
 
 **Bug Fixes:**
+
 - [x] Fixed 401 errors during transfer completion (silently ignore in catch block)
 - [x] Created script to update NODE_CORE blueprints to only allow MANUFACTURING_PLANT
 - [x] Fixed blueprint items not triggering modal (improved isBlueprint detection)
@@ -2625,6 +2771,7 @@ const qualityTierMap = {
 ### Technical Details
 
 **Harvesting Efficiency (New Mechanics):**
+
 ```typescript
 const efficiencyBonusChance = (coreEfficiency - 1) * 0.1;
 // Efficiency 2 = 10% chance for +1 extra
@@ -2633,6 +2780,7 @@ const efficiencyBonusChance = (coreEfficiency - 1) * 0.1;
 ```
 
 **Quality Color Classes:**
+
 ```typescript
 LEGENDARY → 'text-orange-400'
 EPIC → 'text-purple-400'
@@ -2644,23 +2792,25 @@ COMMON → 'text-gray-300'
 ### Files Modified
 
 **Frontend:**
+
 - `apps/web/src/stores/items.ts` - Added isBlueprint/linkedBlueprintId to getStorageItems
 - `apps/web/src/components/game/ResourceDisplay.vue` - Blueprint click handler, visual indicator
 - `apps/web/src/components/game/CoreSlotPanel.vue` - Quality colors, efficiency display
 - `apps/web/src/views/GameView.vue` - BlueprintLearnModal integration, 401 error handling
 
 **Backend:**
+
 - `apps/api/src/modules/crafting/service.ts` - Session-scoped blueprint lookups, output name
 - `apps/api/src/modules/crafting/routes.ts` - Pass sessionId to service functions
 - `apps/worker/src/jobs/upkeep.ts` - Chance-based efficiency bonus for harvesting
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Chance-based harvesting efficiency | 10% per efficiency point matches user spec, prevents guaranteed doubling |
-| Session-scoped learned blueprints | Players learn blueprints per game session, not globally |
-| Quality colors follow MMORPG conventions | LEGENDARY=orange, EPIC=purple, etc. - familiar to players |
+| Decision                                 | Rationale                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| Chance-based harvesting efficiency       | 10% per efficiency point matches user spec, prevents guaranteed doubling |
+| Session-scoped learned blueprints        | Players learn blueprints per game session, not globally                  |
+| Quality colors follow MMORPG conventions | LEGENDARY=orange, EPIC=purple, etc. - familiar to players                |
 
 ### Notes
 
@@ -2686,11 +2836,13 @@ COMMON → 'text-gray-300'
 ### Completed Tasks
 
 **Resource Transfer Fixes:**
+
 - [x] Fixed credits not appearing in Resource Transfer modal
 - [x] Removed credits filter from `transferSourceStorage` computed property in GameView
 - [x] Fixed transfer time estimate - was hardcoded "~30 seconds", now calculates dynamically
 
 **Transfer Time Calculation:**
+
 - [x] Created `packages/shared/src/config/transfers.ts` with transfer constants
 - [x] Added `TRANSFER_TIME_PER_NODE_MS` (60,000ms = 1 min per node)
 - [x] Added `TRANSFER_TIME_PER_RESOURCE_MS` (1,000ms = 1 sec per resource)
@@ -2698,24 +2850,29 @@ COMMON → 'text-gray-300'
 - [x] Updated TransferPanel to calculate estimate based on quantity (assumes distance=1)
 
 **Dev Page Improvements:**
+
 - [x] Updated "Back to Game" button styling - now blue gradient with glow effect
 
 **Auth Token Refresh Fix:**
+
 - [x] Improved axios interceptor for token refresh - added axios 1.x compatible `headers.set()` method
 - [x] Added `await` before `authStore.logout()` to ensure completion before redirect
 - [x] Added explicit `return Promise.reject(error)` in catch block
 
 **Icon Picker Updates:**
+
 - [x] Copied new icon folders from assets to web public (PACK, WEAPONS2, WEAPONS3, WARRIOR)
 - [x] Regenerated items manifest (34 categories, 1099 icons)
 - [x] Regenerated skills manifest (5 categories, 186 icons)
 
 **Item Cache Refresh:**
+
 - [x] Added `reloadItems(force=true)` function to items store
 - [x] GameView now calls `itemsStore.reloadItems()` on mount
 - [x] Fixes stale icons after editing items in dev panel
 
 **Unit Stats System (Section 2.5.7):**
+
 - [x] Added `shield` field to UnitStats interface in shared package
 - [x] Added `unitStats` to DbItemDefinition and DbItemDefinitionInput types
 - [x] Updated API types and service to handle unitStats in create/update/duplicate
@@ -2727,15 +2884,18 @@ COMMON → 'text-gray-300'
 ### Technical Details
 
 **Transfer Time Formula (from shared package):**
+
 ```typescript
-duration = (distance * 60000) + (totalQuantity * 1000)
+duration = distance * 60000 + totalQuantity * 1000;
 // Example: 100 items to adjacent node = 1m + 1m40s = 2m40s
 ```
 
 **Files Created:**
+
 - `packages/shared/src/config/transfers.ts` - Transfer time constants and helpers
 
 **Files Modified:**
+
 - `apps/web/src/views/GameView.vue` - Credits filter removed, items reload
 - `apps/web/src/components/game/TransferPanel.vue` - Dynamic time estimate
 - `apps/web/src/stores/items.ts` - Added reloadItems() function
@@ -2768,6 +2928,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 ### Completed Tasks
 
 **Unit Spawning and Movement:**
+
 - [x] Created UnitManager class for unit rendering and state management
 - [x] Integrated UnitManager into CombatEngine
 - [x] Implemented spawn at perimeter spawn zones
@@ -2777,6 +2938,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 - [x] Health bars above units with color-coding (green/orange/red)
 
 **Flow Field Pathfinding:**
+
 - [x] Implemented Dijkstra integration field from Core (center of arena)
 - [x] Generate flow direction per tile (8 directions)
 - [x] Obstacle handling (blocked tiles, diagonal corner blocking)
@@ -2784,6 +2946,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 - [x] Safe array access helpers (get2D, set2D) for TypeScript strict mode
 
 **Combat Logic (game-logic package):**
+
 - [x] Created combat/damage.ts with damage calculations
 - [x] Armor damage reduction (diminishing returns formula)
 - [x] Shield absorption before health
@@ -2796,6 +2959,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 - [x] Victory condition detection (Core destroyed or all attackers dead)
 
 **Core Health System:**
+
 - [x] Core health bar in HUD (top bar below navbar)
 - [x] Dynamic health percentage display
 - [x] Visual damage states (healthy=green, damaged=orange, critical=red pulsing)
@@ -2803,6 +2967,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 - [x] Real-time updates from server state via WebSocket
 
 ### Files Created
+
 - `apps/web/src/game/combat/UnitManager.ts` - Unit rendering and interpolation
 - `apps/web/src/game/combat/FlowField.ts` - Dijkstra pathfinding
 - `packages/game-logic/src/combat/damage.ts` - Combat calculations
@@ -2810,6 +2975,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 - `packages/game-logic/src/combat/index.ts` - Combat module exports
 
 ### Files Modified
+
 - `apps/web/src/game/combat/CombatEngine.ts` - Integrated UnitManager and FlowField
 - `apps/web/src/game/combat/index.ts` - Added exports
 - `apps/web/src/composables/useCombatEngine.ts` - Added Core health tracking
@@ -2820,12 +2986,14 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 ### Technical Details
 
 **Damage Calculation:**
+
 ```typescript
 // Damage after armor: damage * (100 / (100 + armor))
 // This gives diminishing returns on armor
 ```
 
 **Flow Field Algorithm:**
+
 - Dijkstra from Core (2x2 tiles at center)
 - 8-directional movement with diagonal cost (sqrt(2))
 - Diagonal blocking (can't cut corners through obstacles)
@@ -2856,6 +3024,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 ### Completed Tasks
 
 **Combat View Integration:**
+
 - [x] Installed Babylon.js packages (`pnpm install` from PowerShell)
 - [x] Built shared package with new combat types
 - [x] Replaced "Focus on Node" button with "Combat View" button in node details panel
@@ -2863,6 +3032,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 - [x] Created mock combat setup for testing (uses selected node's type)
 
 **High-DPI Display Fix:**
+
 - [x] Fixed extremely blurry 3D rendering on high-DPI displays
 - [x] Root cause: Canvas was hidden (v-show) during initialization, resulting in zero dimensions
 - [x] Solution: Use `requestAnimationFrame` to wait for layout before sizing canvas
@@ -2870,6 +3040,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 - [x] Added public `resize()` method to CombatEngine for manual resizing
 
 **Arena Size Increase:**
+
 - [x] Increased arena from 40x40 tiles (80m) to 60x60 tiles (120m) - 50% larger
 - [x] Adjusted camera radius from 60 to 90 for proper framing
 - [x] Adjusted zoom limits (30-200) for larger arena
@@ -2877,6 +3048,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 ### Technical Details
 
 **DPI Fix Implementation:**
+
 1. Engine initializes on mount (canvas hidden, zero size)
 2. When `enterCombat()` is called, `isActive` becomes true (v-show shows canvas)
 3. `requestAnimationFrame` waits for browser layout
@@ -2884,17 +3056,18 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 5. `engine.resize()` updates Babylon's internal state
 
 **Files Modified:**
+
 - `apps/web/src/views/GameView.vue` - Added CombatView integration, Combat View button
 - `apps/web/src/game/combat/CombatEngine.ts` - DPI fix, arena size increase
 - `apps/web/src/composables/useCombatEngine.ts` - requestAnimationFrame for resize timing
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
+| Decision                                    | Rationale                                                         |
+| ------------------------------------------- | ----------------------------------------------------------------- |
 | Use requestAnimationFrame for resize timing | Ensures canvas has valid dimensions after v-show makes it visible |
-| Arena size 60x60 (120m x 120m) | User requested 50% larger than original 40x40 (80m x 80m) |
-| Camera radius 90 (was 60) | Proportional increase for larger arena framing |
+| Arena size 60x60 (120m x 120m)              | User requested 50% larger than original 40x40 (80m x 80m)         |
+| Camera radius 90 (was 60)                   | Proportional increase for larger arena framing                    |
 
 ### Notes
 
@@ -2919,6 +3092,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 ### Completed Tasks
 
 **Phase 4.1 - Combat Foundation (Partial):**
+
 - [x] Created combat type definitions (`packages/shared/src/types/combat.ts`)
   - TileType enum for arena terrain
   - UnitState enum for unit behavior
@@ -2959,21 +3133,21 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 
 ### Files Created
 
-| File | Purpose |
-|------|---------|
-| `packages/shared/src/types/combat.ts` | Combat type definitions |
-| `apps/web/src/game/combat/CombatEngine.ts` | Babylon.js 3D combat engine |
-| `apps/web/src/game/combat/index.ts` | Module exports |
-| `apps/web/src/composables/useCombatEngine.ts` | Vue composable for engine |
-| `apps/web/src/components/game/CombatView.vue` | Combat view component |
+| File                                          | Purpose                     |
+| --------------------------------------------- | --------------------------- |
+| `packages/shared/src/types/combat.ts`         | Combat type definitions     |
+| `apps/web/src/game/combat/CombatEngine.ts`    | Babylon.js 3D combat engine |
+| `apps/web/src/game/combat/index.ts`           | Module exports              |
+| `apps/web/src/composables/useCombatEngine.ts` | Vue composable for engine   |
+| `apps/web/src/components/game/CombatView.vue` | Combat view component       |
 
 ### Files Modified
 
-| File | Change |
-|------|--------|
-| `packages/shared/src/types/index.ts` | Export combat types |
-| `apps/web/package.json` | Add Babylon.js dependencies |
-| `docs/DEVELOPMENT-PLAN.md` | Mark Phase 4.1 partial progress |
+| File                                 | Change                          |
+| ------------------------------------ | ------------------------------- |
+| `packages/shared/src/types/index.ts` | Export combat types             |
+| `apps/web/package.json`              | Add Babylon.js dependencies     |
+| `docs/DEVELOPMENT-PLAN.md`           | Mark Phase 4.1 partial progress |
 
 ### Notes
 
@@ -3000,6 +3174,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 ### Completed Tasks
 
 **Combat Stats System Enhancements:**
+
 - [x] Added `shieldRange` field to both UnitStats and BuildingStats interfaces
 - [x] Updated all unit type definitions with `shieldRange: 0` (personal shields)
 - [x] Updated all building type definitions with `shieldRange` (Shield Generator uses 4 for AOE)
@@ -3007,6 +3182,7 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 - [x] Updated `seed-units.ts` and `seed-buildings.ts` to include shieldRange
 
 **Section 3.3 - Building Stats in UI:**
+
 - [x] Extended ItemsEditor combat stats section to work for both UNIT and BUILDING categories
 - [x] Added shieldRange field to display and edit forms
 - [x] Display shows "Personal" or "X tiles (AOE)" based on shieldRange value
@@ -3016,16 +3192,19 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 - [x] Added "Stats not configured" message for items without unitStats set
 
 **UI Improvements:**
+
 - [x] Made QuantityModal larger (max-width 400px → 480px, larger padding/fonts/buttons)
 - [x] HQ Shop now uses tabbed UI for categories instead of scrolling list
 
 ### Technical Details
 
 **shieldRange Mechanic:**
+
 - `shieldRange: 0` = Personal shield (absorbs damage before health, like extra HP)
 - `shieldRange: >0` = AOE shield radius protecting nearby allies within range
 
 **Files Modified:**
+
 - `packages/shared/src/config/units.ts` - Added shieldRange to UnitStats, all unit types
 - `packages/shared/src/config/buildings.ts` - Added shieldRange to BuildingStats, all building types
 - `apps/api/prisma/seed-units.ts` - Include shieldRange in unitStats
@@ -3036,11 +3215,11 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| shieldRange: 0 = personal, >0 = AOE | Clear distinction between self-protection and area protection |
-| Shield Generator has shieldRange: 4 | Projects shields to nearby allies, not just itself |
-| Show "Stats not configured" for items without stats | Better UX than hiding the section entirely |
+| Decision                                            | Rationale                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------- |
+| shieldRange: 0 = personal, >0 = AOE                 | Clear distinction between self-protection and area protection |
+| Shield Generator has shieldRange: 4                 | Projects shields to nearby allies, not just itself            |
+| Show "Stats not configured" for items without stats | Better UX than hiding the section entirely                    |
 
 ### Notes
 
@@ -3065,11 +3244,13 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 ### Completed Tasks
 
 **Arena Scaling:**
+
 - [x] Increased tile size from 2m to 8m (arena now 480m x 480m)
 - [x] Increased zoom speed (wheelPrecision: 20 → 5)
 - [x] Max zoom distance now scales with arena size
 
 **Unit Tile Size System:**
+
 - [x] Added `tileSize` field to UnitDefinition (Prisma schema, shared types)
 - [x] Units now scale based on their tileSize setting (1-10 tiles)
 - [x] Added tile size slider to Unit Editor with NxN display
@@ -3077,11 +3258,13 @@ duration = (distance * 60000) + (totalQuantity * 1000)
 - [x] 3D model loading scales to tileSize
 
 **Skill Updates:**
+
 - [x] Updated `/update` skill to sync mac-claude.md with CLAUDE.md
 
 ### Technical Details
 
 **Arena Constants:**
+
 ```typescript
 TILE_SIZE = 8; // 8 meters per tile (was 2)
 ARENA_SIZE = 60; // 60x60 tiles
@@ -3089,11 +3272,13 @@ ARENA_METERS = 480; // 480m x 480m arena
 ```
 
 **Unit Scaling:**
+
 - Unit size calculated as: `TILE_SIZE * tileSize * 0.8`
 - A 1x1 unit fills 80% of an 8m tile (6.4m)
 - Health bar size scales proportionally
 
 **Files Modified:**
+
 - `apps/api/prisma/schema.prisma` - Added tileSize field
 - `packages/shared/src/types/unitDefinition.ts` - Added tileSize to types
 - `apps/web/src/components/dev/UnitsEditor.vue` - Tile size slider
@@ -3102,11 +3287,11 @@ ARENA_METERS = 480; // 480m x 480m arena
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Tile size 8m (was 2m) | Larger arena feels better, more room for units |
+| Decision                        | Rationale                                          |
+| ------------------------------- | -------------------------------------------------- |
+| Tile size 8m (was 2m)           | Larger arena feels better, more room for units     |
 | Unit tileSize configurable 1-10 | Different unit types can have different footprints |
-| Sync mac-claude.md in /update | Keeps macOS development environment in sync |
+| Sync mac-claude.md in /update   | Keeps macOS development environment in sync        |
 
 ### Notes
 
@@ -3130,43 +3315,51 @@ ARENA_METERS = 480; // 480m x 480m arena
 ### Completed Tasks
 
 **Dev Panel - Link Item Selector:**
+
 - [x] Auto-save linked items when clicking outside dropdown (UnitsEditor.vue, BuildingsEditor.vue)
 - [x] Display linked items as small cards with quality-colored borders
 - [x] Hover-to-reveal unlink buttons on item cards
 
 **Dev Panel - Model Selector:**
+
 - [x] Horizontal scrollable mesh panel instead of tall expanding list
 - [x] Small preview thumbnails for each mesh option
 - [x] Better UX for selecting meshes from large pack files
 
 **Combat View - Building Models:**
+
 - [x] Fixed pack file mesh loading (pattern matching parent/grandparent names)
 - [x] Buildings now scale to respect tile dimensions from settings
 - [x] Fixed "Clear All" to properly dispose entire mesh hierarchies (TransformNode)
 - [x] Mesh centering when reparenting from pack files
 
 **Combat View - Camera:**
+
 - [x] Reduced minimum zoom from 30 to 5 for close-up views
 
 ### Technical Details
 
 **Pack File Mesh Loading:**
+
 - GLB pack files have meshes named like "Object_X" with turret IDs in parent/grandparent nodes
 - Added pattern matching logic similar to ModelPreview.vue
 - Handles both T-series (`T-A01_123`) and other naming conventions
 
 **Building Model Scaling:**
+
 - Models scale to fill their tile footprint (TILE_SIZE = 2 meters)
 - 1x1 tile = 2m x 2m, 2x2 tiles = 4m x 4m
 - Removed minimum height constraint that was incorrectly scaling models UP
 - Pack file meshes centered before scaling to handle scattered world positions
 
 **Mesh Hierarchy Disposal:**
+
 - Changed `devBuildingMeshes` from `Map<string, Mesh>` to `Map<string, TransformNode>`
 - Added recursive `disposeBuildingNode()` function
 - Properly disposes all descendants including rotating turret parts
 
 **Files Modified:**
+
 - `apps/web/src/components/dev/UnitsEditor.vue` - Auto-save, card display
 - `apps/web/src/components/dev/BuildingsEditor.vue` - Same changes
 - `apps/web/src/components/dev/ModelSelectorModal.vue` - Horizontal mesh picker
@@ -3181,7 +3374,7 @@ ARENA_METERS = 480; // 480m x 480m arena
 ### Next Session Plan
 
 1. Continue Section 4.3: Full Combat Features
-2. Implement A* pathfinding for manual orders
+2. Implement A\* pathfinding for manual orders
 3. Tower targeting and firing
 
 ---
@@ -3195,6 +3388,7 @@ ARENA_METERS = 480; // 480m x 480m arena
 ### Completed Tasks
 
 **Economy Tick Performance Optimization:**
+
 - [x] Identified N+1 query patterns in `apps/worker/src/jobs/upkeep.ts`
 - [x] Fixed session player resource updates (was 4 individual queries, now batched)
 - [x] Fixed node storage updates (was ~50-60 individual queries, now batched)
@@ -3204,12 +3398,14 @@ ARENA_METERS = 480; // 480m x 480m arena
 ### Technical Details
 
 **Before (N+1 pattern):**
+
 - 4 individual `gameSessionPlayer.update` calls (one per player)
 - ~50-60 individual `node.update` calls (one per production node)
 - Multiple `updateMany` calls per player for upkeep status
 - Total: ~60-70 queries, 4577ms for 4 players
 
 **After (batched):**
+
 - Single transaction containing:
   - All player resource updates in parallel
   - All node storage updates in parallel
@@ -3217,15 +3413,16 @@ ARENA_METERS = 480; // 480m x 480m arena
 - Expected: ~8-10 queries, ~500ms for 4 players
 
 **Files Modified:**
+
 - `apps/worker/src/jobs/upkeep.ts` - Refactored to collect all updates first, then execute in single batch transaction
 
 ### Performance Impact
 
-| Metric | Before | After (Expected) |
-|--------|--------|------------------|
-| Economy tick (4 players) | 4577ms | ~500ms |
-| Individual queries | ~60-70 | ~8-10 |
-| Scaling impact | 1.1s/player | ~0.1s/player |
+| Metric                   | Before      | After (Expected) |
+| ------------------------ | ----------- | ---------------- |
+| Economy tick (4 players) | 4577ms      | ~500ms           |
+| Individual queries       | ~60-70      | ~8-10            |
+| Scaling impact           | 1.1s/player | ~0.1s/player     |
 
 ### Notes
 
@@ -3237,7 +3434,7 @@ ARENA_METERS = 480; // 480m x 480m arena
 
 1. Continue Section 4.3: Full Combat Features
 2. Complete Section 4.2 verification tasks
-3. Implement A* pathfinding for manual orders
+3. Implement A\* pathfinding for manual orders
 
 ---
 
@@ -3250,6 +3447,7 @@ ARENA_METERS = 480; // 480m x 480m arena
 ### Completed Tasks
 
 **Sprint 6 (Runtime & Test Mode) - Performance Optimization:**
+
 - [x] Completed tick-level caching in CombatSimulator
 - [x] Updated tick() method to call buildTickCache() at start and clear at end
 - [x] Updated processAttackerUnits() to use cache instead of creating new arrays
@@ -3258,6 +3456,7 @@ ARENA_METERS = 480; // 480m x 480m arena
 - [x] Updated checkWinConditions() to use cache
 
 **Code Review & Bug Fixes:**
+
 - [x] Reviewed all AI Editor sprint code for bugs
 - [x] Fixed 5 bugs across multiple files:
   1. Memory leak in AIPresetSelector.vue (missing removeEventListener)
@@ -3269,33 +3468,35 @@ ARENA_METERS = 480; // 480m x 480m arena
 
 ### Files Modified
 
-| File | Change |
-|------|--------|
-| `packages/game-logic/src/combat/simulator.ts` | Added tick cache initialization/cleanup |
-| `apps/web/src/components/ai-editor/AIPresetSelector.vue` | Added onUnmounted to remove event listener |
-| `apps/api/src/modules/units/types.ts` | Added aiPresetId field to UnitDefinitionInput |
-| `apps/api/src/modules/units/service.ts` | Added aiPresetId handling in create/update |
-| `packages/game-logic/src/ai/actions.ts` | Fixed attack_target to handle 'core' |
-| `packages/game-logic/src/ai/conditions.ts` | Fixed target_in_range and target_health for 'core' |
+| File                                                     | Change                                             |
+| -------------------------------------------------------- | -------------------------------------------------- |
+| `packages/game-logic/src/combat/simulator.ts`            | Added tick cache initialization/cleanup            |
+| `apps/web/src/components/ai-editor/AIPresetSelector.vue` | Added onUnmounted to remove event listener         |
+| `apps/api/src/modules/units/types.ts`                    | Added aiPresetId field to UnitDefinitionInput      |
+| `apps/api/src/modules/units/service.ts`                  | Added aiPresetId handling in create/update         |
+| `packages/game-logic/src/ai/actions.ts`                  | Fixed attack_target to handle 'core'               |
+| `packages/game-logic/src/ai/conditions.ts`               | Fixed target_in_range and target_health for 'core' |
 
 ### Technical Details
 
 **Tick Cache Optimization:**
+
 - Before: 6+ Array.from().filter() calls per tick creating new arrays
 - After: 1 cache build at tick start, reused throughout, cleared at end
 - Impact: Significant reduction in GC pressure during combat ticks
 
 **Core Target Bug Pattern:**
+
 - When targetId === 'core', findEnemy() returns null
 - Conditions and actions would fail silently
 - Fixed by adding special case handling before findEnemy() calls
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Deferred full testing to later | Combat mode not fully built out yet for E2E testing |
-| Code review approach | Manual review + hardening since runtime testing not possible |
+| Decision                       | Rationale                                                    |
+| ------------------------------ | ------------------------------------------------------------ |
+| Deferred full testing to later | Combat mode not fully built out yet for E2E testing          |
+| Code review approach           | Manual review + hardening since runtime testing not possible |
 
 ### Notes
 
@@ -3320,12 +3521,14 @@ ARENA_METERS = 480; // 480m x 480m arena
 ### Completed Tasks
 
 **AI Editor Auto-Arrange & Position Persistence:**
+
 - [x] Fixed node mixing bug when switching between presets (nodes from previous preset remained)
 - [x] Added `await nextTick()` between clearing and setting nodes in `loadTreeIntoCanvas`
 - [x] Made `loadTreeIntoCanvas` async to properly sequence node operations
 - [x] Updated `selectPreset` and `cancelEdit` to await async load
 
 **AI Editor Template Validation Fixes:**
+
 - [x] Added `conditionId`/`actionId` extraction from params when loading from DB
 - [x] Added `conditionId`/`actionId` persistence to params when saving to DB
 - [x] Updated both `saveTreePositionsWithNodes` and `buildTreeData` functions
@@ -3340,19 +3543,21 @@ ARENA_METERS = 480; // 480m x 480m arena
 
 ### Files Modified
 
-| File | Change |
-|------|--------|
-| `apps/web/src/components/dev/AIEditor.vue` | Fixed node mixing, added conditionId/actionId persistence |
-| `apps/api/prisma/seed-ai-presets.ts` | Added conditionId/actionId to all template nodes, allow reseed |
+| File                                       | Change                                                         |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| `apps/web/src/components/dev/AIEditor.vue` | Fixed node mixing, added conditionId/actionId persistence      |
+| `apps/api/prisma/seed-ai-presets.ts`       | Added conditionId/actionId to all template nodes, allow reseed |
 
 ### Technical Details
 
 **Node Mixing Bug Fix:**
+
 - Problem: When switching presets, `setNodes([])` and `setNodes(newNodes)` happened synchronously
 - Vue Flow didn't process the clear before new nodes were set, causing mixing
 - Solution: Added `await nextTick()` between clear and set operations
 
 **Validation ID Persistence:**
+
 - Validation checks `node.data.conditionId`/`actionId` at top level
 - When saving to DB, these were only in `data.params`
 - When loading from DB, they weren't extracted back to top level
@@ -3360,11 +3565,11 @@ ARENA_METERS = 480; // 480m x 480m arena
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Store conditionId/actionId in params for DB | Params is the only node data field that persists to DB |
-| Extract to top level on load | Validation expects them at node.data.conditionId/actionId |
-| Allow template reseed by deleting first | Easier to update templates during development |
+| Decision                                    | Rationale                                                 |
+| ------------------------------------------- | --------------------------------------------------------- |
+| Store conditionId/actionId in params for DB | Params is the only node data field that persists to DB    |
+| Extract to top level on load                | Validation expects them at node.data.conditionId/actionId |
+| Allow template reseed by deleting first     | Easier to update templates during development             |
 
 ### Notes
 
@@ -3389,6 +3594,7 @@ ARENA_METERS = 480; // 480m x 480m arena
 ### Completed Tasks
 
 **Turret Attack System - Laser Origin Fix:**
+
 - [x] Fixed laser beam origin to align precisely with barrel tip
 - [x] Implemented barrel offset calculation from model geometry (bounding box analysis)
 - [x] Added `barrelLocalOffset` and `scaleFactor` fields to buildingData
@@ -3400,22 +3606,24 @@ ARENA_METERS = 480; // 480m x 480m arena
 ### Technical Details
 
 **Barrel Offset Calculation:**
+
 - Initial approach: Calculate from bounding box of turret head meshes
 - Problem: Auto-detection didn't account for model pivot point placement
 - Solution: Used fixed Y offset (-0.22) tuned through testing
 - Future: Add `barrelOffsetY` field to BuildingDefinition for per-turret configuration
 
 **Key Code Changes:**
+
 - `CombatEngine.ts`: Added barrelLocalOffset/scaleFactor to buildingData
 - `CombatEngine.ts`: Modified findTurretParts to calculate barrel offset from max Z mesh
 - `CombatEngine.ts`: Updated executeAttack to use pre-calculated scaled offset with rotation
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Fixed Y offset (-0.22) for barrel alignment | Auto-detection from bounding boxes didn't work reliably |
-| Add barrelOffsetY to BuildingDefinition (future) | Allows per-turret configuration without code changes |
+| Decision                                         | Rationale                                               |
+| ------------------------------------------------ | ------------------------------------------------------- |
+| Fixed Y offset (-0.22) for barrel alignment      | Auto-detection from bounding boxes didn't work reliably |
+| Add barrelOffsetY to BuildingDefinition (future) | Allows per-turret configuration without code changes    |
 
 ### Issues Encountered
 
@@ -3440,6 +3648,7 @@ ARENA_METERS = 480; // 480m x 480m arena
 ### Completed Tasks
 
 **AI Editor Enhancement - Sequence Chaining:**
+
 - [x] Implemented visual sequence chaining for behavior tree editor
 - [x] Sequence children now display as chains showing execution order
 - [x] Example: `Attack Sequence → Has Target → Target In Range → Attack Target`
@@ -3451,11 +3660,13 @@ ARENA_METERS = 480; // 480m x 480m arena
 ### Technical Details
 
 **Problem:**
+
 - Vue Flow was rejecting chain edges between leaf nodes (action, condition)
 - Console showed 7 edges being set but only 4 accepted
 - `isValidConnection` was being called even for programmatic `setEdges` operations
 
 **Root Cause:**
+
 ```typescript
 // Existing validation blocked leaf nodes from having children
 const leafTypes: BehaviorNodeType[] = ['condition', 'action'];
@@ -3465,20 +3676,22 @@ if (leafTypes.includes(sourceType)) {
 ```
 
 **Solution:**
+
 - Added `isLoadingEdges` ref flag to AIEditor.vue
 - Modified `isValidConnection` to bypass validation when flag is true
 - Wrapped `setEdges` calls in `loadTreeIntoCanvas` and `autoLayoutTree` with flag toggling
 
 **Key Code Changes:**
+
 - `AIEditor.vue`: Added `isLoadingEdges` flag and validation bypass
 - `sequenceChaining.ts`: Removed debug console.log statements
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Bypass validation only during programmatic loading | Manual user connections should still be validated |
-| Chain is visual only, DB stores standard format | AI logic depends on standard parent-child relationships |
+| Decision                                           | Rationale                                               |
+| -------------------------------------------------- | ------------------------------------------------------- |
+| Bypass validation only during programmatic loading | Manual user connections should still be validated       |
+| Chain is visual only, DB stores standard format    | AI logic depends on standard parent-child relationships |
 
 ### Issues Encountered
 
@@ -3501,39 +3714,46 @@ if (leafTypes.includes(sourceType)) {
 ### Completed Tasks
 
 **Item/Blueprint Editor Improvements:**
+
 - [x] Auto-save item changes via debounced watcher (30 second delay)
 - [x] Card layout instead of table for item/unit lists
 - [x] Model preview thumbnails in card display
 - [x] Better UX for selecting meshes from large pack files
 
 **Combat View - Building Models:**
+
 - [x] Fixed pack file mesh loading (pattern matching parent/grandparent names)
 - [x] Buildings now scale to respect tile dimensions from settings
 - [x] Fixed "Clear All" to properly dispose entire mesh hierarchies (TransformNode)
 - [x] Mesh centering when reparenting from pack files
 
 **Combat View - Camera:**
+
 - [x] Reduced minimum zoom from 30 to 5 for close-up views
 
 ### Technical Details
 
 **Pack File Mesh Loading:**
+
 - GLB pack files have meshes named like "Object_X" with turret IDs in parent/grandparent nodes
 - Added pattern matching logic similar to ModelPreview.vue
 - Handles both T-series (`T-A01_123`) and other naming conventions
 
 **Building Model Scaling:**
+
 - Models scale to fill their tile footprint (TILE_SIZE = 2 meters)
 - 1x1 tile = 2m x 2m, 2x2 tiles = 4m x 4m
 - Removed minimum height constraint that was incorrectly scaling models UP
 - Pack file meshes centered before scaling to handle scattered world positions
 
 **Mesh Hierarchy Disposal:**
+
 - Changed `devBuildingMeshes` from `Map<string, Mesh>` to `Map<string, TransformNode>`
 - Added recursive `disposeBuildingNode()` function
 - Properly disposes all descendants including rotating turret parts
 
 **Files Modified:**
+
 - `apps/web/src/components/dev/UnitsEditor.vue` - Auto-save, card display
 - `apps/web/src/components/dev/BuildingsEditor.vue` - Same changes
 - `apps/web/src/components/dev/ModelSelectorModal.vue` - Horizontal mesh picker
@@ -3548,7 +3768,7 @@ if (leafTypes.includes(sourceType)) {
 ### Next Session Plan
 
 1. Continue Section 4.3: Full Combat Features
-2. Implement A* pathfinding for manual orders
+2. Implement A\* pathfinding for manual orders
 3. Tower targeting and firing
 
 ---
@@ -3562,15 +3782,18 @@ if (leafTypes.includes(sourceType)) {
 ### Completed Tasks
 
 **Phase 2.5 Completion:**
+
 - [x] Phase 2.5 marked complete - all unit training framework tasks done
 - [x] Verification tasks confirmed by user
 
 **Phase 3 Restructuring:**
+
 - [x] Rewrote Phase 3 based on new design: buildings are items manufactured at Manufacturing Plant
 - [x] Deferred 3D grid placement, construction in Combat Mode to Phase 4
 - [x] Removed building upgrades section (quality from blueprint tiers instead)
 
 **Section 3.1 - Building Item Configuration:**
+
 - [x] Added BUILDING to ItemCategory enum in Prisma schema
 - [x] Created migration: `20260111051145_add_building_category`
 - [x] Regenerated Prisma client
@@ -3580,11 +3803,13 @@ if (leafTypes.includes(sourceType)) {
 - [x] Added BUILDING to ITEM_CATEGORY_NAMES, ICONS, and COLORS
 
 **Section 3.2 - Building Items & Blueprints:**
+
 - [x] Created `apps/api/prisma/seed-buildings.ts` - seeds items and manufacturing blueprints
 - [x] Added `db:seed-buildings` script to package.json (api and root)
 - [x] Buildings reuse `unitStats` JSON field for combat stats
 
 **Blueprint Editor Improvements:**
+
 - [x] "Create Items" now maps blueprint category to correct item category:
   - BUILDINGS → BUILDING
   - UNIT → UNIT
@@ -3594,11 +3819,13 @@ if (leafTypes.includes(sourceType)) {
 - [x] "Create Variants" context menu also defaults to requiring learning
 
 **Icon Picker Improvements:**
+
 - [x] Wider scrollbar (21px) for easier grabbing
 - [x] Auto-scroll to selected icon when picker opens
 - [x] Custom scrollbar styling with rounded corners
 
 **Item Editor Improvements:**
+
 - [x] Added "HQ" badge on items with hqCost > 0 in item list
 
 ### Technical Details
@@ -3615,11 +3842,13 @@ if (leafTypes.includes(sourceType)) {
 | Supply Depot | 1 | Support | 100 | 0 | 0 | 2m |
 
 **Files Created:**
+
 - `packages/shared/src/config/buildings.ts` - Building types and stats
 - `apps/api/prisma/seed-buildings.ts` - Building items/blueprints seeder
 - `apps/api/prisma/migrations/20260111051145_add_building_category/` - Migration
 
 **Files Modified:**
+
 - `apps/api/prisma/schema.prisma` - Added BUILDING to ItemCategory
 - `packages/shared/src/types/enums.ts` - Added BUILDING to DbItemCategory
 - `packages/shared/src/config/itemDefinitions.ts` - Added BUILDING display info
@@ -3630,13 +3859,13 @@ if (leafTypes.includes(sourceType)) {
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Buildings are items (like units) | Consistent with manufacturing system, 3D placement deferred to Phase 4 |
-| No building upgrades | Quality from blueprint tiers, simpler design |
-| Buildings have shield stat | Same combat stats as units for consistency |
-| Reuse unitStats field for buildings | Same structure, no schema change needed |
-| New blueprints require learning by default | More game progression control |
+| Decision                                   | Rationale                                                              |
+| ------------------------------------------ | ---------------------------------------------------------------------- |
+| Buildings are items (like units)           | Consistent with manufacturing system, 3D placement deferred to Phase 4 |
+| No building upgrades                       | Quality from blueprint tiers, simpler design                           |
+| Buildings have shield stat                 | Same combat stats as units for consistency                             |
+| Reuse unitStats field for buildings        | Same structure, no schema change needed                                |
+| New blueprints require learning by default | More game progression control                                          |
 
 ### Notes
 
@@ -3663,6 +3892,7 @@ if (leafTypes.includes(sourceType)) {
 ### Completed Tasks
 
 **Section 2.5.5 - Crafting System:**
+
 - [x] Implemented crafting queue system with per-run processing
 - [x] Created `CraftingQueueItem` type with run tracking (completedRuns, timePerRun)
 - [x] Added crafting queue JSON field to Node model in Prisma schema
@@ -3674,6 +3904,7 @@ if (leafTypes.includes(sourceType)) {
 - [x] Worker processes crafts at exact completion time (no polling delay)
 
 **Section 2.5.6 - Crafting UI:**
+
 - [x] Created `CraftingPanel.vue` component with full crafting interface
 - [x] Left section: Blueprint list filtered by node type/category
 - [x] Middle section: Material requirements with inventory counts
@@ -3692,6 +3923,7 @@ if (leafTypes.includes(sourceType)) {
 ### Technical Implementation
 
 **Instant Crafting Completion Flow:**
+
 1. API calls `scheduleCraftingJob()` after starting a craft
 2. API publishes to Redis `crafting:schedule` channel with nodeId and delay
 3. Worker subscribes to channel and creates delayed BullMQ job
@@ -3700,6 +3932,7 @@ if (leafTypes.includes(sourceType)) {
 6. WebSocket event updates client UI in real-time
 
 **Key Files Created:**
+
 - `apps/api/src/modules/crafting/service.ts` - Crafting business logic
 - `apps/api/src/modules/crafting/routes.ts` - API endpoints
 - `apps/worker/src/jobs/crafting.ts` - Worker job processor
@@ -3707,6 +3940,7 @@ if (leafTypes.includes(sourceType)) {
 - `packages/shared/src/types/crafting.ts` - Type definitions and helpers
 
 **Key Files Modified:**
+
 - `apps/api/src/lib/redis.ts` - Added `scheduleCraftingJob()` function
 - `apps/worker/src/index.ts` - Added crafting:schedule subscription
 - `apps/worker/src/lib/events.ts` - Added queue to CraftingCompletedEvent
@@ -3715,12 +3949,12 @@ if (leafTypes.includes(sourceType)) {
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
-| Per-run crafting system | Each run produces 1 item, allows precise timing and progress display |
-| Delayed BullMQ jobs for completion | Instant completion without polling delay (was 30s) |
-| Redis pub/sub for job scheduling | Cross-service communication without direct coupling |
-| 5-second polling as backup | Safety net for missed scheduled jobs |
+| Decision                           | Rationale                                                            |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| Per-run crafting system            | Each run produces 1 item, allows precise timing and progress display |
+| Delayed BullMQ jobs for completion | Instant completion without polling delay (was 30s)                   |
+| Redis pub/sub for job scheduling   | Cross-service communication without direct coupling                  |
+| 5-second polling as backup         | Safety net for missed scheduled jobs                                 |
 
 ### Notes
 
@@ -3870,15 +4104,15 @@ if (leafTypes.includes(sourceType)) {
 
 <!-- Track key performance metrics as development progresses -->
 
-| Metric                        | Target  | Current  | Status |
-| ----------------------------- | ------- | -------- | ------ |
-| Initial page load             | < 3s    | ~1s      | 🟢     |
-| World map render (1000 nodes) | < 1s    | ~500ms   | 🟢     |
-| Zoom/pan performance          | 60 fps  | Smooth   | 🟢     |
-| API response time (p95)       | < 200ms | -        | ⚪     |
-| WebSocket latency             | < 100ms | -        | ⚪     |
-| Combat tick rate              | 60ms    | -        | ⚪     |
-| Memory usage (client)         | < 200MB | -        | ⚪     |
+| Metric                        | Target  | Current | Status |
+| ----------------------------- | ------- | ------- | ------ |
+| Initial page load             | < 3s    | ~1s     | 🟢     |
+| World map render (1000 nodes) | < 1s    | ~500ms  | 🟢     |
+| Zoom/pan performance          | 60 fps  | Smooth  | 🟢     |
+| API response time (p95)       | < 200ms | -       | ⚪     |
+| WebSocket latency             | < 100ms | -       | ⚪     |
+| Combat tick rate              | 60ms    | -       | ⚪     |
+| Memory usage (client)         | < 200MB | -       | ⚪     |
 
 ---
 
@@ -3913,16 +4147,19 @@ if (leafTypes.includes(sourceType)) {
 ### Completed Tasks
 
 **AI Editor Bug Fixes:**
+
 - [x] Fixed AI Behavior dropdown not appearing (event propagation issue)
   - Click events were bubbling to document's `handleClickOutside` listener
   - Added `.stop` modifier to prevent immediate close
 
 **AI Editor UI Improvements:**
+
 - [x] Added readonly mode to AIPresetSelector component
   - View mode shows just a label with preset name instead of dropdown
   - Updated BuildingsEditor.vue and UnitsEditor.vue to use readonly prop
 
 **New AI Presets Created:**
+
 - [x] Scout AI - Hit-and-run distraction unit
   - Kites away when targeted
   - Makes quick strikes on structures when in range
@@ -3935,6 +4172,7 @@ if (leafTypes.includes(sourceType)) {
   - Holds position as fallback
 
 **Auto-Arrange Improvements:**
+
 - [x] Dynamic node width calculation based on label length
   - Nodes with longer names no longer overlap
   - Added `charWidth` (8px/char) and `nodePadding` (50px) options
@@ -3944,6 +4182,7 @@ if (leafTypes.includes(sourceType)) {
 ### Technical Details
 
 **Files Modified:**
+
 - `apps/web/src/components/ai-editor/AIPresetSelector.vue` - Bug fix and readonly mode
 - `apps/web/src/components/dev/BuildingsEditor.vue` - Use readonly prop
 - `apps/web/src/components/dev/UnitsEditor.vue` - Use readonly prop
@@ -3954,8 +4193,8 @@ if (leafTypes.includes(sourceType)) {
 
 ### Decisions Made
 
-| Decision | Rationale |
-|----------|-----------|
+| Decision                                | Rationale                                   |
+| --------------------------------------- | ------------------------------------------- |
 | Dynamic node width for AI Editor layout | Prevents overlap for nodes with long labels |
 
 ### Issues Encountered
@@ -3976,4 +4215,95 @@ if (leafTypes.includes(sourceType)) {
 
 ---
 
-_Last Updated: 2026-01-13 (Session 52 - AI Editor improvements)_
+## Session 53 - 2026-01-16
+
+**Duration:** In progress
+**Phase:** Phase 4 - Combat System
+**Focus:** Turret Barrel Line System - Complete rework of laser alignment
+
+### Background
+
+After many iterations of trying to align lasers with turret barrels using offset calculations and matrix transformations, a fundamental rework was needed. The previous approach had cumulative errors from:
+
+- Bounding box-based barrel position detection
+- Multi-step transform chain (local → scale → rotation → world)
+- Heuristic Y position averaging
+
+### New Approach: Barrel Line System
+
+Instead of calculating laser origin/direction from rotations, the new system:
+
+1. **Manual calibration**: User positions a line inside the barrel in the Model Calibration tool
+2. **Parent to barrel mesh**: Line is parented to the rotating barrel mesh
+3. **Automatic transforms**: Babylon.js scene graph handles all rotations automatically
+4. **Direct position**: `getAbsolutePosition()` gives exact world-space laser origin
+5. **Explicit direction**: Line orientation defines laser direction (not derived from matrices)
+
+### Tasks In Progress
+
+- [ ] Add barrel line positioning to ModelCalibrationPanel (draggable/positionable line)
+- [ ] Parent barrel line to pitch mesh so it rotates with barrel
+- [ ] Save barrel line local position (Vector3) to definition
+- [ ] Add `barrelLinePosition` field to BuildingDefinition and UnitDefinition schemas
+- [ ] Create runtime TransformNode from saved position, parented to barrel mesh
+- [ ] Refactor CombatEngine.executeAttack() to use barrel line
+- [ ] Remove old barrelOffsetY-based calculations
+- [ ] Test laser alignment at various yaw/pitch angles
+
+### Files to Modify
+
+- `apps/web/src/components/dev/ModelCalibrationPanel.vue` - Add line positioning UI
+- `packages/shared/src/types/buildingDefinition.ts` - Add barrelLinePosition type
+- `packages/shared/src/types/unitDefinition.ts` - Add barrelLinePosition type
+- `apps/api/prisma/schema.prisma` - Add barrelLinePosition field
+- `apps/api/src/modules/buildings/types.ts` - Update input types
+- `apps/api/src/modules/units/types.ts` - Update input types
+- `apps/web/src/game/combat/CombatEngine.ts` - Use barrel line for laser origin
+
+### Decisions Made
+
+| Decision                                      | Rationale                                                    |
+| --------------------------------------------- | ------------------------------------------------------------ |
+| Replace barrelOffsetY with barrel line system | More reliable - lets Babylon handle transforms via parenting |
+| Manual line positioning vs auto-detection     | Gives explicit control, works with any model structure       |
+| Line defines both origin AND direction        | Single source of truth, no matrix calculations needed        |
+
+---
+
+## Session 54 - 2026-01-17
+
+**Duration:** In progress
+**Phase:** Phase 4 - Combat System
+**Focus:** Turret barrel line alignment rework and calibration cleanup
+
+### Completed
+
+- Reworked turret yaw/pitch rotation to apply base rotations and strict alignment gating
+- Barrel line anchor now drives laser origin and alignment checks
+- Added rotation-delta fallback alignment for kill/force firing
+- Fixed pitch rotation sign to match calibration preview
+- Stabilized model cleanup so new buildings no longer remove existing entities
+- Recomputed bar placement using tile center world coordinates for stability
+- Detached bars from model hierarchy to avoid pack offsets
+- Centered bars using multi-tile footprint + model height
+- Centered selection/range rings on model center for multi-tile buildings
+- Increased bar size + brighter colors for cooldown/health bars
+- Removed verbose combat/dev logging in combat engine and dev panel
+- Force/kill commands require barrel line calibration before firing
+- Removed CombatDevPanel barrel calibration modal (use Model Calibration tab)
+
+### Decisions Made
+
+| Decision                                              | Rationale                                   |
+| ----------------------------------------------------- | ------------------------------------------- |
+| Skip turret firing when barrelLinePosition is missing | Prevents misaligned lasers until calibrated |
+
+### Next Session Plan
+
+1. Test laser alignment at extreme yaw/pitch angles
+2. Verify turret firing on moving targets
+3. Continue Section 4.3 auto-targeting
+
+---
+
+_Last Updated: 2026-01-17 (Session 54 - Turret Barrel Line System)_
