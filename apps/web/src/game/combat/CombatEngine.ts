@@ -39,6 +39,7 @@ import { TileType, UnitState } from '@nova-fall/shared';
 import type { DbUnitDefinition, DbBuildingDefinition } from '@nova-fall/shared';
 import { UnitManager } from './UnitManager';
 import { FlowField } from './FlowField';
+import { PerformanceMonitor } from '@/utils/debugMetrics';
 
 // Arena constants
 export const ARENA_SIZE = 60; // 60x60 tiles
@@ -92,6 +93,9 @@ export class CombatEngine {
   // Dev mode tracking
   private devUnitIds = new Set<string>();
   private devBuildingMeshes = new Map<string, TransformNode>();
+
+  private performanceMonitor = new PerformanceMonitor();
+  private lastPerfSampleTime = 0;
 
   // Building metadata for turret attacks and selection
   private buildingData = new Map<
@@ -370,6 +374,8 @@ export class CombatEngine {
     if (this._isRunning) return;
     this._isRunning = true;
     this._lastFrameTime = performance.now();
+    this.lastPerfSampleTime = this._lastFrameTime;
+    this.performanceMonitor.start();
 
     this.engine.runRenderLoop(() => {
       // Calculate delta time
@@ -393,6 +399,11 @@ export class CombatEngine {
       this.updateAllBuildingCooldownBars();
       this.unitManager?.updateAllCooldownBars();
 
+      if (now - this.lastPerfSampleTime >= 250) {
+        this.performanceMonitor.recordFrame(now);
+        this.lastPerfSampleTime = now;
+      }
+
       // Render the scene
       this.scene.render();
     });
@@ -406,6 +417,7 @@ export class CombatEngine {
     this._isRunning = false;
 
     this.engine.stopRenderLoop();
+    this.performanceMonitor.stop();
   }
 
   /**
@@ -982,6 +994,19 @@ export class CombatEngine {
         const worldZ = pickResult.pickedPoint.z;
 
         // Check if within arena bounds (in world units)
+        const arenaWorldSize = ARENA_SIZE * TILE_SIZE;
+        if (worldX >= 0 && worldX < arenaWorldSize && worldZ >= 0 && worldZ < arenaWorldSize) {
+          return { x: worldX, y: 0.1, z: worldZ };
+        }
+      }
+    }
+
+    // Fallback to picking plane for consistent ground hit (even when clicking tall meshes)
+    if (this.pickingPlane) {
+      const planePick = this.scene.pick(canvasX, canvasY, (mesh) => mesh === this.pickingPlane);
+      if (planePick?.hit && planePick.pickedPoint) {
+        const worldX = planePick.pickedPoint.x;
+        const worldZ = planePick.pickedPoint.z;
         const arenaWorldSize = ARENA_SIZE * TILE_SIZE;
         if (worldX >= 0 && worldX < arenaWorldSize && worldZ >= 0 && worldZ < arenaWorldSize) {
           return { x: worldX, y: 0.1, z: worldZ };
@@ -1767,6 +1792,23 @@ export class CombatEngine {
     return {
       units: this.devUnitIds.size,
       buildings: this.devBuildingMeshes.size,
+    };
+  }
+
+  public getCombatEntitySummary(): {
+    units: { total: number; attackers: number; defenders: number; dead: number };
+    buildings: { total: number };
+    dev: { units: number; buildings: number };
+  } {
+    return {
+      units: this.unitManager?.getUnitSummary() ?? {
+        total: 0,
+        attackers: 0,
+        defenders: 0,
+        dead: 0,
+      },
+      buildings: { total: this.buildingData.size },
+      dev: this.getDevEntityCount(),
     };
   }
 

@@ -1963,6 +1963,12 @@ The following combat prerequisites were completed in Phase 2.5:
   - [ ] Order queue (shift-click waypoints)
   - [ ] Order completion → AI behavior reverts
 
+- [ ] **Debug metrics + logging (combat-focused)**
+  - [ ] Persistent debug log storage with server-managed settings
+  - [ ] Usage + performance metrics (FPS, frame time, entity counts, socket status)
+  - [ ] Combat simulation metrics (tick rate, input rate, state update rate)
+  - [ ] Debug tab UI for metrics, logs, and filtering
+
 - [~] **Tower targeting and firing** (turret rotation/laser working, needs auto-targeting)
   - [ ] Tower placement from defense state
   - [ ] Auto-target nearest enemy in range
@@ -1984,7 +1990,7 @@ The following combat prerequisites were completed in Phase 2.5:
   - [x] Refactor CombatEngine.executeAttack() to use barrel line getAbsolutePosition() for origin
   - [x] Use barrel line direction for laser trajectory (not calculated from rotation matrices)
   - [x] Remove old barrelOffsetY-based laser origin calculations
-  - [ ] Test laser alignment at various yaw/pitch angles
+  - [x] Test laser alignment at various yaw/pitch angles
 
 - [ ] **Projectile system**
   - [ ] Create ProjectileManager class

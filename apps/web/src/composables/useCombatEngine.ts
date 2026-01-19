@@ -11,7 +11,7 @@
  * This is intentional - there's only one combat engine instance.
  */
 
-import { ref, shallowRef, onMounted, onUnmounted, readonly, computed } from 'vue';
+import { ref, shallowRef, onMounted, onUnmounted, readonly, computed, toRaw } from 'vue';
 import { CombatEngine } from '../game/combat';
 import type {
   CombatSetup,
@@ -24,10 +24,12 @@ import type {
   DbBuildingDefinition,
 } from '@nova-fall/shared';
 import { gameSocket, type CombatErrorEvent } from '../services/socket';
+import { trackCombatInput, trackCombatState } from '@/utils/metricsTracker';
 
 // Shared state - singleton pattern for combat engine
 // All components using this composable share the same engine instance
 const engine = shallowRef<CombatEngine | null>(null);
+const engineInstance = shallowRef<CombatEngine | null>(null);
 const isActive = ref(false);
 const isLoading = ref(false);
 const isConnected = ref(false);
@@ -61,6 +63,10 @@ export function useCombatEngine() {
     Math.round((coreHealth.value.health / coreHealth.value.maxHealth) * 100)
   );
 
+  const getEngine = (): CombatEngine | null => {
+    return engineInstance.value ?? (engine.value ? (toRaw(engine.value) as CombatEngine) : null);
+  };
+
   const formattedTimeRemaining = computed(() => {
     const minutes = Math.floor(timeRemaining.value / 60);
     const seconds = timeRemaining.value % 60;
@@ -82,6 +88,7 @@ export function useCombatEngine() {
         antialias: true,
         preserveDrawingBuffer: true,
       });
+      engineInstance.value = engine.value;
       error.value = null;
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to initialize combat engine';
@@ -97,6 +104,7 @@ export function useCombatEngine() {
     // Handle incoming combat state updates
     gameSocket.on('combat:state', (state: CombatState) => {
       if (state.battleId === currentBattleId.value && engine.value && isActive.value) {
+        trackCombatState();
         engine.value.updateState(state);
 
         // Update Core health and time
@@ -228,6 +236,7 @@ export function useCombatEngine() {
       console.warn('Cannot send input: not in combat');
       return;
     }
+    trackCombatInput();
     gameSocket.sendCombatInput(input);
   };
 
@@ -236,6 +245,7 @@ export function useCombatEngine() {
    */
   const updateState = (state: CombatState): void => {
     if (!engine.value || !isActive.value) return;
+    trackCombatState();
     engine.value.updateState(state);
   };
 
@@ -331,6 +341,20 @@ export function useCombatEngine() {
    */
   const getDevEntityCount = (): { units: number; buildings: number } => {
     return engine.value?.getDevEntityCount() ?? { units: 0, buildings: 0 };
+  };
+
+  const getCombatEntitySummary = (): {
+    units: { total: number; attackers: number; defenders: number; dead: number };
+    buildings: { total: number };
+    dev: { units: number; buildings: number };
+  } => {
+    return (
+      engine.value?.getCombatEntitySummary() ?? {
+        units: { total: 0, attackers: 0, defenders: 0, dead: 0 },
+        buildings: { total: 0 },
+        dev: { units: 0, buildings: 0 },
+      }
+    );
   };
 
   /**
@@ -566,6 +590,7 @@ export function useCombatEngine() {
       if (engine.value) {
         engine.value.dispose();
         engine.value = null;
+        engineInstance.value = null;
       }
     }
   });
@@ -573,6 +598,7 @@ export function useCombatEngine() {
   return {
     // State (readonly to prevent external mutation)
     engine: readonly(engine),
+    getEngine,
     isActive: readonly(isActive),
     isLoading: readonly(isLoading),
     isConnected: readonly(isConnected),
@@ -607,6 +633,7 @@ export function useCombatEngine() {
     devPlaceBuilding,
     devClearAll,
     getDevEntityCount,
+    getCombatEntitySummary,
     inspectModelPack,
 
     // Barrel calibration

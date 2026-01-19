@@ -24,6 +24,7 @@ const emit = defineEmits<{
 // Get combat engine methods
 const {
   engine,
+  getEngine,
   initDevArena,
   hasArena,
   screenToArena,
@@ -71,6 +72,7 @@ const selectedPlacedBuildingId = ref<string | null>(null);
 
 // Hover state for unit targeting
 const hoveredUnitId = ref<string | null>(null);
+const selectedTargetUnitId = ref<string | null>(null);
 
 // Panel visibility
 const isCollapsed = ref(false);
@@ -167,9 +169,13 @@ function handleSelectionClick(event: MouseEvent) {
     // Clicked outside arena - deselect
     deselectBuilding();
     selectedPlacedBuildingId.value = null;
+    selectedTargetUnitId.value = null;
+    getEngine()?.hideTargetRing();
     emit('attackableSelectionChange', false);
     return;
   }
+
+  getEngine()?.hideTargetRing();
 
   // Check if there's a building at this position
   const key = `${position.x},${position.z}`;
@@ -179,15 +185,99 @@ function handleSelectionClick(event: MouseEvent) {
     // Select this building
     selectBuilding(buildingInfo.id);
     selectedPlacedBuildingId.value = buildingInfo.id;
+    selectedTargetUnitId.value = null;
     // Check if building can attack (has range and damage)
     const canAttack = buildingInfo.def.range > 0 && buildingInfo.def.damage > 0;
     emit('attackableSelectionChange', canAttack);
-  } else {
-    // Clicked empty space - deselect
-    deselectBuilding();
-    selectedPlacedBuildingId.value = null;
-    emit('attackableSelectionChange', false);
+    return;
   }
+
+  // No building selected; allow unit selection for targeting
+  const worldPos = screenToWorld(event.clientX, event.clientY);
+  if (worldPos) {
+    const targetUnitId = findUnitAtWorldPosition(worldPos.x, worldPos.z);
+    if (targetUnitId) {
+      selectedTargetUnitId.value = targetUnitId;
+      const unitPos = getUnitWorldPosition(targetUnitId);
+      if (unitPos) {
+        getEngine()?.showTargetRing(targetUnitId, unitPos.x, unitPos.z, 2.2);
+      }
+      emit('attackableSelectionChange', selectedPlacedBuildingId.value != null);
+      return;
+    }
+  }
+
+  // Clicked empty space - deselect
+  deselectBuilding();
+  selectedPlacedBuildingId.value = null;
+  selectedTargetUnitId.value = null;
+  getEngine()?.hideTargetRing();
+  emit('attackableSelectionChange', false);
+}
+
+// Find unit near world position (within click tolerance)
+function findUnitAtWorldPosition(worldX: number, worldZ: number): string | null {
+  const clickTolerance = 8; // meters - how close click needs to be to unit center
+  const unitIds = getAllUnitIds();
+
+  for (const unitId of unitIds) {
+    const unitPos = getUnitWorldPosition(unitId);
+    if (!unitPos) continue;
+
+    const dist = Math.sqrt(Math.pow(unitPos.x - worldX, 2) + Math.pow(unitPos.z - worldZ, 2));
+
+    if (dist <= clickTolerance) {
+      return unitId;
+    }
+  }
+  return null;
+}
+
+// Try to attack a unit at click position (more reliable than hover-based)
+// Returns true if a unit was targeted, false otherwise
+function tryAttackAtClick(event: MouseEvent): boolean {
+  if (!selectedPlacedBuildingId.value) return false;
+
+  const worldPos = screenToWorld(event.clientX, event.clientY);
+  if (!worldPos) return false;
+
+  const targetUnitId = findUnitAtWorldPosition(worldPos.x, worldPos.z);
+  if (!targetUnitId) return false;
+
+  selectedTargetUnitId.value = targetUnitId;
+  const unitPos = getUnitWorldPosition(targetUnitId);
+  if (unitPos) {
+    getEngine()?.showTargetRing(targetUnitId, unitPos.x, unitPos.z, 2.2);
+  }
+
+  if (selectedPlacedBuildingId.value) {
+    issueKillCommand(selectedPlacedBuildingId.value, targetUnitId);
+  }
+  return true; // We handled the click (targeted a unit), even if the command failed
+}
+
+// Clear all dev entities
+function handleClearAll() {
+  devClearAll();
+  placedBuildings.value.clear();
+  spawnedUnits.value.clear();
+  selectedPlacedBuildingId.value = null;
+  hoveredUnitId.value = null;
+  selectedTargetUnitId.value = null;
+  cancelAllKillCommands();
+  getEngine()?.hideTargetRing();
+  emit('attackableSelectionChange', false);
+  updateEntityCounts();
+}
+
+// Update entity counts
+function updateEntityCounts() {
+  entityCounts.value = getDevEntityCount();
+}
+
+// Stop all active commands
+function handleStopAll() {
+  cancelAllKillCommands();
 }
 
 // Handle force attack (Ctrl+Click) - uses precise world coordinates
@@ -209,50 +299,6 @@ function handleForceAttack(event: MouseEvent) {
   forceAttackGroundWorld(currentSelection, worldPos.x, worldPos.z);
 }
 
-// Cancel placement mode
-function cancelPlacement() {
-  selectedItem.value = null;
-  placementMode.value = false;
-  emit('placementModeChange', false);
-}
-
-// Clear all dev entities
-function handleClearAll() {
-  devClearAll();
-  placedBuildings.value.clear();
-  spawnedUnits.value.clear();
-  selectedPlacedBuildingId.value = null;
-  hoveredUnitId.value = null;
-  cancelAllKillCommands();
-  emit('attackableSelectionChange', false);
-  updateEntityCounts();
-}
-
-// Update entity counts
-function updateEntityCounts() {
-  entityCounts.value = getDevEntityCount();
-}
-
-// ========== Unit Targeting ==========
-
-// Find unit near world position (within click tolerance)
-function findUnitAtWorldPosition(worldX: number, worldZ: number): string | null {
-  const CLICK_TOLERANCE = 8; // meters - how close click needs to be to unit center
-  const unitIds = getAllUnitIds();
-
-  for (const unitId of unitIds) {
-    const unitPos = getUnitWorldPosition(unitId);
-    if (!unitPos) continue;
-
-    const dist = Math.sqrt(Math.pow(unitPos.x - worldX, 2) + Math.pow(unitPos.z - worldZ, 2));
-
-    if (dist <= CLICK_TOLERANCE) {
-      return unitId;
-    }
-  }
-  return null;
-}
-
 // Handle mouse move for unit hover detection
 function handleMouseMove(event: MouseEvent) {
   // Only show targeting cursor when a turret is selected and not in placement mode
@@ -267,34 +313,38 @@ function handleMouseMove(event: MouseEvent) {
     return;
   }
 
-  hoveredUnitId.value = findUnitAtWorldPosition(worldPos.x, worldPos.z);
+  const newHoveredUnitId = findUnitAtWorldPosition(worldPos.x, worldPos.z);
+  hoveredUnitId.value = newHoveredUnitId;
+
+  if (selectedTargetUnitId.value) {
+    const targetPos = getUnitWorldPosition(selectedTargetUnitId.value);
+    if (targetPos) {
+      const combatEngine = getEngine();
+      combatEngine?.showTargetRing(selectedTargetUnitId.value, targetPos.x, targetPos.z, 2.2);
+      combatEngine?.updateTargetRingPosition(targetPos.x, targetPos.z);
+    }
+  } else {
+    getEngine()?.hideTargetRing();
+  }
 }
 
 // Handle click to issue kill command on hovered unit
 function handleUnitTargetClick(_event: MouseEvent) {
   if (!selectedPlacedBuildingId.value || !hoveredUnitId.value) return;
 
+  selectedTargetUnitId.value = hoveredUnitId.value;
+  const unitPos = getUnitWorldPosition(selectedTargetUnitId.value);
+  if (unitPos) {
+    getEngine()?.showTargetRing(selectedTargetUnitId.value, unitPos.x, unitPos.z, 2.2);
+  }
   issueKillCommand(selectedPlacedBuildingId.value, hoveredUnitId.value);
 }
 
-// Try to attack a unit at click position (more reliable than hover-based)
-// Returns true if a unit was targeted, false otherwise
-function tryAttackAtClick(event: MouseEvent): boolean {
-  if (!selectedPlacedBuildingId.value) return false;
-
-  const worldPos = screenToWorld(event.clientX, event.clientY);
-  if (!worldPos) return false;
-
-  const targetUnitId = findUnitAtWorldPosition(worldPos.x, worldPos.z);
-  if (!targetUnitId) return false;
-
-  issueKillCommand(selectedPlacedBuildingId.value, targetUnitId);
-  return true; // We handled the click (targeted a unit), even if the command failed
-}
-
-// Stop all active commands
-function handleStopAll() {
-  cancelAllKillCommands();
+// Cancel placement mode
+function cancelPlacement() {
+  selectedItem.value = null;
+  placementMode.value = false;
+  emit('placementModeChange', false);
 }
 
 // Handle escape key

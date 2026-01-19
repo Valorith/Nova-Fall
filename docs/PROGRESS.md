@@ -4248,7 +4248,7 @@ Instead of calculating laser origin/direction from rotations, the new system:
 - [ ] Create runtime TransformNode from saved position, parented to barrel mesh
 - [ ] Refactor CombatEngine.executeAttack() to use barrel line
 - [ ] Remove old barrelOffsetY-based calculations
-- [ ] Test laser alignment at various yaw/pitch angles
+- [x] Test laser alignment at various yaw/pitch angles
 
 ### Files to Modify
 
@@ -4300,9 +4300,9 @@ Instead of calculating laser origin/direction from rotations, the new system:
 
 ### Next Session Plan
 
-1. Test laser alignment at extreme yaw/pitch angles
-2. Verify turret firing on moving targets
-3. Continue Section 4.3 auto-targeting
+1. Verify turret firing on moving targets
+2. Continue Section 4.3 auto-targeting
+3. Tower placement from defense state (if starting auto-targeting work)
 
 ---
 

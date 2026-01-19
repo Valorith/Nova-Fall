@@ -8,6 +8,7 @@ import type {
   CombatResult,
 } from '@nova-fall/shared';
 import { COMBAT_EVENTS } from '@nova-fall/shared';
+import { trackSocketEvent, trackSocketEmit } from '@/utils/metricsTracker';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:3002';
 
@@ -165,6 +166,7 @@ class GameSocket {
   connect(): void {
     if (this.socket?.connected) return;
 
+    trackSocketEmit('connect');
     this.socket = io(WS_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -182,85 +184,104 @@ class GameSocket {
     this.socket.on('connect', () => {
       console.log('[Socket] Connected to WebSocket server');
       this.reconnectAttempts = 0;
+      trackSocketEvent('connect');
       this.handlers.connect?.();
     });
 
     this.socket.on('disconnect', (reason) => {
       console.log('[Socket] Disconnected:', reason);
+      trackSocketEvent('disconnect');
       this.handlers.disconnect?.(reason);
     });
 
     this.socket.on('connect_error', (error) => {
       console.error('[Socket] Connection error:', error.message);
+      trackSocketEvent('connect_error');
       this.reconnectAttempts++;
       this.handlers.connect_error?.(error);
     });
 
     // Game events
     this.socket.on('node:update', (data: NodeUpdateEvent) => {
+      trackSocketEvent('node:update');
       this.handlers['node:update']?.(data);
     });
 
     this.socket.on('node:claimed', (data: NodeClaimedEvent) => {
+      trackSocketEvent('node:claimed');
       this.handlers['node:claimed']?.(data);
     });
 
     this.socket.on('battle:start', (data: BattleStartEvent) => {
+      trackSocketEvent('battle:start');
       this.handlers['battle:start']?.(data);
     });
 
     this.socket.on('battle:update', (data: BattleUpdateEvent) => {
+      trackSocketEvent('battle:update');
       this.handlers['battle:update']?.(data);
     });
 
     this.socket.on('resources:update', (data: ResourcesUpdateEvent) => {
+      trackSocketEvent('resources:update');
       this.handlers['resources:update']?.(data);
     });
 
     this.socket.on('upkeep:tick', (data: UpkeepTickEvent) => {
+      trackSocketEvent('upkeep:tick');
       this.handlers['upkeep:tick']?.(data);
     });
 
     this.socket.on('economy:processed', (data: EconomyProcessedEvent) => {
+      trackSocketEvent('economy:processed');
       this.handlers['economy:processed']?.(data);
     });
 
     this.socket.on('transfer:completed', (data: TransferCompletedEvent) => {
+      trackSocketEvent('transfer:completed');
       this.handlers['transfer:completed']?.(data);
     });
 
     this.socket.on('game:victory', (data: VictoryEvent) => {
+      trackSocketEvent('game:victory');
       this.handlers['game:victory']?.(data);
     });
 
     this.socket.on('player:eliminated', (data: PlayerEliminatedEvent) => {
+      trackSocketEvent('player:eliminated');
       this.handlers['player:eliminated']?.(data);
     });
 
     this.socket.on('crafting:completed', (data: CraftingCompletedEvent) => {
+      trackSocketEvent('crafting:completed');
       this.handlers['crafting:completed']?.(data);
     });
 
     // Combat events
     this.socket.on(COMBAT_EVENTS.COMBAT_SETUP, (data: CombatSetup) => {
+      trackSocketEvent(COMBAT_EVENTS.COMBAT_SETUP);
       this.handlers['combat:setup']?.(data);
     });
 
     this.socket.on(COMBAT_EVENTS.STATE_UPDATE, (data: CombatState) => {
+      trackSocketEvent(COMBAT_EVENTS.STATE_UPDATE);
       this.handlers['combat:state']?.(data);
     });
 
     this.socket.on(COMBAT_EVENTS.COMBAT_END, (data: CombatResult) => {
+      trackSocketEvent(COMBAT_EVENTS.COMBAT_END);
       this.handlers['combat:end']?.(data);
     });
 
     this.socket.on(COMBAT_EVENTS.COMBAT_ERROR, (data: CombatErrorEvent) => {
+      trackSocketEvent(COMBAT_EVENTS.COMBAT_ERROR);
       this.handlers['combat:error']?.(data);
     });
   }
 
   disconnect(): void {
     if (this.socket) {
+      trackSocketEmit('disconnect');
       this.socket.disconnect();
       this.socket = null;
     }
@@ -278,28 +299,34 @@ class GameSocket {
 
   // Subscribe to specific node updates
   subscribeToNode(nodeId: string): void {
+    trackSocketEmit('subscribe:node');
     this.socket?.emit('subscribe:node', nodeId);
   }
 
   unsubscribeFromNode(nodeId: string): void {
+    trackSocketEmit('unsubscribe:node');
     this.socket?.emit('unsubscribe:node', nodeId);
   }
 
   // Subscribe to battle updates
   subscribeToBattle(battleId: string): void {
+    trackSocketEmit('subscribe:battle');
     this.socket?.emit('subscribe:battle', battleId);
   }
 
   unsubscribeFromBattle(battleId: string): void {
+    trackSocketEmit('unsubscribe:battle');
     this.socket?.emit('unsubscribe:battle', battleId);
   }
 
   // Join a game session (viewing the game board)
   joinSession(sessionId: string): void {
+    trackSocketEmit('join:session');
     this.socket?.emit('join:session', sessionId);
   }
 
   leaveSession(sessionId: string): void {
+    trackSocketEmit('leave:session');
     this.socket?.emit('leave:session', sessionId);
   }
 
@@ -307,26 +334,31 @@ class GameSocket {
 
   // Authenticate socket with player ID
   authenticatePlayer(playerId: string): void {
+    trackSocketEmit('auth:player');
     this.socket?.emit('auth:player', playerId);
   }
 
   // Join a combat battle
   joinCombat(battleId: string, playerId: string): void {
+    trackSocketEmit(COMBAT_EVENTS.JOIN_COMBAT);
     this.socket?.emit(COMBAT_EVENTS.JOIN_COMBAT, { battleId, playerId });
   }
 
   // Leave a combat battle
   leaveCombat(battleId: string): void {
+    trackSocketEmit(COMBAT_EVENTS.LEAVE_COMBAT);
     this.socket?.emit(COMBAT_EVENTS.LEAVE_COMBAT, { battleId });
   }
 
   // Send combat input (deploy, move, attack, ability)
   sendCombatInput(input: CombatInput): void {
+    trackSocketEmit(COMBAT_EVENTS.SEND_INPUT);
     this.socket?.emit(COMBAT_EVENTS.SEND_INPUT, input);
   }
 
   // Request current combat state (for reconnection)
   requestCombatState(battleId: string): void {
+    trackSocketEmit(COMBAT_EVENTS.REQUEST_STATE);
     this.socket?.emit(COMBAT_EVENTS.REQUEST_STATE, { battleId });
   }
 

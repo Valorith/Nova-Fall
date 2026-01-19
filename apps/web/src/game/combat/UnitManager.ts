@@ -766,6 +766,24 @@ export class UnitManager {
     return Array.from(this.units.keys());
   }
 
+  getUnitSummary(): { total: number; attackers: number; defenders: number; dead: number } {
+    let attackers = 0;
+    let defenders = 0;
+    let dead = 0;
+    for (const unit of this.units.values()) {
+      if (unit.state === UnitState.DEAD) {
+        dead++;
+        continue;
+      }
+      if (unit.ownerId === this.attackerId) {
+        attackers++;
+      } else {
+        defenders++;
+      }
+    }
+    return { total: this.units.size, attackers, defenders, dead };
+  }
+
   /**
    * Set a unit's world position directly (bypasses grid snapping)
    * Used for dev mode precise placement

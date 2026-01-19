@@ -7,9 +7,18 @@ import BuildingsEditor from '@/components/dev/BuildingsEditor.vue';
 import SettingsEditor from '@/components/dev/SettingsEditor.vue';
 import AIEditor from '@/components/dev/AIEditor.vue';
 import ModelCalibrationPanel from '@/components/dev/ModelCalibrationPanel.vue';
+import DebugPanel from '@/components/dev/DebugPanel.vue';
 
 // Dev panel tabs
-type DevTab = 'blueprints' | 'items' | 'units' | 'buildings' | 'ai' | 'calibration' | 'settings' | 'debug';
+type DevTab =
+  | 'blueprints'
+  | 'items'
+  | 'units'
+  | 'buildings'
+  | 'ai'
+  | 'calibration'
+  | 'settings'
+  | 'debug';
 
 const activeTab = ref<DevTab>('blueprints');
 
@@ -57,9 +66,7 @@ function navigateToAIEditor(presetId: string) {
       </div>
 
       <div class="sidebar-footer">
-        <router-link to="/lobby" class="back-link">
-          &larr; Back to Game
-        </router-link>
+        <router-link to="/lobby" class="back-link"> &larr; Back to Game </router-link>
       </div>
     </nav>
 
@@ -71,18 +78,22 @@ function navigateToAIEditor(presetId: string) {
 
       <UnitsEditor v-else-if="activeTab === 'units'" @navigate-to-ai-editor="navigateToAIEditor" />
 
-      <BuildingsEditor v-else-if="activeTab === 'buildings'" @navigate-to-ai-editor="navigateToAIEditor" />
+      <BuildingsEditor
+        v-else-if="activeTab === 'buildings'"
+        @navigate-to-ai-editor="navigateToAIEditor"
+      />
 
-      <AIEditor v-else-if="activeTab === 'ai'" :initial-preset-id="aiEditorPresetId" @preset-loaded="aiEditorPresetId = null" />
+      <AIEditor
+        v-else-if="activeTab === 'ai'"
+        :initial-preset-id="aiEditorPresetId"
+        @preset-loaded="aiEditorPresetId = null"
+      />
 
       <ModelCalibrationPanel v-else-if="activeTab === 'calibration'" />
 
       <SettingsEditor v-else-if="activeTab === 'settings'" />
 
-      <div v-else-if="activeTab === 'debug'" class="placeholder-panel">
-        <h2>Debug Tools</h2>
-        <p>Coming soon - Game state inspection and manipulation</p>
-      </div>
+      <DebugPanel v-else-if="activeTab === 'debug'" />
     </main>
   </div>
 </template>
