@@ -41,6 +41,9 @@ const {
   cancelAllKillCommands,
   getUnitWorldPosition,
   getAllUnitIds,
+  moveUnitToWorld,
+  showMoveMarker,
+  hideMoveMarker,
 } = useCombatEngine();
 
 // State
@@ -73,6 +76,7 @@ const selectedPlacedBuildingId = ref<string | null>(null);
 // Hover state for unit targeting
 const hoveredUnitId = ref<string | null>(null);
 const selectedTargetUnitId = ref<string | null>(null);
+const selectedUnitId = ref<string | null>(null);
 
 // Panel visibility
 const isCollapsed = ref(false);
@@ -186,6 +190,7 @@ function handleSelectionClick(event: MouseEvent) {
     selectBuilding(buildingInfo.id);
     selectedPlacedBuildingId.value = buildingInfo.id;
     selectedTargetUnitId.value = null;
+    selectedUnitId.value = null;
     // Check if building can attack (has range and damage)
     const canAttack = buildingInfo.def.range > 0 && buildingInfo.def.damage > 0;
     emit('attackableSelectionChange', canAttack);
@@ -197,12 +202,22 @@ function handleSelectionClick(event: MouseEvent) {
   if (worldPos) {
     const targetUnitId = findUnitAtWorldPosition(worldPos.x, worldPos.z);
     if (targetUnitId) {
-      selectedTargetUnitId.value = targetUnitId;
+      deselectBuilding();
+      selectedPlacedBuildingId.value = null;
+      selectedTargetUnitId.value = null;
+      selectedUnitId.value = targetUnitId;
       const unitPos = getUnitWorldPosition(targetUnitId);
       if (unitPos) {
         getEngine()?.showTargetRing(targetUnitId, unitPos.x, unitPos.z, 2.2);
       }
+      hideMoveMarker();
       emit('attackableSelectionChange', selectedPlacedBuildingId.value != null);
+      return;
+    }
+
+    if (selectedUnitId.value) {
+      moveUnitToWorld(selectedUnitId.value, worldPos.x, worldPos.z);
+      showMoveMarker(worldPos.x, worldPos.z);
       return;
     }
   }
@@ -211,7 +226,9 @@ function handleSelectionClick(event: MouseEvent) {
   deselectBuilding();
   selectedPlacedBuildingId.value = null;
   selectedTargetUnitId.value = null;
+  selectedUnitId.value = null;
   getEngine()?.hideTargetRing();
+  hideMoveMarker();
   emit('attackableSelectionChange', false);
 }
 
@@ -264,8 +281,10 @@ function handleClearAll() {
   selectedPlacedBuildingId.value = null;
   hoveredUnitId.value = null;
   selectedTargetUnitId.value = null;
+  selectedUnitId.value = null;
   cancelAllKillCommands();
   getEngine()?.hideTargetRing();
+  hideMoveMarker();
   emit('attackableSelectionChange', false);
   updateEntityCounts();
 }
@@ -302,7 +321,12 @@ function handleForceAttack(event: MouseEvent) {
 // Handle mouse move for unit hover detection
 function handleMouseMove(event: MouseEvent) {
   // Only show targeting cursor when a turret is selected and not in placement mode
-  if (!selectedPlacedBuildingId.value || placementMode.value) {
+  if (placementMode.value) {
+    hoveredUnitId.value = null;
+    return;
+  }
+
+  if (!selectedPlacedBuildingId.value && !selectedUnitId.value) {
     hoveredUnitId.value = null;
     return;
   }
@@ -313,8 +337,12 @@ function handleMouseMove(event: MouseEvent) {
     return;
   }
 
-  const newHoveredUnitId = findUnitAtWorldPosition(worldPos.x, worldPos.z);
-  hoveredUnitId.value = newHoveredUnitId;
+  if (selectedPlacedBuildingId.value) {
+    const newHoveredUnitId = findUnitAtWorldPosition(worldPos.x, worldPos.z);
+    hoveredUnitId.value = newHoveredUnitId;
+  } else {
+    hoveredUnitId.value = null;
+  }
 
   if (selectedTargetUnitId.value) {
     const targetPos = getUnitWorldPosition(selectedTargetUnitId.value);
@@ -322,6 +350,13 @@ function handleMouseMove(event: MouseEvent) {
       const combatEngine = getEngine();
       combatEngine?.showTargetRing(selectedTargetUnitId.value, targetPos.x, targetPos.z, 2.2);
       combatEngine?.updateTargetRingPosition(targetPos.x, targetPos.z);
+    }
+  } else if (selectedUnitId.value) {
+    const unitPos = getUnitWorldPosition(selectedUnitId.value);
+    if (unitPos) {
+      const combatEngine = getEngine();
+      combatEngine?.showTargetRing(selectedUnitId.value, unitPos.x, unitPos.z, 2.2);
+      combatEngine?.updateTargetRingPosition(unitPos.x, unitPos.z);
     }
   } else {
     getEngine()?.hideTargetRing();
@@ -352,6 +387,16 @@ function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && placementMode.value) {
     cancelPlacement();
   }
+  if (event.key === 'Escape' && selectedUnitId.value) {
+    const unitPos = getUnitWorldPosition(selectedUnitId.value);
+    if (unitPos) {
+      moveUnitToWorld(selectedUnitId.value, unitPos.x, unitPos.z);
+    }
+    selectedUnitId.value = null;
+    selectedTargetUnitId.value = null;
+    getEngine()?.hideTargetRing();
+    hideMoveMarker();
+  }
 }
 
 // Expose click handlers for parent to wire up
@@ -363,6 +408,7 @@ defineExpose({
   handleUnitTargetClick,
   tryAttackAtClick,
   hoveredUnitId,
+  selectedUnitId,
 });
 
 // Track if we've already initialized in this component instance

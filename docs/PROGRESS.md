@@ -4306,4 +4306,93 @@ Instead of calculating laser origin/direction from rotations, the new system:
 
 ---
 
-_Last Updated: 2026-01-17 (Session 54 - Turret Barrel Line System)_
+## Session 55 - 2026-01-22
+
+**Duration:** ~2 hours
+**Phase:** Phase 4 - Combat System
+**Focus:** 3D Model preview improvements, combat view persistence, dev tools
+
+### Completed Tasks
+
+**Model Preview System:**
+
+- [x] Fixed 3D model preview rotation while dragging onto combat board
+  - Tried 5 approaches (root rotation, quaternion, rotation wrapper, mesh rotation)
+  - Final fix: Apply `rotation.y = Math.PI` to clonedRoot (not individual meshes)
+  - Babylon.js hierarchy requires rotating parent, not children
+
+**Authentication Fix:**
+
+- [x] Fixed 401 error on login page
+  - Items were loading before authentication
+  - Added auth check in App.vue - only load items when authenticated
+  - Added watcher for auth state changes
+
+**Combat View Persistence:**
+
+- [x] Combat view now persists across page refresh
+  - URL query params track `view=combat` and `nodeId`
+  - Initialize state from URL immediately (no flash of tactical view)
+  - Added "Initializing Combat..." overlay during engine startup
+
+**Dev Tools - Game Constants Settings:**
+
+- [x] Added Settings Editor with Economy, Combat, and Tick sections
+  - Base node upkeep, distance penalty, upkeep interval
+  - Prep time, combat duration, forces lock, post-battle cooldown
+  - Economy tick frequency, combat tick rate
+  - Settings persist to database via settingsApi
+
+**Code Quality:**
+
+- [x] Fixed all linting errors
+  - Removed unused imports (Quaternion, computed)
+  - Fixed EventListener type casts
+  - Removed unused catch parameters
+  - Fixed hasArena unused variable
+- [x] Fixed all TypeScript errors
+  - Added `as const` to watch array
+  - Removed `.value` on exposed refs (Vue unwraps them)
+  - Added null checks for function returns
+  - Fixed non-null assertion in setTimeout
+
+### Technical Details
+
+**Files Modified:**
+
+- `apps/web/src/game/combat/CombatEngine.ts` - Model preview rotation fix
+- `apps/web/src/App.vue` - Auth check for items loading
+- `apps/web/src/views/GameView.vue` - Combat view URL persistence
+- `apps/web/src/components/game/CombatView.vue` - Initializing overlay, lint fixes
+- `apps/web/src/components/game/CombatStoragePanel.vue` - Removed unused imports
+- `apps/web/src/components/dev/SettingsEditor.vue` - Game constants UI
+- `apps/web/src/components/dev/DebugPanel.vue` - Type narrowing fix
+
+### Bug Fixes
+
+- **Model rotation not working**: Individual mesh rotation doesn't account for parent transforms in hierarchy. Fixed by rotating clonedRoot instead.
+- **Combat view flash on refresh**: State was initialized in onMounted instead of at ref creation. Fixed by reading URL query params immediately.
+- **401 on login page**: Items store loaded regardless of auth state. Fixed with auth check and watcher.
+
+### Decisions Made
+
+| Decision | Rationale |
+| -------- | --------- |
+| Rotate clonedRoot for model preview | Babylon.js hierarchy transforms - rotating parent affects all children correctly |
+| URL query params for combat persistence | Simple state persistence without localStorage complexity |
+| Settings API for game constants | Consistent with other dev panel settings, persists to DB |
+
+### Notes
+
+- All lint and typecheck errors resolved
+- Ready for continued combat system work
+
+### Next Session Plan
+
+1. Verify turret firing on moving targets
+2. Continue Section 4.3 auto-targeting
+3. Tower placement from defense state
+
+---
+
+_Last Updated: 2026-01-22 (Session 55 - Model Preview & Combat Persistence)_

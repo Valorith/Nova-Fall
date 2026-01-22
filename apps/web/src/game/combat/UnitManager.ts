@@ -655,6 +655,15 @@ export class UnitManager {
         const moveDir = posDiff.normalize();
         visual.currentPosition.addInPlace(moveDir.scale(moveAmount));
         visual.container.position = visual.currentPosition;
+      } else if (visual.state === UnitState.MOVING) {
+        visual.state = UnitState.IDLE;
+      }
+
+      if (visual.state === UnitState.MOVING) {
+        const moveDir = visual.targetPosition.subtract(visual.currentPosition);
+        if (moveDir.length() > 0.01) {
+          visual.targetRotation = Math.atan2(moveDir.x, moveDir.z) + Math.PI;
+        }
       }
 
       // Interpolate rotation
@@ -666,7 +675,7 @@ export class UnitManager {
       if (Math.abs(rotDiff) > 0.01) {
         const rotAmount = Math.sign(rotDiff) * Math.min(5 * deltaTime, Math.abs(rotDiff));
         visual.currentRotation += rotAmount;
-        visual.mesh.rotation.y = visual.currentRotation;
+        visual.container.rotation.y = visual.currentRotation;
       }
 
       // Animate spawning units
@@ -799,6 +808,30 @@ export class UnitManager {
     visual.currentPosition = newPos;
     visual.targetPosition = newPos.clone();
     visual.container.position = newPos;
+  }
+
+  /**
+   * Set a unit's target world position for movement
+   */
+  setUnitTargetWorldPosition(unitId: string, worldX: number, worldZ: number): void {
+    const visual = this.units.get(unitId);
+    if (!visual) {
+      console.warn(`[setUnitTargetWorldPosition] Unit ${unitId} not found!`);
+      return;
+    }
+
+    if (visual.state === UnitState.DEAD) {
+      return;
+    }
+
+    const newTarget = new Vector3(worldX, 0, worldZ);
+    visual.targetPosition = newTarget;
+    visual.state = UnitState.MOVING;
+
+    const dir = newTarget.subtract(visual.currentPosition);
+    if (dir.length() > 0.01) {
+      visual.targetRotation = Math.atan2(dir.x, dir.z) + Math.PI;
+    }
   }
 
   /**

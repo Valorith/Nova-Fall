@@ -272,14 +272,14 @@ Examples:
 
 <!-- UPDATE THIS SECTION AT THE END OF EVERY SESSION -->
 
-| Field              | Value                                               |
-| ------------------ | --------------------------------------------------- |
-| **Current Phase**  | Phase 4 - Combat System                             |
-| **Phase Progress** | Turret barrel line alignment rework in CombatEngine |
-| **Current Task**   | Test laser alignment at yaw/pitch extremes          |
-| **Blockers**       | None                                                |
-| **Last Session**   | Session 54 - 2026-01-17                             |
-| **Last Updated**   | 2026-01-17                                          |
+| Field              | Value                                                |
+| ------------------ | ---------------------------------------------------- |
+| **Current Phase**  | Phase 4 - Combat System                              |
+| **Phase Progress** | Model preview, combat persistence, dev tools updates |
+| **Current Task**   | Verify turret firing on moving targets               |
+| **Blockers**       | None                                                 |
+| **Last Session**   | Session 55 - 2026-01-22                              |
+| **Last Updated**   | 2026-01-22                                           |
 
 ---
 
@@ -506,5 +506,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-_Last Updated: 2026-01-13 (Session 52)_
-_Version: 2.0.6 (macOS)_
+_Last Updated: 2026-01-22 (Session 55)_
+_Version: 2.0.7 (macOS)_

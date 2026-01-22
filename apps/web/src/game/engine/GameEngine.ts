@@ -107,6 +107,7 @@ export class GameEngine {
   }
 
   private async init(container: HTMLElement, width: number, height: number, backgroundColor: number) {
+    if (this._isDestroyed) return;
     // Initialize the application
     await this.app.init({
       width,
@@ -117,10 +118,18 @@ export class GameEngine {
       autoDensity: true,
     });
 
+    if (this._isDestroyed) {
+      return;
+    }
+
     // Add canvas to container
+    if (!container) return;
     container.appendChild(this.app.canvas);
 
     // Add world container to stage
+    if (!this.app.stage) {
+      return;
+    }
     this.app.stage.addChild(this.worldContainer);
 
     // Pass app reference to renderer for texture caching
@@ -374,16 +383,27 @@ export class GameEngine {
     // Cancel animation frame
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+
+    // Stop the PixiJS ticker BEFORE destroying to prevent render loop errors
+    try {
+      this.app.ticker.stop();
+      this.app.ticker.destroy();
+    } catch {
+      // Ignore ticker errors during teardown
     }
 
     // Remove event listeners
     if (this._inputHandlers) {
       const canvas = this.app.canvas;
-      canvas.removeEventListener('pointerdown', this._inputHandlers.onPointerDown);
-      canvas.removeEventListener('pointermove', this._inputHandlers.onPointerMove);
-      canvas.removeEventListener('pointerup', this._inputHandlers.onPointerUp);
-      canvas.removeEventListener('pointerleave', this._inputHandlers.onPointerLeave);
-      canvas.removeEventListener('wheel', this._inputHandlers.onWheel);
+      if (canvas) {
+        canvas.removeEventListener('pointerdown', this._inputHandlers.onPointerDown);
+        canvas.removeEventListener('pointermove', this._inputHandlers.onPointerMove);
+        canvas.removeEventListener('pointerup', this._inputHandlers.onPointerUp);
+        canvas.removeEventListener('pointerleave', this._inputHandlers.onPointerLeave);
+        canvas.removeEventListener('wheel', this._inputHandlers.onWheel);
+      }
     }
 
     // Disconnect resize observer
@@ -392,7 +412,15 @@ export class GameEngine {
     }
 
     // Destroy PixiJS application
-    this.app.destroy(true, { children: true, texture: true });
+    const appWithCancel = this.app as unknown as { _cancelResize?: () => void };
+    if (typeof appWithCancel._cancelResize !== 'function') {
+      appWithCancel._cancelResize = () => undefined;
+    }
+    try {
+      this.app.destroy(true, { children: true, texture: true });
+    } catch {
+      // Ignore destroy errors during HMR/teardown
+    }
   }
 
   // Public API

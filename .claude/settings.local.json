@@ -67,7 +67,8 @@
       "Bash(pnpm --filter=api db:seed-ai-presets:*)",
       "Bash(psql:*)",
       "Bash(pnpm --filter api db:seed-ai-presets:*)",
-      "Bash(npx vue-tsc:*)"
+      "Bash(npx vue-tsc:*)",
+      "Bash(wc:*)"
     ]
   }
 }

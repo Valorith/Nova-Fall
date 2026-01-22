@@ -47,6 +47,9 @@ export const TILE_SIZE = 8; // 8 meters per tile
 export const ARENA_METERS = ARENA_SIZE * TILE_SIZE; // 480m x 480m
 
 const TURRET_ALIGNMENT_TOLERANCE = (0.5 * Math.PI) / 180;
+const AUTO_TARGET_COOLDOWN_MS = 800;
+
+type UnitVisual = NonNullable<ReturnType<UnitManager['getUnit']>>;
 
 /**
  * Engine configuration options
@@ -71,8 +74,7 @@ export class CombatEngine {
   private groundMesh: Mesh | null = null;
   private pickingPlane: Mesh | null = null; // Invisible plane for raycasting
   private coreMesh: Mesh | null = null;
-  // Arena layout stored for future tile-specific logic
-  // @ts-expect-error - Will be used when implementing tile-based obstacles
+  // Arena layout stored for tile-based logic
   private _arenaLayout: TileType[][] | null = null;
 
   // Unit manager
@@ -110,6 +112,7 @@ export class CombatEngine {
       attackSpeed: number; // Attacks per second
       attackType: string;
       laserColor: string | null;
+      ownerId: string;
       mesh: TransformNode;
       yawParts: TransformNode[]; // All meshes that rotate for yaw
       pitchParts: TransformNode[]; // All meshes that rotate for pitch
@@ -146,6 +149,8 @@ export class CombatEngine {
       cooldownBarPlane: Mesh | null;
       cooldownBarTexture: DynamicTexture | null;
       lastFireTime: number; // Timestamp of last shot
+      autoTargetId: string | null;
+      autoTargetSwitchAt: number;
     }
   >();
 
@@ -161,6 +166,32 @@ export class CombatEngine {
   // Target ring visualization
   private targetRing: Mesh | null = null;
   private targetRingTargetId: string | null = null;
+
+  // Placement preview
+  private placementPreview: {
+    root: TransformNode;
+    placeholder: Mesh | null;
+    modelMeshes: Mesh[];
+    modelPath: string | null;
+    tileWidth: number;
+    tileHeight: number;
+    valid: boolean;
+    loading: boolean; // Flag to track if model is currently loading
+  } | null = null;
+  private placementPreviewToken = 0;
+
+  // Model cache for fast preview loading - stores hidden model hierarchy for cloning
+  private modelCache = new Map<
+    string,
+    {
+      cacheRoot: TransformNode;
+      glbRoot: TransformNode; // The __root__ node from the GLB file
+    }
+  >();
+  private modelCacheLoading = new Map<string, Promise<boolean>>();
+
+  // Move marker visualization
+  private moveMarker: Mesh | null = null;
 
   // Barrel calibration visualization
   private calibrationMarker: Mesh | null = null;
@@ -389,8 +420,14 @@ export class CombatEngine {
       // Update turret rotations
       this.updateTurretRotations(deltaTime);
 
+      // Keep target ring synced to moving targets
+      this.updateTargetRingTracking();
+
       // Process active kill commands
       this.updateKillCommands(now);
+
+      // Auto-targeting for turrets without manual commands
+      this.updateAutoTargeting(now);
 
       // Update laser lifecycle (remove expired lasers)
       this.updateLasers();
@@ -432,6 +469,18 @@ export class CombatEngine {
    */
   public get battleId(): string | null {
     return this._battleId;
+  }
+
+  public get attackerId(): string {
+    return this._attackerId;
+  }
+
+  public get defenderId(): string {
+    return this._defenderId;
+  }
+
+  public get arenaLayout(): TileType[][] | null {
+    return this._arenaLayout;
   }
 
   /**
@@ -929,6 +978,14 @@ export class CombatEngine {
     this.stop();
     this.unitManager?.dispose();
     this.flowField?.dispose();
+
+    // Clean up model cache
+    this.modelCache.forEach((cached) => {
+      cached.cacheRoot.dispose();
+    });
+    this.modelCache.clear();
+    this.modelCacheLoading.clear();
+
     this.scene.dispose();
     this.engine.dispose();
   }
@@ -1187,6 +1244,7 @@ export class CombatEngine {
       attackSpeed: buildingDef.attackSpeed || 1.0, // Default: 1 attack per second
       attackType: buildingDef.attackType || 'instant_laser',
       laserColor: buildingDef.laserColor || null,
+      ownerId: team === 'attacker' ? this._attackerId : this._defenderId,
       mesh: building,
       yawParts: [], // Will be populated when model loads
       pitchParts: [], // Will be populated when model loads
@@ -1224,6 +1282,8 @@ export class CombatEngine {
       cooldownBarPlane,
       cooldownBarTexture,
       lastFireTime: 0, // Never fired yet
+      autoTargetId: null,
+      autoTargetSwitchAt: 0,
     });
 
     // Draw initial bars
@@ -2399,6 +2459,558 @@ export class CombatEngine {
     }
   }
 
+  // ==================== MOVE MARKER ====================
+
+  /**
+   * Show a move destination marker
+   */
+  public showMoveMarker(worldX: number, worldZ: number, radius = 2): void {
+    if (this.moveMarker) {
+      this.moveMarker.dispose();
+    }
+
+    this.moveMarker = MeshBuilder.CreateTorus(
+      'moveMarker',
+      {
+        diameter: radius * 2,
+        thickness: 0.2,
+        tessellation: 32,
+      },
+      this.scene
+    );
+
+    this.moveMarker.position = new Vector3(worldX, 0.15, worldZ);
+
+    const material = new StandardMaterial('moveMarkerMat', this.scene);
+    material.emissiveColor = new Color3(0.2, 0.6, 1);
+    material.alpha = 0.7;
+    this.moveMarker.material = material;
+
+    if (this.glowLayer) {
+      this.glowLayer.addIncludedOnlyMesh(this.moveMarker);
+    }
+  }
+
+  /**
+   * Hide move destination marker
+   */
+  public hideMoveMarker(): void {
+    if (this.moveMarker) {
+      this.moveMarker.dispose();
+      this.moveMarker = null;
+    }
+  }
+
+  /**
+   * Track target ring for moving unit targets
+   */
+  private updateTargetRingTracking(): void {
+    if (!this.targetRing || !this.targetRingTargetId) {
+      return;
+    }
+
+    if (this.targetRingTargetId === 'ground') {
+      return;
+    }
+
+    if (!this.unitManager) {
+      return;
+    }
+
+    const unitPos = this.unitManager.getUnitWorldPosition(this.targetRingTargetId);
+    if (!unitPos) {
+      this.hideTargetRing();
+      return;
+    }
+
+    this.updateTargetRingPosition(unitPos.x, unitPos.z);
+  }
+
+  // ==================== PLACEMENT PREVIEW ====================
+
+  public showPlacementPreview(
+    modelPath: string | null,
+    tileWidth: number,
+    tileHeight: number,
+    worldX: number,
+    worldZ: number,
+    valid: boolean
+  ): void {
+    if (
+      this.placementPreview &&
+      this.placementPreview.modelPath === modelPath &&
+      this.placementPreview.tileWidth === tileWidth &&
+      this.placementPreview.tileHeight === tileHeight
+    ) {
+      // Just update position, preview already exists with same params
+      this.updatePlacementPreview(worldX, worldZ, valid);
+      return;
+    }
+
+    this.hidePlacementPreview();
+
+    const root = new TransformNode('placementPreviewRoot', this.scene);
+
+    // Create placeholder but keep it hidden - only shown if model fails to load
+    const placeholder = MeshBuilder.CreateBox(
+      'placementPreviewBox',
+      {
+        width: tileWidth * TILE_SIZE * 0.8,
+        height: TILE_SIZE * Math.max(1, tileHeight) * 0.6,
+        depth: tileHeight * TILE_SIZE * 0.8,
+      },
+      this.scene
+    );
+    placeholder.parent = root;
+    placeholder.position.y = TILE_SIZE * Math.max(1, tileHeight) * 0.3 || TILE_SIZE * 0.3;
+    placeholder.isVisible = !modelPath; // Only show if no model to load
+
+    this.placementPreview = {
+      root,
+      placeholder,
+      modelMeshes: [],
+      modelPath,
+      tileWidth,
+      tileHeight,
+      valid,
+      loading: !!modelPath,
+    };
+
+    this.updatePlacementPreview(worldX, worldZ, valid);
+
+    if (modelPath) {
+      void this.loadPlacementPreviewModel(modelPath, root, tileWidth, tileHeight);
+    }
+  }
+
+  public updatePlacementPreview(worldX: number, worldZ: number, valid: boolean): void {
+    if (!this.placementPreview) return;
+    const preview = this.placementPreview;
+    preview.root.position.x = worldX;
+    preview.root.position.z = worldZ;
+    preview.valid = valid;
+
+    const color = valid ? new Color3(0.2, 0.9, 0.6) : new Color3(1, 0.3, 0.3);
+    const alpha = 0.6;
+
+    // Only update placeholder material if it's visible (fallback when no model)
+    if (preview.placeholder && preview.placeholder.isVisible) {
+      const material = new StandardMaterial('placementPreviewMat', this.scene);
+      material.diffuseColor = color;
+      material.emissiveColor = color.scale(0.5);
+      material.alpha = alpha;
+      material.backFaceCulling = false;
+      preview.placeholder.material = material;
+    }
+
+    for (const mesh of preview.modelMeshes) {
+      this.applyPlacementPreviewMaterial(mesh, alpha, color);
+    }
+  }
+
+  public hidePlacementPreview(): void {
+    if (!this.placementPreview) return;
+    // Increment token to invalidate any pending model loads
+    this.placementPreviewToken++;
+    this.placementPreview.root.dispose();
+    this.placementPreview = null;
+  }
+
+  /**
+   * Preload a model file and parse it into the scene for instant cloning.
+   * Call this when storage items are known to reduce load delay during drag.
+   */
+  public async preloadModel(modelPath: string): Promise<void> {
+    if (!modelPath) return;
+
+    // Extract file path (without mesh name after #)
+    const hashIndex = modelPath.indexOf('#');
+    const filePath = hashIndex !== -1 ? modelPath.substring(0, hashIndex) : modelPath;
+
+    // Already cached or loading
+    if (this.modelCache.has(filePath) || this.modelCacheLoading.has(filePath)) {
+      return;
+    }
+
+    const fullPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
+    const lastSlash = fullPath.lastIndexOf('/');
+    const rootUrl = fullPath.substring(0, lastSlash + 1);
+    const file = fullPath.substring(lastSlash + 1);
+
+    // Load and parse the model, storing the entire hierarchy hidden for later cloning
+    const loadPromise = SceneLoader.ImportMeshAsync('', rootUrl, file, this.scene)
+      .then((result) => {
+        // Create a hidden container for the cached model
+        const cacheRoot = new TransformNode(`cache_${filePath}`, this.scene);
+        cacheRoot.setEnabled(false);
+
+        // Get the GLB root node (first mesh is usually __root__)
+        const glbRoot = result.meshes[0];
+        if (glbRoot) {
+          glbRoot.parent = cacheRoot;
+        }
+
+        // Hide all meshes but keep hierarchy intact
+        result.meshes.forEach((m) => {
+          m.isVisible = false;
+          m.setEnabled(false);
+        });
+
+        // Store in cache - keep entire hierarchy for cloning
+        this.modelCache.set(filePath, {
+          cacheRoot,
+          glbRoot: glbRoot as TransformNode,
+        });
+
+        this.modelCacheLoading.delete(filePath);
+        return true;
+      })
+      .catch((err) => {
+        console.warn(`Failed to preload model ${filePath}:`, err);
+        this.modelCacheLoading.delete(filePath);
+        return false;
+      });
+
+    this.modelCacheLoading.set(filePath, loadPromise);
+    await loadPromise;
+  }
+
+  /**
+   * Preload multiple models at once
+   */
+  public async preloadModels(modelPaths: string[]): Promise<void> {
+    await Promise.all(modelPaths.map((path) => this.preloadModel(path)));
+  }
+
+  /**
+   * Enable all nodes in a hierarchy
+   */
+  private enableHierarchy(node: TransformNode): void {
+    node.setEnabled(true);
+    if (node instanceof Mesh) {
+      node.isVisible = true;
+    }
+    const children = node.getChildren();
+    for (const child of children) {
+      if (child instanceof TransformNode) {
+        this.enableHierarchy(child);
+      }
+    }
+  }
+
+  /**
+   * Disable all nodes in a hierarchy
+   */
+  private disableHierarchy(node: TransformNode): void {
+    node.setEnabled(false);
+    if (node instanceof Mesh) {
+      node.isVisible = false;
+    }
+    const children = node.getChildren();
+    for (const child of children) {
+      if (child instanceof TransformNode) {
+        this.disableHierarchy(child);
+      }
+    }
+  }
+
+  /**
+   * Compute world matrices for all nodes in a hierarchy
+   */
+  private computeHierarchyMatrices(node: TransformNode): void {
+    node.computeWorldMatrix(true);
+    if (node instanceof Mesh) {
+      node.refreshBoundingInfo();
+    }
+    const children = node.getChildren();
+    for (const child of children) {
+      if (child instanceof TransformNode) {
+        this.computeHierarchyMatrices(child);
+      }
+    }
+  }
+
+  /**
+   * Collect all meshes (with vertices) from a node and its descendants
+   */
+  private collectMeshesFromNode(node: TransformNode, meshes: Mesh[]): void {
+    if (node instanceof Mesh && node.getTotalVertices() > 0) {
+      meshes.push(node);
+    }
+    const children = node.getChildren();
+    for (const child of children) {
+      if (child instanceof TransformNode) {
+        this.collectMeshesFromNode(child, meshes);
+      }
+    }
+  }
+
+  /**
+   * Check if a mesh has any ancestor (parent, grandparent, etc.) matching the pattern
+   */
+  private meshHasAncestorMatching(mesh: Mesh, pattern: RegExp): boolean {
+    let current: TransformNode | null = mesh.parent as TransformNode | null;
+    while (current) {
+      if (pattern.test(current.name || '')) {
+        return true;
+      }
+      current = current.parent as TransformNode | null;
+    }
+    return false;
+  }
+
+  /**
+   * Deep clone a node hierarchy, preserving all transforms and parent-child relationships
+   */
+  private deepCloneHierarchy(
+    node: TransformNode,
+    newParent: TransformNode | null,
+    cloneMap: Map<TransformNode, TransformNode>
+  ): TransformNode {
+    let clonedNode: TransformNode;
+
+    if (node instanceof Mesh) {
+      // Clone mesh (this copies geometry and local transforms)
+      clonedNode = node.clone(`clone_${node.name}`, newParent) as Mesh;
+    } else {
+      // Clone transform node
+      clonedNode = new TransformNode(`clone_${node.name}`, this.scene);
+      clonedNode.parent = newParent;
+      clonedNode.position = node.position.clone();
+      // Handle both quaternion and euler rotation
+      if (node.rotationQuaternion) {
+        clonedNode.rotationQuaternion = node.rotationQuaternion.clone();
+      } else {
+        clonedNode.rotation = node.rotation.clone();
+      }
+      clonedNode.scaling = node.scaling.clone();
+    }
+
+    cloneMap.set(node, clonedNode);
+
+    // Recursively clone children
+    const children = node.getChildren();
+    for (const child of children) {
+      if (child instanceof TransformNode) {
+        this.deepCloneHierarchy(child, clonedNode, cloneMap);
+      }
+    }
+
+    return clonedNode;
+  }
+
+  private async loadPlacementPreviewModel(
+    modelPath: string,
+    root: TransformNode,
+    tileWidth: number,
+    tileHeight: number
+  ): Promise<void> {
+    const token = ++this.placementPreviewToken;
+    let filePath = modelPath;
+    let targetMeshName: string | null = null;
+
+    const hashIndex = modelPath.indexOf('#');
+    if (hashIndex !== -1) {
+      filePath = modelPath.substring(0, hashIndex);
+      targetMeshName = modelPath.substring(hashIndex + 1);
+    }
+
+    try {
+      // Check if model is already cached
+      let cachedData = this.modelCache.get(filePath);
+
+      // If not cached and not currently loading, load it now
+      if (!cachedData) {
+        // Wait for any in-progress load
+        const loadingPromise = this.modelCacheLoading.get(filePath);
+        if (loadingPromise) {
+          await loadingPromise;
+          cachedData = this.modelCache.get(filePath);
+        } else {
+          // Load and cache the model
+          await this.preloadModel(modelPath);
+          cachedData = this.modelCache.get(filePath);
+        }
+      }
+
+      // Check if we're still valid after async operations
+      if (token !== this.placementPreviewToken) {
+        return;
+      }
+
+      if (!this.placementPreview || this.placementPreview.root !== root) {
+        return;
+      }
+
+      if (!cachedData || !cachedData.glbRoot) {
+        // Cache failed, placeholder will remain visible
+        if (this.placementPreview) {
+          this.placementPreview.loading = false;
+        }
+        return;
+      }
+
+      // Temporarily enable the cache to compute matrices
+      cachedData.cacheRoot.setEnabled(true);
+      this.enableHierarchy(cachedData.glbRoot);
+      cachedData.cacheRoot.computeWorldMatrix(true);
+      this.computeHierarchyMatrices(cachedData.glbRoot);
+
+      // Collect all meshes that belong to the target model
+      // The model parts may be spread across multiple branches, so we check each mesh's ancestry
+      const meshesToUse: Mesh[] = [];
+      if (targetMeshName) {
+        // Pattern matches any node starting with the target name (e.g., T-A03_base, T-A03_barrel, T-A03_11)
+        const escapedName = targetMeshName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const modelPattern = new RegExp(`^${escapedName}_`);
+
+        // Collect all meshes from the GLB and filter by ancestry
+        const allMeshes: Mesh[] = [];
+        this.collectMeshesFromNode(cachedData.glbRoot, allMeshes);
+
+        for (const mesh of allMeshes) {
+          if (this.meshHasAncestorMatching(mesh, modelPattern)) {
+            meshesToUse.push(mesh);
+          }
+        }
+
+      } else {
+        // No target specified, use all meshes
+        this.collectMeshesFromNode(cachedData.glbRoot, meshesToUse);
+      }
+
+      if (meshesToUse.length === 0) {
+        cachedData.cacheRoot.setEnabled(false);
+        this.disableHierarchy(cachedData.glbRoot);
+        if (this.placementPreview) {
+          this.placementPreview.loading = false;
+        }
+        return;
+      }
+
+      // Calculate bounding box from target meshes
+      let minVec = new Vector3(Infinity, Infinity, Infinity);
+      let maxVec = new Vector3(-Infinity, -Infinity, -Infinity);
+      let hasValidBounds = false;
+
+      meshesToUse.forEach((mesh) => {
+        mesh.refreshBoundingInfo();
+        const boundingInfo = mesh.getBoundingInfo();
+        const min = boundingInfo.boundingBox.minimumWorld;
+        const max = boundingInfo.boundingBox.maximumWorld;
+
+        if (isFinite(min.x) && isFinite(max.x)) {
+          minVec = Vector3.Minimize(minVec, min);
+          maxVec = Vector3.Maximize(maxVec, max);
+          hasValidBounds = true;
+        }
+      });
+
+      if (!hasValidBounds) {
+        cachedData.cacheRoot.setEnabled(false);
+        this.disableHierarchy(cachedData.glbRoot);
+        if (this.placementPreview) {
+          this.placementPreview.loading = false;
+        }
+        return;
+      }
+
+      // Calculate scale factor and center
+      const preScaleWidth = maxVec.x - minVec.x;
+      const preScaleDepth = maxVec.z - minVec.z;
+      const targetWidth = tileWidth * TILE_SIZE;
+      const targetDepth = tileHeight * TILE_SIZE;
+      const modelFootprint = Math.max(preScaleWidth, preScaleDepth);
+      const targetFootprint = Math.max(targetWidth, targetDepth);
+      const scaleFactor = modelFootprint > 0 ? targetFootprint / modelFootprint : 1;
+      const center = minVec.add(maxVec).scale(0.5);
+
+      // Deep clone the ENTIRE glbRoot hierarchy (preserves all parent-child transforms)
+      // Then we'll hide meshes that don't belong to our target model
+      const cloneMap = new Map<TransformNode, TransformNode>();
+      const clonedRoot = this.deepCloneHierarchy(cachedData.glbRoot, root, cloneMap);
+
+      // Collect all cloned meshes
+      const allClonedMeshes: Mesh[] = [];
+      this.collectMeshesFromNode(clonedRoot, allClonedMeshes);
+
+      // Build a set of original mesh names we want to keep
+      const meshNamesToKeep = new Set(meshesToUse.map((m) => m.name));
+
+      // Process cloned meshes - keep target meshes visible with preview material, hide others
+      const clonedMeshes: Mesh[] = [];
+      const previewColor = new Color3(0.2, 0.9, 0.6);
+
+      for (const clonedMesh of allClonedMeshes) {
+        // The cloned mesh name has 'clone_' prefix from deepCloneHierarchy
+        const originalName = clonedMesh.name.replace(/^clone_/, '');
+
+        if (meshNamesToKeep.has(originalName)) {
+          // This mesh belongs to our target model - make it visible with preview material
+          const previewMat = new StandardMaterial(`previewMat_${clonedMesh.name}`, this.scene);
+          previewMat.diffuseColor = previewColor;
+          previewMat.emissiveColor = previewColor.scale(0.3);
+          previewMat.alpha = 0.6;
+          previewMat.backFaceCulling = false;
+          clonedMesh.material = previewMat;
+
+          clonedMesh.isVisible = true;
+          clonedMesh.setEnabled(true);
+          clonedMesh.isPickable = false;
+          clonedMeshes.push(clonedMesh);
+        } else {
+          // This mesh doesn't belong to our target - hide it
+          clonedMesh.isVisible = false;
+          clonedMesh.setEnabled(false);
+        }
+      }
+
+      // Position, rotate, and scale the entire cloned hierarchy
+      clonedRoot.position = new Vector3(-center.x, -minVec.y, -center.z).scale(scaleFactor);
+      clonedRoot.scaling = new Vector3(scaleFactor, scaleFactor, scaleFactor);
+      // Apply 180-degree rotation to match placed model orientation
+      clonedRoot.rotationQuaternion = null;
+      clonedRoot.rotation.y = Math.PI;
+
+
+      // Re-disable cache
+      cachedData.cacheRoot.setEnabled(false);
+      this.disableHierarchy(cachedData.glbRoot);
+
+      if (this.placementPreview) {
+        this.placementPreview.modelMeshes = clonedMeshes;
+        this.placementPreview.loading = false;
+        if (this.placementPreview.placeholder) {
+          this.placementPreview.placeholder.dispose();
+          this.placementPreview.placeholder = null;
+        }
+      }
+    } catch {
+      // Model loading failed - placeholder will remain visible
+      if (this.placementPreview) {
+        this.placementPreview.loading = false;
+      }
+      return;
+    }
+  }
+
+  private applyPlacementPreviewMaterial(mesh: Mesh, alpha: number, color: Color3): void {
+    const material = mesh.material;
+    if (material instanceof StandardMaterial) {
+      material.alpha = alpha;
+      material.diffuseColor = color;
+      material.emissiveColor = color.scale(0.5);
+      material.specularColor = new Color3(0.1, 0.1, 0.1);
+      material.backFaceCulling = false;
+    } else if (material instanceof PBRMaterial) {
+      material.alpha = alpha;
+      material.albedoColor = color;
+      material.emissiveColor = color.scale(0.5);
+      material.transparencyMode = PBRMaterial.PBRMATERIAL_ALPHABLEND;
+      material.backFaceCulling = false;
+    }
+  }
+
   // ==================== LASER SYSTEM ====================
 
   /**
@@ -3459,11 +4071,56 @@ export class CombatEngine {
   }
 
   /**
+   * Move a unit to a world position (dev/manual orders)
+   */
+  public moveUnitToWorld(unitId: string, worldX: number, worldZ: number): void {
+    if (!this.unitManager) return;
+    this.unitManager.setUnitTargetWorldPosition(unitId, worldX, worldZ);
+  }
+
+  /**
    * Get all unit IDs currently in the arena
    */
   public getAllUnitIds(): string[] {
     if (!this.unitManager) return [];
     return this.unitManager.getAllUnitIds();
+  }
+
+  public removeUnit(unitId: string): void {
+    this.unitManager?.removeUnit(unitId);
+  }
+
+  public getBuildingFootprint(buildingId: string): {
+    x: number;
+    z: number;
+    width: number;
+    height: number;
+  } | null {
+    const building = this.buildingData.get(buildingId);
+    if (!building) return null;
+    return { x: building.x, z: building.z, width: building.tileWidth, height: building.tileHeight };
+  }
+
+  public destroyBuilding(buildingId: string): void {
+    const building = this.buildingData.get(buildingId);
+    if (!building) return;
+
+    this.activeKillCommands.delete(buildingId);
+    this.pendingAttacks.delete(buildingId);
+
+    building.healthBarPlane?.dispose();
+    building.healthBarTexture?.dispose();
+    building.cooldownBarPlane?.dispose();
+    building.cooldownBarTexture?.dispose();
+    building.mesh.dispose();
+
+    this.buildingData.delete(buildingId);
+
+    if (this.selectedBuildingId === buildingId) {
+      this.hideSelectionRing();
+      this.hideRangeCircle();
+      this.selectedBuildingId = null;
+    }
   }
 
   // ==================== KILL COMMANDS ====================
@@ -3610,6 +4267,155 @@ export class CombatEngine {
 
       const fireInterval = 1000 / command.attackSpeed;
       command.nextFireTime = now + fireInterval;
+    }
+  }
+
+  private findNearestEnemyUnit(
+    building: typeof this.buildingData extends Map<string, infer V> ? V : never,
+    centerX: number,
+    centerZ: number,
+    rangeInMeters: number
+  ): { id: string; pos: Vector3; unit: UnitVisual } | null {
+    if (!this.unitManager) return null;
+
+    let nearest: { id: string; pos: Vector3; unit: UnitVisual; dist: number } | null = null;
+
+    for (const unitId of this.unitManager.getAllUnitIds()) {
+      const unit = this.unitManager.getUnit(unitId);
+      if (!unit || unit.state === UnitState.DEAD) continue;
+      if (unit.ownerId === building.ownerId) continue;
+
+      const pos = this.unitManager.getUnitWorldPosition(unitId);
+      if (!pos) continue;
+
+      const dist = Math.sqrt(Math.pow(pos.x - centerX, 2) + Math.pow(pos.z - centerZ, 2));
+      if (dist > rangeInMeters) continue;
+
+      if (!nearest || dist < nearest.dist) {
+        nearest = { id: unitId, pos, unit, dist };
+      }
+    }
+
+    if (!nearest) return null;
+    return { id: nearest.id, pos: nearest.pos, unit: nearest.unit };
+  }
+
+  private updateAutoTargeting(now: number): void {
+    if (!this.unitManager) return;
+
+    for (const [buildingId, building] of this.buildingData) {
+      if (this.activeKillCommands.has(buildingId)) {
+        continue;
+      }
+
+      if (building.damage <= 0 || building.range <= 0 || building.attackSpeed <= 0) {
+        continue;
+      }
+
+      if (!building.hasBarrelLine) {
+        continue;
+      }
+
+      const { centerX: buildingCenterX, centerZ: buildingCenterZ } =
+        this.getBuildingCenterWorld(building);
+      const rangeInMeters = building.range * TILE_SIZE;
+
+      let targetId = building.autoTargetId;
+      let targetUnit = targetId ? this.unitManager.getUnit(targetId) : undefined;
+      let targetPos = targetId ? this.unitManager.getUnitWorldPosition(targetId) : null;
+
+      if (targetId && targetUnit && targetUnit.state !== UnitState.DEAD && targetPos) {
+        const distFromCenter = Math.sqrt(
+          Math.pow(targetPos.x - buildingCenterX, 2) + Math.pow(targetPos.z - buildingCenterZ, 2)
+        );
+        if (distFromCenter > rangeInMeters) {
+          targetId = null;
+          targetUnit = undefined;
+          targetPos = null;
+          building.autoTargetId = null;
+          building.autoTargetSwitchAt = 0;
+        }
+      } else {
+        targetId = null;
+        targetUnit = undefined;
+        targetPos = null;
+        building.autoTargetId = null;
+        building.autoTargetSwitchAt = 0;
+      }
+
+      if (!targetId && now >= building.autoTargetSwitchAt) {
+        const nearest = this.findNearestEnemyUnit(
+          building,
+          buildingCenterX,
+          buildingCenterZ,
+          rangeInMeters
+        );
+        if (nearest) {
+          targetId = nearest.id;
+          targetUnit = nearest.unit;
+          targetPos = nearest.pos;
+          building.autoTargetId = nearest.id;
+          building.autoTargetSwitchAt = now + AUTO_TARGET_COOLDOWN_MS;
+        }
+      }
+
+      if (!targetId || !targetUnit || !targetPos) {
+        continue;
+      }
+
+      const resolvedTargetPos = targetPos;
+
+      const unitTileSize = targetUnit.tileSize ?? 1;
+      const targetWorldY = TILE_SIZE * unitTileSize * 0.4;
+
+      const viewCheck = this.isTargetInTurretView(
+        building,
+        resolvedTargetPos.x,
+        resolvedTargetPos.z,
+        targetWorldY
+      );
+      if (!viewCheck.inView) {
+        continue;
+      }
+
+      if (viewCheck.requiredYaw === undefined || viewCheck.requiredPitch === undefined) {
+        continue;
+      }
+
+      building.targetRotation = viewCheck.requiredYaw;
+      building.targetPitch = viewCheck.requiredPitch;
+
+      const alignmentAngle = this.getTurretAlignmentAngle(
+        building,
+        resolvedTargetPos.x,
+        resolvedTargetPos.z,
+        targetWorldY
+      );
+      const aligned =
+        (alignmentAngle !== null && alignmentAngle <= TURRET_ALIGNMENT_TOLERANCE) ||
+        this.isTurretRotationAligned(building);
+      if (!aligned) {
+        continue;
+      }
+
+      const fireInterval = 1000 / building.attackSpeed;
+      if (now - building.lastFireTime < fireInterval) {
+        continue;
+      }
+
+      this.executeAttack(buildingId, building, {
+        targetWorldX: resolvedTargetPos.x,
+        targetWorldZ: resolvedTargetPos.z,
+        targetWorldY,
+        color: building.laserColor || '#ff0000',
+      });
+
+      building.lastFireTime = now;
+
+      const result = this.unitManager.damageUnit(targetId, building.damage);
+      if (result && !result.alive) {
+        building.autoTargetId = null;
+      }
     }
   }
 }

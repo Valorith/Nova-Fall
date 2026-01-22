@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, reactive } from 'vue';
 import { settingsApi, type NodeIconsMap } from '@/services/api';
 import IconPicker from './IconPicker.vue';
-import { NodeType, NODE_TYPE_CONFIGS } from '@nova-fall/shared';
+import { NodeType, NODE_TYPE_CONFIGS, UPKEEP, COMBAT, TICK } from '@nova-fall/shared';
 
 // State
 const loading = ref(false);
@@ -12,6 +12,98 @@ const nodeIcons = ref<NodeIconsMap>({});
 const showIconPicker = ref(false);
 const editingNodeType = ref<string | null>(null);
 const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+// Game Constants State - use defaults from shared package
+const gameConstants = reactive({
+  // Economy
+  baseNodeUpkeep: UPKEEP.BASE_NODE_COST,
+  distancePenalty: UPKEEP.DISTANCE_PENALTY * 100, // Convert to percentage for display
+  upkeepIntervalMinutes: UPKEEP.UPKEEP_CHECK_INTERVAL / 60000, // Convert ms to minutes
+
+  // Combat
+  prepTimeHours: COMBAT.PREP_TIME_BASE / 3600000, // Convert ms to hours
+  prepTimeVarianceHours: COMBAT.PREP_TIME_VARIANCE / 3600000,
+  forcesLockHours: COMBAT.FORCES_LOCK_BEFORE / 3600000,
+  combatDurationMinutes: COMBAT.COMBAT_DURATION / 60000, // Convert ms to minutes
+  postBattleImmunityMinutes: COMBAT.POST_BATTLE_IMMUNITY / 60000,
+  attackCooldownDays: COMBAT.ATTACK_COOLDOWN / 86400000, // Convert ms to days
+
+  // Tick
+  tickIntervalSeconds: TICK.INTERVAL / 1000, // Convert ms to seconds
+  resourceGenTicks: TICK.RESOURCE_GENERATION_TICKS,
+  npcAiTicks: TICK.NPC_AI_TICKS,
+});
+
+// Track which settings have been modified
+const modifiedSettings = ref<Set<string>>(new Set());
+
+// Load game constants from API
+async function loadGameConstants() {
+  try {
+    const response = await settingsApi.get('gameConstants');
+    if (response.data?.data?.value) {
+      const saved = response.data.data.value as Record<string, number>;
+      // Merge saved values with defaults
+      Object.assign(gameConstants, saved);
+    }
+  } catch {
+    // Settings don't exist yet, use defaults
+    console.log('No saved game constants, using defaults');
+  }
+}
+
+// Save all modified settings
+async function saveAllConstants() {
+  saving.value = 'all';
+  error.value = null;
+
+  try {
+    await settingsApi.set('gameConstants', { ...gameConstants });
+    modifiedSettings.value.clear();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to save settings';
+    console.error('Failed to save game constants:', err);
+  } finally {
+    saving.value = null;
+  }
+}
+
+// Reset all constants to defaults
+async function resetAllConstants() {
+  if (!confirm('Are you sure you want to reset all game constants to defaults?')) return;
+
+  saving.value = 'all';
+  error.value = null;
+
+  try {
+    // Reset to defaults from shared package
+    gameConstants.baseNodeUpkeep = UPKEEP.BASE_NODE_COST;
+    gameConstants.distancePenalty = UPKEEP.DISTANCE_PENALTY * 100;
+    gameConstants.upkeepIntervalMinutes = UPKEEP.UPKEEP_CHECK_INTERVAL / 60000;
+    gameConstants.prepTimeHours = COMBAT.PREP_TIME_BASE / 3600000;
+    gameConstants.prepTimeVarianceHours = COMBAT.PREP_TIME_VARIANCE / 3600000;
+    gameConstants.forcesLockHours = COMBAT.FORCES_LOCK_BEFORE / 3600000;
+    gameConstants.combatDurationMinutes = COMBAT.COMBAT_DURATION / 60000;
+    gameConstants.postBattleImmunityMinutes = COMBAT.POST_BATTLE_IMMUNITY / 60000;
+    gameConstants.attackCooldownDays = COMBAT.ATTACK_COOLDOWN / 86400000;
+    gameConstants.tickIntervalSeconds = TICK.INTERVAL / 1000;
+    gameConstants.resourceGenTicks = TICK.RESOURCE_GENERATION_TICKS;
+    gameConstants.npcAiTicks = TICK.NPC_AI_TICKS;
+
+    await settingsApi.set('gameConstants', { ...gameConstants });
+    modifiedSettings.value.clear();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to reset settings';
+    console.error('Failed to reset game constants:', err);
+  } finally {
+    saving.value = null;
+  }
+}
+
+// Mark a setting as modified
+function markModified(key: string) {
+  modifiedSettings.value.add(key);
+}
 
 // Get all node types for display
 const nodeTypes = Object.values(NodeType);
@@ -153,7 +245,10 @@ async function resetAllIcons() {
   }
 }
 
-onMounted(loadNodeIcons);
+onMounted(() => {
+  loadNodeIcons();
+  loadGameConstants();
+});
 </script>
 
 <template>
@@ -249,10 +344,282 @@ onMounted(loadNodeIcons);
         </div>
       </section>
 
-      <!-- Future settings sections can be added here -->
-      <section class="settings-section placeholder">
-        <h3>More Settings Coming Soon</h3>
-        <p>Additional game configuration options will be added here.</p>
+      <!-- Game Constants Section -->
+      <section class="settings-section">
+        <div class="section-header">
+          <div class="section-title">
+            <h3>Game Constants</h3>
+            <p class="section-description">Configure core game mechanics and timing values</p>
+          </div>
+          <div class="section-actions">
+            <button
+              v-if="modifiedSettings.size > 0"
+              class="btn btn-primary"
+              :disabled="saving === 'all'"
+              @click="saveAllConstants"
+            >
+              {{ saving === 'all' ? 'Saving...' : `Save All (${modifiedSettings.size})` }}
+            </button>
+            <button
+              class="btn btn-secondary"
+              :disabled="saving === 'all'"
+              @click="resetAllConstants"
+            >
+              Reset to Defaults
+            </button>
+          </div>
+        </div>
+
+        <!-- Economy Settings -->
+        <div class="settings-group">
+          <h4 class="group-title">Economy</h4>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">Base Node Upkeep</span>
+                <span class="label-unit">credits/hour</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.baseNodeUpkeep"
+                  type="number"
+                  min="0"
+                  max="1000"
+                  step="5"
+                  class="setting-input"
+                  @input="markModified('baseNodeUpkeep')"
+                />
+                <span class="setting-default">Default: {{ UPKEEP.BASE_NODE_COST }}</span>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">Distance Penalty</span>
+                <span class="label-unit">% per node from HQ</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.distancePenalty"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  class="setting-input"
+                  @input="markModified('distancePenalty')"
+                />
+                <span class="setting-default">Default: {{ UPKEEP.DISTANCE_PENALTY * 100 }}%</span>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">Economy Tick Interval</span>
+                <span class="label-unit">minutes</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.upkeepIntervalMinutes"
+                  type="number"
+                  min="1"
+                  max="1440"
+                  step="1"
+                  class="setting-input"
+                  @input="markModified('upkeepIntervalMinutes')"
+                />
+                <span class="setting-default">Default: {{ UPKEEP.UPKEEP_CHECK_INTERVAL / 60000 }} min</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Combat Settings -->
+        <div class="settings-group">
+          <h4 class="group-title">Combat Timing</h4>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">Prep Time Base</span>
+                <span class="label-unit">hours</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.prepTimeHours"
+                  type="number"
+                  min="1"
+                  max="168"
+                  step="1"
+                  class="setting-input"
+                  @input="markModified('prepTimeHours')"
+                />
+                <span class="setting-default">Default: {{ COMBAT.PREP_TIME_BASE / 3600000 }}h</span>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">Prep Time Variance</span>
+                <span class="label-unit">± hours</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.prepTimeVarianceHours"
+                  type="number"
+                  min="0"
+                  max="24"
+                  step="0.5"
+                  class="setting-input"
+                  @input="markModified('prepTimeVarianceHours')"
+                />
+                <span class="setting-default">Default: ±{{ COMBAT.PREP_TIME_VARIANCE / 3600000 }}h</span>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">Forces Lock Before</span>
+                <span class="label-unit">hours before combat</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.forcesLockHours"
+                  type="number"
+                  min="0"
+                  max="24"
+                  step="0.5"
+                  class="setting-input"
+                  @input="markModified('forcesLockHours')"
+                />
+                <span class="setting-default">Default: {{ COMBAT.FORCES_LOCK_BEFORE / 3600000 }}h</span>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">Combat Duration</span>
+                <span class="label-unit">minutes</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.combatDurationMinutes"
+                  type="number"
+                  min="1"
+                  max="120"
+                  step="5"
+                  class="setting-input"
+                  @input="markModified('combatDurationMinutes')"
+                />
+                <span class="setting-default">Default: {{ COMBAT.COMBAT_DURATION / 60000 }} min</span>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">Post-Battle Immunity</span>
+                <span class="label-unit">minutes</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.postBattleImmunityMinutes"
+                  type="number"
+                  min="0"
+                  max="60"
+                  step="1"
+                  class="setting-input"
+                  @input="markModified('postBattleImmunityMinutes')"
+                />
+                <span class="setting-default">Default: {{ COMBAT.POST_BATTLE_IMMUNITY / 60000 }} min</span>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">Attack Cooldown</span>
+                <span class="label-unit">days</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.attackCooldownDays"
+                  type="number"
+                  min="0"
+                  max="30"
+                  step="1"
+                  class="setting-input"
+                  @input="markModified('attackCooldownDays')"
+                />
+                <span class="setting-default">Default: {{ COMBAT.ATTACK_COOLDOWN / 86400000 }} days</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tick Settings -->
+        <div class="settings-group">
+          <h4 class="group-title">Game Tick</h4>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">Tick Interval</span>
+                <span class="label-unit">seconds</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.tickIntervalSeconds"
+                  type="number"
+                  min="1"
+                  max="60"
+                  step="1"
+                  class="setting-input"
+                  @input="markModified('tickIntervalSeconds')"
+                />
+                <span class="setting-default">Default: {{ TICK.INTERVAL / 1000 }}s</span>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">Resource Gen Every</span>
+                <span class="label-unit">ticks</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.resourceGenTicks"
+                  type="number"
+                  min="1"
+                  max="120"
+                  step="1"
+                  class="setting-input"
+                  @input="markModified('resourceGenTicks')"
+                />
+                <span class="setting-default">Default: {{ TICK.RESOURCE_GENERATION_TICKS }} ticks</span>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label">
+                <span class="label-text">NPC AI Every</span>
+                <span class="label-unit">ticks</span>
+              </label>
+              <div class="setting-input-group">
+                <input
+                  v-model.number="gameConstants.npcAiTicks"
+                  type="number"
+                  min="1"
+                  max="120"
+                  step="1"
+                  class="setting-input"
+                  @input="markModified('npcAiTicks')"
+                />
+                <span class="setting-default">Default: {{ TICK.NPC_AI_TICKS }} ticks</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p class="settings-note">
+          <strong>Note:</strong> Changes to these settings require a server restart to take effect.
+          Values are stored in the database and override the hardcoded defaults.
+        </p>
       </section>
     </div>
 
@@ -516,5 +883,115 @@ onMounted(loadNodeIcons);
 .btn-icon:hover:not(:disabled) {
   background: #4b5563;
   color: #e5e5e5;
+}
+
+/* Game Constants Styles */
+.section-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.settings-group {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #2a3040;
+}
+
+.settings-group:last-of-type {
+  margin-bottom: 16px;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.group-title {
+  margin: 0 0 16px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.setting-item {
+  background: #0f1419;
+  border-radius: 8px;
+  padding: 14px 16px;
+  border: 1px solid #2a3040;
+  transition: border-color 0.15s;
+}
+
+.setting-item:hover {
+  border-color: #3b82f6;
+}
+
+.setting-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.label-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #e5e5e5;
+}
+
+.label-unit {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.setting-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setting-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: #1a1f2e;
+  border: 1px solid #2a3040;
+  border-radius: 6px;
+  color: #e5e5e5;
+  font-size: 14px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.setting-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.setting-input::-webkit-inner-spin-button,
+.setting-input::-webkit-outer-spin-button {
+  opacity: 1;
+}
+
+.setting-default {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.settings-note {
+  margin: 20px 0 0 0;
+  padding: 12px 16px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.settings-note strong {
+  color: #60a5fa;
 }
 </style>

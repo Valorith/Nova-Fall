@@ -10,7 +10,7 @@
  * - Death handling
  */
 
-import type { UnitStats, BehaviorTree, AIContext } from '@nova-fall/shared';
+import type { UnitStats, BehaviorTree, AIContext, CombatInput } from '@nova-fall/shared';
 import { UnitState } from '@nova-fall/shared';
 import {
   applyDamage,
@@ -31,6 +31,7 @@ export interface SimUnit {
   z: number;
   targetX: number | null;
   targetZ: number | null;
+  manualOrder?: ManualOrder | null;
   health: number;
   maxHealth: number;
   shield: number;
@@ -41,6 +42,13 @@ export interface SimUnit {
   lastAttackTime: number;
   rotation: number;
   aiPreset?: BehaviorTree | null;
+}
+
+export interface ManualOrder {
+  type: 'move' | 'attack';
+  targetX?: number;
+  targetZ?: number;
+  targetId?: string;
 }
 
 /**
@@ -212,6 +220,38 @@ export class CombatSimulator {
    */
   addBuilding(building: SimBuilding): void {
     this.state.buildings.set(building.id, building);
+  }
+
+  /**
+   * Apply a manual combat input (move/attack)
+   */
+  applyInput(input: CombatInput): void {
+    if (!input.unitIds || input.unitIds.length === 0) return;
+
+    if (input.type === 'move' && input.position) {
+      for (const unitId of input.unitIds) {
+        const unit = this.state.units.get(unitId);
+        if (!unit || unit.state === UnitState.DEAD) continue;
+        unit.manualOrder = {
+          type: 'move',
+          targetX: input.position.x,
+          targetZ: input.position.z,
+        };
+        unit.targetId = null;
+      }
+    }
+
+    if (input.type === 'attack' && input.targetId) {
+      for (const unitId of input.unitIds) {
+        const unit = this.state.units.get(unitId);
+        if (!unit || unit.state === UnitState.DEAD) continue;
+        unit.manualOrder = {
+          type: 'attack',
+          targetId: input.targetId,
+        };
+        unit.targetId = input.targetId;
+      }
+    }
   }
 
   /**
@@ -522,6 +562,59 @@ export class CombatSimulator {
   }
 
   /**
+   * Process manual order for a unit
+   */
+  private processManualOrder(unit: SimUnit, deltaMs: number): boolean {
+    if (!unit.manualOrder) return false;
+
+    if (unit.manualOrder.type === 'move') {
+      const targetX = unit.manualOrder.targetX;
+      const targetZ = unit.manualOrder.targetZ;
+      if (targetX === undefined || targetZ === undefined) {
+        unit.manualOrder = null;
+        unit.state = UnitState.IDLE;
+        return true;
+      }
+
+      this.moveUnitToward(unit, targetX, targetZ, deltaMs);
+      const dx = targetX - unit.x;
+      const dz = targetZ - unit.z;
+      if (Math.sqrt(dx * dx + dz * dz) < 0.1) {
+        unit.manualOrder = null;
+        unit.state = UnitState.IDLE;
+      }
+      return true;
+    }
+
+    if (unit.manualOrder.type === 'attack') {
+      const targetId = unit.manualOrder.targetId;
+      if (!targetId) {
+        unit.manualOrder = null;
+        unit.state = UnitState.IDLE;
+        return true;
+      }
+
+      const target = this.state.units.get(targetId);
+      if (!target || target.state === UnitState.DEAD) {
+        unit.manualOrder = null;
+        unit.targetId = null;
+        unit.state = UnitState.IDLE;
+        return true;
+      }
+
+      if (isInRange(unit.x, unit.z, target.x, target.z, unit.stats.range)) {
+        this.processUnitAttack(unit, target);
+        return true;
+      }
+
+      this.moveUnitToward(unit, target.x, target.z, deltaMs);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Move unit toward a position
    */
   private moveUnitToward(unit: SimUnit, targetX: number, targetZ: number, deltaMs: number): void {
@@ -597,6 +690,10 @@ export class CombatSimulator {
       // Skip spawning units
       if (unit.state === UnitState.SPAWNING) continue;
 
+      if (this.processManualOrder(unit, deltaMs)) {
+        continue;
+      }
+
       // Use behavior tree if available
       if (unit.aiPreset) {
         const executor = this.getExecutor(unit.id, unit.aiPreset);
@@ -645,6 +742,10 @@ export class CombatSimulator {
 
     for (const unit of defenderUnits) {
       if (unit.state === UnitState.SPAWNING) continue;
+
+      if (this.processManualOrder(unit, deltaMs)) {
+        continue;
+      }
 
       // Use behavior tree if available
       if (unit.aiPreset) {

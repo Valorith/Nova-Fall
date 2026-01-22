@@ -13,6 +13,7 @@
 
 import { ref, shallowRef, onMounted, onUnmounted, readonly, computed, toRaw } from 'vue';
 import { CombatEngine } from '../game/combat';
+import { CombatPhase } from '@nova-fall/shared';
 import type {
   CombatSetup,
   CombatState,
@@ -24,7 +25,11 @@ import type {
   DbBuildingDefinition,
 } from '@nova-fall/shared';
 import { gameSocket, type CombatErrorEvent } from '../services/socket';
-import { trackCombatInput, trackCombatState } from '@/utils/metricsTracker';
+import {
+  trackCombatInput,
+  trackCombatState,
+  registerCombatDataProvider,
+} from '@/utils/metricsTracker';
 
 // Shared state - singleton pattern for combat engine
 // All components using this composable share the same engine instance
@@ -35,6 +40,8 @@ const isLoading = ref(false);
 const isConnected = ref(false);
 const currentBattleId = ref<string | null>(null);
 const currentPlayerId = ref<string | null>(null);
+const currentNodeId = ref<string | null>(null);
+const combatPhase = ref<CombatPhase>(CombatPhase.DEPLOY);
 const combatResult = ref<CombatResult | null>(null);
 const error = ref<string | null>(null);
 
@@ -51,6 +58,22 @@ const coreHealth = ref<HQState>({
 
 // Time remaining in combat
 const timeRemaining = ref(30 * 60); // 30 minutes in seconds
+
+// Register this composable as the combat data provider for metrics
+// This breaks the circular import between metricsTracker and useCombatEngine
+registerCombatDataProvider({
+  isActive,
+  currentBattleId,
+  getCombatEntitySummary: () => {
+    return (
+      engine.value?.getCombatEntitySummary() ?? {
+        units: { total: 0, attackers: 0, defenders: 0, dead: 0 },
+        buildings: { total: 0 },
+        dev: { units: 0, buildings: 0 },
+      }
+    );
+  },
+});
 
 export function useCombatEngine() {
   // Track component mount/unmount for reference counting
@@ -78,9 +101,16 @@ export function useCombatEngine() {
    * Call this once when the CombatView component mounts
    */
   const initEngine = (canvas: HTMLCanvasElement): void => {
+    // During HMR, the old engine might still exist - dispose it first
     if (engine.value) {
-      console.warn('Combat engine already initialized');
-      return;
+      console.log('Disposing existing combat engine before reinitializing (likely HMR)');
+      try {
+        engine.value.dispose();
+      } catch (e) {
+        console.warn('Error disposing old engine:', e);
+      }
+      engine.value = null;
+      engineInstance.value = null;
     }
 
     try {
@@ -110,6 +140,7 @@ export function useCombatEngine() {
         // Update Core health and time
         coreHealth.value = state.hq;
         timeRemaining.value = state.timeRemaining;
+        combatPhase.value = state.phase;
       }
     });
 
@@ -186,6 +217,8 @@ export function useCombatEngine() {
       engine.value.start();
       currentBattleId.value = setup.battleId;
       currentPlayerId.value = playerId;
+      currentNodeId.value = setup.nodeId;
+      combatPhase.value = CombatPhase.DEPLOY;
       isActive.value = true;
 
       // Setup socket handlers and join battle
@@ -226,6 +259,8 @@ export function useCombatEngine() {
     isActive.value = false;
     currentBattleId.value = null;
     currentPlayerId.value = null;
+    currentNodeId.value = null;
+    combatPhase.value = CombatPhase.DEPLOY;
   };
 
   /**
@@ -534,11 +569,66 @@ export function useCombatEngine() {
     return engine.value?.getUnitWorldPosition(unitId) ?? null;
   };
 
+  const moveUnitToWorld = (unitId: string, worldX: number, worldZ: number): void => {
+    engine.value?.moveUnitToWorld(unitId, worldX, worldZ);
+  };
+
+  const showMoveMarker = (worldX: number, worldZ: number): void => {
+    engine.value?.showMoveMarker(worldX, worldZ);
+  };
+
+  const hideMoveMarker = (): void => {
+    engine.value?.hideMoveMarker();
+  };
+
+  const showPlacementPreview = (
+    modelPath: string | null,
+    tileWidth: number,
+    tileHeight: number,
+    worldX: number,
+    worldZ: number,
+    valid: boolean
+  ): void => {
+    engine.value?.showPlacementPreview(modelPath, tileWidth, tileHeight, worldX, worldZ, valid);
+  };
+
+  const updatePlacementPreview = (worldX: number, worldZ: number, valid: boolean): void => {
+    engine.value?.updatePlacementPreview(worldX, worldZ, valid);
+  };
+
+  const hidePlacementPreview = (): void => {
+    engine.value?.hidePlacementPreview();
+  };
+
+  /**
+   * Preload a model for faster preview loading during drag
+   */
+  const preloadModel = async (modelPath: string): Promise<void> => {
+    await engine.value?.preloadModel(modelPath);
+  };
+
+  /**
+   * Preload multiple models at once
+   */
+  const preloadModels = async (modelPaths: string[]): Promise<void> => {
+    await engine.value?.preloadModels(modelPaths);
+  };
+
   /**
    * Get all unit IDs in the arena
    */
   const getAllUnitIds = (): string[] => {
     return engine.value?.getAllUnitIds() ?? [];
+  };
+
+  const getBuildingFootprint = (
+    buildingId: string
+  ): { x: number; z: number; width: number; height: number } | null => {
+    return engine.value?.getBuildingFootprint(buildingId) ?? null;
+  };
+
+  const destroyBuilding = (buildingId: string): void => {
+    engine.value?.destroyBuilding(buildingId);
   };
 
   /**
@@ -603,6 +693,9 @@ export function useCombatEngine() {
     isLoading: readonly(isLoading),
     isConnected: readonly(isConnected),
     currentBattleId: readonly(currentBattleId),
+    currentNodeId: readonly(currentNodeId),
+    currentPlayerId: readonly(currentPlayerId),
+    combatPhase: readonly(combatPhase),
     combatResult: readonly(combatResult),
     error: readonly(error),
 
@@ -664,6 +757,16 @@ export function useCombatEngine() {
     forceAttackUnit,
     getUnitWorldPosition,
     getAllUnitIds,
+    getBuildingFootprint,
+    destroyBuilding,
+    moveUnitToWorld,
+    showMoveMarker,
+    hideMoveMarker,
+    showPlacementPreview,
+    updatePlacementPreview,
+    hidePlacementPreview,
+    preloadModel,
+    preloadModels,
 
     // Kill commands
     issueKillCommand,

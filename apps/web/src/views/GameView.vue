@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { GameEngine, ZOOM_LEVELS, type ZoomLevel, type ConnectionData, type TransferData, type LoadProgressCallback } from '../game';
 import { NodeType, NodeStatus, RoadType, NODE_TYPE_CONFIGS, STARTING_RESOURCES, NODE_BASE_STORAGE, NODE_BASE_UPKEEP, NODE_CLAIM_COST_BY_TIER, nodeRequiresCore, getNodeProduction, nodeHasProduction, nodeSupportsCrafting, RESOURCES, getCraftingProgress, type MapNode, type ResourceStorage, type ItemStorage, type CraftingQueueItem, type CraftingQueue, type TileType } from '@nova-fall/shared';
 import PlayerResourcesPanel, { type UpkeepBreakdownItem, type IncomeBreakdownItem } from '@/components/game/PlayerResourcesPanel.vue';
@@ -32,6 +32,7 @@ const props = defineProps<{
 }>();
 
 const router = useRouter();
+const route = useRoute();
 const gameStore = useGameStore();
 const authStore = useAuthStore();
 const toastStore = useToastStore();
@@ -51,7 +52,9 @@ const isShopOpen = ref(false);
 const isCraftingOpen = ref(false);
 const isBlueprintLearnOpen = ref(false);
 const selectedBlueprintItemId = ref<string | null>(null);
-const inCombatView = ref(false);
+// Initialize combat view state from URL to avoid flash of tactical view on refresh
+const inCombatView = ref(route.query.view === 'combat');
+const combatNodeId = ref<string | null>((route.query.nodeId as string) || null);
 const combatViewRef = ref<InstanceType<typeof CombatView> | null>(null);
 
 // Map loading state
@@ -714,6 +717,16 @@ onMounted(async () => {
       engine.value.setPlayerNames(extractPlayerNames(nodes));
     }
   }
+
+  // Restore combat view with persisted node (after data is loaded)
+  if (route.query.view === 'combat' && combatNodeId.value) {
+    // Capture the nodeId before the timeout to avoid non-null assertion
+    const nodeIdToRestore = combatNodeId.value;
+    // Defer entering combat to ensure CombatView is mounted and node data is loaded
+    setTimeout(() => {
+      handleEnterCombat(nodeIdToRestore);
+    }, 100);
+  }
 });
 
 // Handle returning to lobby after game ends
@@ -792,6 +805,28 @@ watch(
     }
   },
   { immediate: true }
+);
+
+// Watch inCombatView and combatNodeId to update URL query params for view persistence across refreshes
+watch(
+  [inCombatView, combatNodeId],
+  ([isInCombat, nodeId]) => {
+    const currentView = route.query.view;
+    const currentNodeId = route.query.nodeId;
+    const newView = isInCombat ? 'combat' : undefined;
+    const newNodeId = isInCombat ? nodeId : undefined;
+
+    // Only update if values actually changed to avoid unnecessary navigation
+    if ((currentView === 'combat') !== isInCombat || currentNodeId !== newNodeId) {
+      router.replace({
+        query: {
+          ...route.query,
+          view: newView,
+          nodeId: newNodeId,
+        },
+      });
+    }
+  }
 );
 
 function handleZoomIn() {
@@ -879,8 +914,11 @@ async function handleSignOut() {
   window.location.href = '/';
 }
 
-function handleEnterCombat() {
-  if (!primarySelectedNode.value) return;
+function handleEnterCombat(nodeId?: string) {
+  const targetNodeId = nodeId || primarySelectedNode.value?.id;
+  const targetNode = targetNodeId ? gameStore.getNode(targetNodeId) : primarySelectedNode.value;
+
+  if (!targetNode) return;
 
   const playerId = authStore.user?.playerId;
   if (!playerId) {
@@ -893,8 +931,8 @@ function handleEnterCombat() {
     battleId: `test-battle-${Date.now()}`,
     attackerId: 'attacker-1',
     defenderId: playerId,
-    nodeId: primarySelectedNode.value.id,
-    nodeType: primarySelectedNode.value.type,
+    nodeId: targetNode.id,
+    nodeType: targetNode.type,
     arenaLayout: Array(40).fill(null).map(() => Array(40).fill('walkable')) as TileType[][],
     attackerUnits: [{ unitTypeId: 'militia', count: 10 }],
     defenderUnits: [{ unitTypeId: 'militia', count: 5, deployed: true }],
@@ -902,6 +940,9 @@ function handleEnterCombat() {
     hqMaxHealth: 10000,
     combatDuration: 1800,
   };
+
+  // Store the combat node ID for URL persistence
+  combatNodeId.value = targetNode.id;
 
   // Close the node details panel and enter combat view
   selectedNodeIds.value = [];
@@ -911,6 +952,7 @@ function handleEnterCombat() {
 
 function handleExitCombat() {
   inCombatView.value = false;
+  combatNodeId.value = null;
   combatViewRef.value?.exitCombat();
 }
 
@@ -2055,7 +2097,7 @@ function handleBlueprintLearned(storage: Record<string, number>) {
               </button>
               <button
                 class="w-full py-2 px-4 bg-purple-600 hover:bg-purple-500 text-white rounded text-sm font-medium transition-colors"
-                @click="handleEnterCombat"
+                @click="handleEnterCombat()"
               >
                 Combat View
               </button>

@@ -62,8 +62,9 @@ const activeGroupMetrics = computed(() => {
 
 watchEffect(() => {
   if (!groupIds.value.length) return;
-  if (!groupIds.value.includes(selectedGroup.value)) {
-    selectedGroup.value = groupIds.value[0];
+  const firstGroup = groupIds.value[0];
+  if (firstGroup && !groupIds.value.includes(selectedGroup.value)) {
+    selectedGroup.value = firstGroup;
   }
 });
 

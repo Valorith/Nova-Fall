@@ -1,7 +1,34 @@
 import { useDebugStore } from '@/stores/debug';
 import { useGameStore } from '@/stores/game';
-import { useCombatEngine } from '@/composables/useCombatEngine';
 import { useSessionStore } from '@/stores/session';
+
+// Type for combat data provider to avoid circular dependency with useCombatEngine
+export interface CombatDataProvider {
+  isActive: { value: boolean };
+  currentBattleId: { value: string | null };
+  getCombatEntitySummary: () => {
+    units: { total: number; attackers: number; defenders: number; dead: number };
+    buildings: { total: number };
+    dev: { units: number; buildings: number };
+  };
+}
+
+// Registered combat data provider (set by useCombatEngine)
+let combatDataProvider: CombatDataProvider | null = null;
+
+/**
+ * Register a combat data provider to avoid circular imports
+ */
+export function registerCombatDataProvider(provider: CombatDataProvider): void {
+  combatDataProvider = provider;
+}
+
+/**
+ * Unregister the combat data provider
+ */
+export function unregisterCombatDataProvider(): void {
+  combatDataProvider = null;
+}
 
 let initialized = false;
 let rafId: number | null = null;
@@ -34,9 +61,10 @@ export function initMetricsTracker(): void {
   const debugStore = useDebugStore();
   const gameStore = useGameStore();
   const sessionStore = useSessionStore();
-  const combatEngine = useCombatEngine();
 
-  debugStore.setMetric('usage', 'view', combatEngine.isActive.value ? 'combat' : 'map', {
+  // Get initial view state from registered provider (may not be registered yet)
+  const initialView = combatDataProvider?.isActive.value ? 'combat' : 'map';
+  debugStore.setMetric('usage', 'view', initialView, {
     label: 'Active view',
   });
 
@@ -49,7 +77,9 @@ export function initMetricsTracker(): void {
     const deltaSeconds = Math.max((now - lastSampleTime) / 1000, 0.5);
     lastSampleTime = now;
 
-    debugStore.setMetric('usage', 'view', combatEngine.isActive.value ? 'combat' : 'map', {
+    // Use registered combat data provider (safe if not yet registered)
+    const isInCombat = combatDataProvider?.isActive.value ?? false;
+    debugStore.setMetric('usage', 'view', isInCombat ? 'combat' : 'map', {
       label: 'Active view',
     });
 
@@ -80,7 +110,12 @@ export function initMetricsTracker(): void {
       trackHistory: true,
     });
 
-    const combatSummary = combatEngine.getCombatEntitySummary();
+    // Get combat summary from registered provider (use defaults if not registered)
+    const combatSummary = combatDataProvider?.getCombatEntitySummary() ?? {
+      units: { total: 0, attackers: 0, defenders: 0, dead: 0 },
+      buildings: { total: 0 },
+      dev: { units: 0, buildings: 0 },
+    };
     debugStore.setMetric('combat', 'unitsTotal', combatSummary.units.total, {
       label: 'Units',
       trackHistory: true,
@@ -102,10 +137,10 @@ export function initMetricsTracker(): void {
       trackHistory: true,
     });
 
-    debugStore.setMetric('usage', 'battleId', combatEngine.currentBattleId.value ?? '-', {
+    debugStore.setMetric('usage', 'battleId', combatDataProvider?.currentBattleId.value ?? '-', {
       label: 'Battle ID',
     });
-    debugStore.setMetric('usage', 'combatActive', combatEngine.isActive.value, {
+    debugStore.setMetric('usage', 'combatActive', isInCombat, {
       label: 'Combat active',
       trackHistory: true,
     });

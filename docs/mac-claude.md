@@ -25,9 +25,9 @@ Before starting ANY work session, you MUST read these files:
 
 ### Active Feature Plans
 
-| File                                   | Purpose                                    | Status      |
-| -------------------------------------- | ------------------------------------------ | ----------- |
-| `docs/TURRET-ATTACK-SYSTEM-PLAN.md`    | Turret rotation, lasers, force attack, UI  | In Progress |
+| File                                | Purpose                                   | Status      |
+| ----------------------------------- | ----------------------------------------- | ----------- |
+| `docs/TURRET-ATTACK-SYSTEM-PLAN.md` | Turret rotation, lasers, force attack, UI | In Progress |
 
 ---
 
@@ -41,18 +41,18 @@ This project runs on macOS. Claude Code runs in the same environment as the dev 
 
 All pnpm/npm commands work normally:
 
-| Command | What it does |
-|---------|--------------|
-| `pnpm install` | Install/update dependencies |
-| `pnpm dev` | Start development servers |
-| `pnpm build` | Build all packages |
-| `pnpm typecheck` | Run TypeScript compiler |
-| `pnpm lint` / `pnpm lint:fix` | Run ESLint |
-| `pnpm test` | Run tests |
-| `pnpm db:generate` | Regenerate Prisma client |
-| `pnpm db:migrate` | Apply database migrations |
-| `pnpm db:seed` | Seed the database |
-| `pnpm db:reseed-map` | Reseed map nodes only |
+| Command                       | What it does                |
+| ----------------------------- | --------------------------- |
+| `pnpm install`                | Install/update dependencies |
+| `pnpm dev`                    | Start development servers   |
+| `pnpm build`                  | Build all packages          |
+| `pnpm typecheck`              | Run TypeScript compiler     |
+| `pnpm lint` / `pnpm lint:fix` | Run ESLint                  |
+| `pnpm test`                   | Run tests                   |
+| `pnpm db:generate`            | Regenerate Prisma client    |
+| `pnpm db:migrate`             | Apply database migrations   |
+| `pnpm db:seed`                | Seed the database           |
+| `pnpm db:reseed-map`          | Reseed map nodes only       |
 
 #### Initial Setup (if needed)
 
@@ -80,19 +80,19 @@ These tables contain manually configured game data that takes significant time t
 
 #### ❌ NEVER suggest these commands for routine work:
 
-| Command | Why it's dangerous |
-|---------|-------------------|
-| `prisma migrate reset` | Drops ALL tables including global data |
-| `pnpm db:reset` | Same as above - wipes everything |
-| Deleting/recreating the database | Loses all configuration |
+| Command                          | Why it's dangerous                     |
+| -------------------------------- | -------------------------------------- |
+| `prisma migrate reset`           | Drops ALL tables including global data |
+| `pnpm db:reset`                  | Same as above - wipes everything       |
+| Deleting/recreating the database | Loses all configuration                |
 
 #### ✅ SAFE commands for routine workflow:
 
-| Command | What it does |
-|---------|--------------|
+| Command              | What it does                                           |
+| -------------------- | ------------------------------------------------------ |
 | `pnpm db:reseed-map` | Reseeds map nodes only, **preserves items/blueprints** |
-| `pnpm db:migrate` | Applies new migrations without data loss |
-| `pnpm db:generate` | Regenerates Prisma client (no data changes) |
+| `pnpm db:migrate`    | Applies new migrations without data loss               |
+| `pnpm db:generate`   | Regenerates Prisma client (no data changes)            |
 
 #### 🚨 Before suggesting ANY database command, ask yourself:
 
@@ -103,6 +103,7 @@ These tables contain manually configured game data that takes significant time t
 #### When full reset is truly needed (rare):
 
 Only suggest `prisma migrate reset` when:
+
 - Schema changes require it (breaking migration)
 - User explicitly requests full wipe
 - **ALWAYS warn the user** that ItemDefinition and Blueprint data will be lost
@@ -271,14 +272,14 @@ Examples:
 
 <!-- UPDATE THIS SECTION AT THE END OF EVERY SESSION -->
 
-| Field              | Value                                     |
-| ------------------ | ----------------------------------------- |
-| **Current Phase**  | Phase 4 - Combat System                   |
-| **Phase Progress** | AI Editor polished, Scout/Tank presets added |
-| **Current Task**   | Add barrelOffsetY config field, then continue 4.3 |
-| **Blockers**       | None                                      |
-| **Last Session**   | Session 52 - 2026-01-13                   |
-| **Last Updated**   | 2026-01-13                                |
+| Field              | Value                                                |
+| ------------------ | ---------------------------------------------------- |
+| **Current Phase**  | Phase 4 - Combat System                              |
+| **Phase Progress** | Model preview, combat persistence, dev tools updates |
+| **Current Task**   | Verify turret firing on moving targets               |
+| **Blockers**       | None                                                 |
+| **Last Session**   | Session 55 - 2026-01-22                              |
+| **Last Updated**   | 2026-01-22                                           |
 
 ---
 
@@ -286,88 +287,89 @@ Examples:
 
 Record ALL significant decisions here. If it's not documented, it didn't happen.
 
-| Date       | Decision                                  | Rationale                                          | Approved By |
-| ---------- | ----------------------------------------- | -------------------------------------------------- | ----------- |
-| 2025-01-04 | 100 nodes for MVP map                     | Balance between scope and playability              | User        |
-| 2025-01-04 | 24h ± 4h random attack prep time          | Strategic preparation without being instant        | User        |
-| 2025-01-04 | 30 minute combat window                   | Long enough for tactics, short enough for sessions | User        |
-| 2025-01-04 | 3-day post-battle cooldown                | Prevents griefing, allows recovery                 | User        |
-| 2025-01-04 | Discord + Google OAuth                    | Two popular options, both free                     | User        |
-| 2025-01-04 | 1000 Credits + 100 Iron + 50 Energy start | Reasonable starting resources                      | User        |
-| 2025-01-04 | Infrastructure transfers on capture       | Meaningful territory control                       | User        |
-| 2025-01-04 | Defending units retreat to adjacent node  | Prevents total loss, allows recovery               | User        |
-| 2026-01-04 | pnpm 9.15.4 as package manager            | Stable version, efficient workspace support        | Claude      |
-| 2026-01-04 | ESLint flat config format                 | Modern approach, better TypeScript integration     | Claude      |
-| 2026-01-04 | Husky + lint-staged for pre-commit        | Industry standard, ensures code quality            | Claude      |
-| 2026-01-05 | Hexagon nodes with connection faces       | Visual clarity for node connections                | User        |
-| 2026-01-04 | vue-tsc 2.2.0                             | Compatible with TypeScript 5.9+                    | Claude      |
-| 2026-01-06 | Section-level verification tasks          | Lightweight testing before moving to next feature  | User        |
-| 2026-01-06 | Hex grid with terrain tiles               | Full hex map, nodes + terrain, no whitespace       | User        |
-| 2026-01-06 | RenderTexture caching for map rendering   | 1000+ objects → 2 sprites, critical for performance| Claude      |
-| 2026-01-06 | 1000 nodes for development testing        | Stress test rendering, user requested scale        | User        |
-| 2026-01-06 | Default map is 4-player (1000 nodes)      | Capitals at corners, balanced starting positions   | User        |
-| 2026-01-06 | Future maps: variable sizes/player counts | Different configurations for 2, 6, 8+ players      | User        |
-| 2026-01-06 | Node color shows ownership only           | Clear territory visualization, type in panel       | User        |
-| 2026-01-06 | Capitals at grid corners                  | Fair starting positions, max distance between HQs  | User        |
-| 2026-01-06 | ~15 starting nodes per player             | BFS from HQ, enough to develop with room to expand | User        |
-| 2026-01-06 | Golden ratio hash for player colors       | Ensures distinct colors even for similar IDs       | Claude      |
-| 2026-01-06 | Default zoom 0.55 (Regional View)         | Map fills viewport on load, better first impression| User        |
-| 2026-01-06 | Thematic faction names                    | Sci-fi colonization theme (Helios, Cryo, etc.)     | User        |
-| 2026-01-06 | Multi-session game with lobby system      | Transform from shared world to session-based games | User        |
-| 2026-01-06 | Two game types: KOTH and Domination       | KOTH: 48h crown hold; Domination: last HQ standing | User        |
-| 2026-01-06 | 2 player minimum to start games           | Prevents single-player games, ensures competition  | User        |
-| 2026-01-06 | One active game per player                | Simplifies resource/state management               | User        |
-| 2026-01-06 | Consolidated hourly economy tick          | Upkeep, income, and resource gen on single event   | User        |
-| 2026-01-06 | Shared package uses tsc (not tsup)        | ESM compatibility with .js extensions required     | Claude      |
-| 2026-01-06 | Removed 30s game tick (for now)           | Saves ~120 DB queries/hr; reintroduce for combat   | User        |
-| 2026-01-06 | Conditional tick strategy for combat      | Rapid ticks only when viewers present or combat active | User     |
-| 2026-01-06 | Redis-based session viewer tracking       | INCR/DECR counters for live player counts per session | Claude   |
-| 2026-01-06 | Global economy tick (all sessions)        | Single hourly tick processes all sessions at once    | User        |
-| 2026-01-07 | CROWN nodes reset on session end          | Prevents orphaned crown nodes from accumulating      | Claude      |
-| 2026-01-07 | Session-scoped crown detection            | Only use crownNodeId for session queries, not type   | Claude      |
-| 2026-01-07 | Market access via Trade Hub nodes only    | Thematic - trade hubs unlock commerce, not global    | User        |
-| 2026-01-07 | 4 Trade Hubs per quadrant (16 total)      | Even distribution, strategic resource placement      | User        |
-| 2026-01-07 | Trade Hub icon on map (money bag)         | Visual distinction for special node type             | User        |
-| 2026-01-07 | Real-time credits via economy:processed   | WebSocket event updates UI without page refresh      | Claude      |
-| 2026-01-07 | Transfer time: 1 min/node + 1 sec/resource | Both distance and quantity affect transfer duration  | User        |
-| 2026-01-07 | Transfer paths through owned nodes only   | Resources can't traverse neutral/enemy territory     | User        |
-| 2026-01-07 | Animated transfer flow lines on map       | Visual feedback showing resource movement direction  | User        |
-| 2026-01-07 | Single transfers job (removed from upkeep)| Prevents race condition causing double resource transfer | Claude   |
-| 2026-01-07 | WebSocket transfer:completed event        | Real-time UI updates without page refresh            | Claude      |
-| 2026-01-07 | Transfer animations private to owner      | Strategic - opponents can't see your resource movements | User     |
-| 2026-01-08 | Event-based victory conditions            | No polling; crown/HQ events trigger victory checks     | User        |
-| 2026-01-11 | shieldRange: 0=personal, >0=AOE           | Personal shield = extra HP, AOE protects nearby allies | User        |
-| 2026-01-08 | HQ only passive credit income (20/hr)     | All other credits come from trading/selling resources  | User        |
-| 2026-01-08 | Node core activation system               | Non-HQ/Crown nodes inactive until core installed       | User        |
-| 2026-01-08 | 8 node core types (one per node type)     | Solar Farm, Laboratory, Refinery, etc. - 100 credits each | User     |
-| 2026-01-08 | Cores purchased at HQ, transferred/installed | Cannot withdraw once installed, can destroy            | User        |
-| 2026-01-08 | New resources: Coal, Grain, Steel Bar     | Coal/Grain from Agricultural; Steel Bar crafted        | User        |
-| 2026-01-08 | Rename Iron → Iron Ore, reduce to 50/hr   | Clarity for crafting system                            | User        |
-| 2026-01-08 | MANUFACTURING_PLANT new node type         | Creates non-biological units/items with Factory core   | User        |
-| 2026-01-08 | Flexible node storage for any item type   | Supports resources, cores, crafted items               | User        |
-| 2026-01-08 | Reusable crafting UI component            | Left: recipes, Middle: materials, Right: controls      | User        |
-| 2026-01-08 | Refinery Complex for refinement recipes   | First recipe: 1 Iron Ore + 1 Coal = 1 Steel Bar        | User        |
-| 2026-01-08 | Unified ItemStorage type (items.ts)       | Generic Record<string, number> for any item category   | Claude      |
-| 2026-01-09 | Refinery has no passive production        | Only serves as crafting facility, no passive output    | User        |
-| 2026-01-09 | HOURLY_PRODUCTION in shared package       | Single source of truth for frontend and backend        | Claude      |
-| 2026-01-10 | NEVER wipe global tables in routine work  | ItemDefinition/Blueprint data is costly to recreate    | User        |
-| 2026-01-10 | Use db:reseed-map for map regeneration    | Preserves items/blueprints, only resets game nodes     | User        |
-| 2026-01-10 | CoreShopPanel fetches from ItemDefinition | Cores configured in Item Editor, not hardcoded         | User        |
-| 2026-01-10 | Blueprints filtered by learned status     | Only show unlearned or player-learned blueprints       | User        |
-| 2026-01-11 | Combat arena size 60x60 tiles (120m)      | 50% larger than initial 40x40 for better gameplay      | User        |
-| 2026-01-10 | Session-scoped learned blueprints         | Players learn blueprints per game session, not globally| Claude      |
-| 2026-01-10 | Harvesting efficiency: chance-based bonus | 10% per efficiency point for +1 extra resource         | User        |
-| 2026-01-10 | Quality colors follow MMORPG conventions  | Legendary=orange, Epic=purple, Rare=yellow, etc.       | Claude      |
-| 2026-01-10 | Buildings are items (like units)          | Manufactured at Manufacturing Plant, 3D placement in Phase 4 | User   |
-| 2026-01-10 | No building upgrades                      | Quality comes from blueprint tiers, not upgrade system | User        |
-| 2026-01-10 | Buildings have shield stat                | Same combat stats as units: health, shield, damage, etc. | User      |
-| 2026-01-11 | New blueprints require learning by default | More control over game progression                     | User        |
-| 2026-01-11 | Reuse unitStats field for buildings       | Same structure, avoids schema change                   | Claude      |
-| 2026-01-11 | Arena tile size 8m (was 2m)               | Larger arena feels better, 480m x 480m total           | User        |
-| 2026-01-11 | Unit tileSize configurable (1-10)         | Different unit types can have different footprints     | User        |
-| 2026-01-11 | Switched to macOS development             | Traveling with MacBook Pro                             | User        |
-| 2026-01-12 | barrelOffsetY config per building         | Allows per-turret barrel position tuning without code changes | User   |
-| 2026-01-13 | Dynamic node width for AI Editor layout   | Calculates width from label length to prevent overlap          | Claude |
+| Date       | Decision                                           | Rationale                                                     | Approved By |
+| ---------- | -------------------------------------------------- | ------------------------------------------------------------- | ----------- |
+| 2025-01-04 | 100 nodes for MVP map                              | Balance between scope and playability                         | User        |
+| 2025-01-04 | 24h ± 4h random attack prep time                   | Strategic preparation without being instant                   | User        |
+| 2025-01-04 | 30 minute combat window                            | Long enough for tactics, short enough for sessions            | User        |
+| 2025-01-04 | 3-day post-battle cooldown                         | Prevents griefing, allows recovery                            | User        |
+| 2025-01-04 | Discord + Google OAuth                             | Two popular options, both free                                | User        |
+| 2025-01-04 | 1000 Credits + 100 Iron + 50 Energy start          | Reasonable starting resources                                 | User        |
+| 2025-01-04 | Infrastructure transfers on capture                | Meaningful territory control                                  | User        |
+| 2025-01-04 | Defending units retreat to adjacent node           | Prevents total loss, allows recovery                          | User        |
+| 2026-01-04 | pnpm 9.15.4 as package manager                     | Stable version, efficient workspace support                   | Claude      |
+| 2026-01-04 | ESLint flat config format                          | Modern approach, better TypeScript integration                | Claude      |
+| 2026-01-04 | Husky + lint-staged for pre-commit                 | Industry standard, ensures code quality                       | Claude      |
+| 2026-01-05 | Hexagon nodes with connection faces                | Visual clarity for node connections                           | User        |
+| 2026-01-04 | vue-tsc 2.2.0                                      | Compatible with TypeScript 5.9+                               | Claude      |
+| 2026-01-06 | Section-level verification tasks                   | Lightweight testing before moving to next feature             | User        |
+| 2026-01-06 | Hex grid with terrain tiles                        | Full hex map, nodes + terrain, no whitespace                  | User        |
+| 2026-01-06 | RenderTexture caching for map rendering            | 1000+ objects → 2 sprites, critical for performance           | Claude      |
+| 2026-01-06 | 1000 nodes for development testing                 | Stress test rendering, user requested scale                   | User        |
+| 2026-01-06 | Default map is 4-player (1000 nodes)               | Capitals at corners, balanced starting positions              | User        |
+| 2026-01-06 | Future maps: variable sizes/player counts          | Different configurations for 2, 6, 8+ players                 | User        |
+| 2026-01-06 | Node color shows ownership only                    | Clear territory visualization, type in panel                  | User        |
+| 2026-01-06 | Capitals at grid corners                           | Fair starting positions, max distance between HQs             | User        |
+| 2026-01-06 | ~15 starting nodes per player                      | BFS from HQ, enough to develop with room to expand            | User        |
+| 2026-01-06 | Golden ratio hash for player colors                | Ensures distinct colors even for similar IDs                  | Claude      |
+| 2026-01-06 | Default zoom 0.55 (Regional View)                  | Map fills viewport on load, better first impression           | User        |
+| 2026-01-06 | Thematic faction names                             | Sci-fi colonization theme (Helios, Cryo, etc.)                | User        |
+| 2026-01-06 | Multi-session game with lobby system               | Transform from shared world to session-based games            | User        |
+| 2026-01-06 | Two game types: KOTH and Domination                | KOTH: 48h crown hold; Domination: last HQ standing            | User        |
+| 2026-01-06 | 2 player minimum to start games                    | Prevents single-player games, ensures competition             | User        |
+| 2026-01-06 | One active game per player                         | Simplifies resource/state management                          | User        |
+| 2026-01-06 | Consolidated hourly economy tick                   | Upkeep, income, and resource gen on single event              | User        |
+| 2026-01-06 | Shared package uses tsc (not tsup)                 | ESM compatibility with .js extensions required                | Claude      |
+| 2026-01-06 | Removed 30s game tick (for now)                    | Saves ~120 DB queries/hr; reintroduce for combat              | User        |
+| 2026-01-06 | Conditional tick strategy for combat               | Rapid ticks only when viewers present or combat active        | User        |
+| 2026-01-06 | Redis-based session viewer tracking                | INCR/DECR counters for live player counts per session         | Claude      |
+| 2026-01-06 | Global economy tick (all sessions)                 | Single hourly tick processes all sessions at once             | User        |
+| 2026-01-07 | CROWN nodes reset on session end                   | Prevents orphaned crown nodes from accumulating               | Claude      |
+| 2026-01-07 | Session-scoped crown detection                     | Only use crownNodeId for session queries, not type            | Claude      |
+| 2026-01-07 | Market access via Trade Hub nodes only             | Thematic - trade hubs unlock commerce, not global             | User        |
+| 2026-01-07 | 4 Trade Hubs per quadrant (16 total)               | Even distribution, strategic resource placement               | User        |
+| 2026-01-07 | Trade Hub icon on map (money bag)                  | Visual distinction for special node type                      | User        |
+| 2026-01-07 | Real-time credits via economy:processed            | WebSocket event updates UI without page refresh               | Claude      |
+| 2026-01-07 | Transfer time: 1 min/node + 1 sec/resource         | Both distance and quantity affect transfer duration           | User        |
+| 2026-01-07 | Transfer paths through owned nodes only            | Resources can't traverse neutral/enemy territory              | User        |
+| 2026-01-07 | Animated transfer flow lines on map                | Visual feedback showing resource movement direction           | User        |
+| 2026-01-07 | Single transfers job (removed from upkeep)         | Prevents race condition causing double resource transfer      | Claude      |
+| 2026-01-07 | WebSocket transfer:completed event                 | Real-time UI updates without page refresh                     | Claude      |
+| 2026-01-07 | Transfer animations private to owner               | Strategic - opponents can't see your resource movements       | User        |
+| 2026-01-08 | Event-based victory conditions                     | No polling; crown/HQ events trigger victory checks            | User        |
+| 2026-01-11 | shieldRange: 0=personal, >0=AOE                    | Personal shield = extra HP, AOE protects nearby allies        | User        |
+| 2026-01-08 | HQ only passive credit income (20/hr)              | All other credits come from trading/selling resources         | User        |
+| 2026-01-08 | Node core activation system                        | Non-HQ/Crown nodes inactive until core installed              | User        |
+| 2026-01-08 | 8 node core types (one per node type)              | Solar Farm, Laboratory, Refinery, etc. - 100 credits each     | User        |
+| 2026-01-08 | Cores purchased at HQ, transferred/installed       | Cannot withdraw once installed, can destroy                   | User        |
+| 2026-01-08 | New resources: Coal, Grain, Steel Bar              | Coal/Grain from Agricultural; Steel Bar crafted               | User        |
+| 2026-01-08 | Rename Iron → Iron Ore, reduce to 50/hr            | Clarity for crafting system                                   | User        |
+| 2026-01-08 | MANUFACTURING_PLANT new node type                  | Creates non-biological units/items with Factory core          | User        |
+| 2026-01-08 | Flexible node storage for any item type            | Supports resources, cores, crafted items                      | User        |
+| 2026-01-08 | Reusable crafting UI component                     | Left: recipes, Middle: materials, Right: controls             | User        |
+| 2026-01-08 | Refinery Complex for refinement recipes            | First recipe: 1 Iron Ore + 1 Coal = 1 Steel Bar               | User        |
+| 2026-01-08 | Unified ItemStorage type (items.ts)                | Generic Record<string, number> for any item category          | Claude      |
+| 2026-01-09 | Refinery has no passive production                 | Only serves as crafting facility, no passive output           | User        |
+| 2026-01-09 | HOURLY_PRODUCTION in shared package                | Single source of truth for frontend and backend               | Claude      |
+| 2026-01-10 | NEVER wipe global tables in routine work           | ItemDefinition/Blueprint data is costly to recreate           | User        |
+| 2026-01-10 | Use db:reseed-map for map regeneration             | Preserves items/blueprints, only resets game nodes            | User        |
+| 2026-01-10 | CoreShopPanel fetches from ItemDefinition          | Cores configured in Item Editor, not hardcoded                | User        |
+| 2026-01-10 | Blueprints filtered by learned status              | Only show unlearned or player-learned blueprints              | User        |
+| 2026-01-11 | Combat arena size 60x60 tiles (120m)               | 50% larger than initial 40x40 for better gameplay             | User        |
+| 2026-01-10 | Session-scoped learned blueprints                  | Players learn blueprints per game session, not globally       | Claude      |
+| 2026-01-10 | Harvesting efficiency: chance-based bonus          | 10% per efficiency point for +1 extra resource                | User        |
+| 2026-01-10 | Quality colors follow MMORPG conventions           | Legendary=orange, Epic=purple, Rare=yellow, etc.              | Claude      |
+| 2026-01-10 | Buildings are items (like units)                   | Manufactured at Manufacturing Plant, 3D placement in Phase 4  | User        |
+| 2026-01-10 | No building upgrades                               | Quality comes from blueprint tiers, not upgrade system        | User        |
+| 2026-01-10 | Buildings have shield stat                         | Same combat stats as units: health, shield, damage, etc.      | User        |
+| 2026-01-11 | New blueprints require learning by default         | More control over game progression                            | User        |
+| 2026-01-11 | Reuse unitStats field for buildings                | Same structure, avoids schema change                          | Claude      |
+| 2026-01-11 | Arena tile size 8m (was 2m)                        | Larger arena feels better, 480m x 480m total                  | User        |
+| 2026-01-11 | Unit tileSize configurable (1-10)                  | Different unit types can have different footprints            | User        |
+| 2026-01-11 | Switched to macOS development                      | Traveling with MacBook Pro                                    | User        |
+| 2026-01-12 | barrelOffsetY config per building                  | Allows per-turret barrel position tuning without code changes | User        |
+| 2026-01-13 | Dynamic node width for AI Editor layout            | Calculates width from label length to prevent overlap         | Claude      |
+| 2026-01-17 | Skip turret firing when barrelLinePosition missing | Prevents misaligned lasers until calibrated                   | User        |
 
 ---
 
@@ -504,5 +506,5 @@ Before marking ANY phase complete, verify:
 
 ---
 
-_Last Updated: 2026-01-13 (Session 52)_
-_Version: 2.0.6 (macOS)_
+_Last Updated: 2026-01-22 (Session 55)_
+_Version: 2.0.7 (macOS)_

@@ -57,23 +57,12 @@ function getViewerKey(sessionId: string): string {
   return `session:${sessionId}:viewers`;
 }
 
-// Increment viewer count for a session
-async function incrementViewers(sessionId: string): Promise<number> {
-  const count = await redis.incr(getViewerKey(sessionId));
-  logger.debug({ sessionId, count }, 'Viewer count incremented');
-  return count;
-}
-
-// Decrement viewer count for a session
-async function decrementViewers(sessionId: string): Promise<number> {
-  const key = getViewerKey(sessionId);
-  const count = await redis.decr(key);
-  // Ensure count doesn't go negative
-  if (count < 0) {
-    await redis.set(key, '0');
-    return 0;
-  }
-  logger.debug({ sessionId, count }, 'Viewer count decremented');
+// Update viewer count for a session based on room size
+async function updateViewerCount(sessionId: string): Promise<number> {
+  const room = io.sockets.adapter.rooms.get(`session:${sessionId}`);
+  const count = room?.size ?? 0;
+  await redis.set(getViewerKey(sessionId), count.toString());
+  logger.debug({ sessionId, count }, 'Viewer count updated');
   return count;
 }
 
@@ -193,7 +182,10 @@ redisSub.on('message', (channel, message) => {
         // Broadcast crafting completion to session
         if (data.sessionId) {
           io.to(`session:${data.sessionId}`).emit('crafting:completed', data);
-          logger.debug({ sessionId: data.sessionId, nodeId: data.nodeId }, 'Crafting completed event broadcast');
+          logger.debug(
+            { sessionId: data.sessionId, nodeId: data.nodeId },
+            'Crafting completed event broadcast'
+          );
         }
         break;
 
@@ -201,7 +193,10 @@ redisSub.on('message', (channel, message) => {
         // Broadcast victory event to session
         if (data.sessionId) {
           io.to(`session:${data.sessionId}`).emit('game:victory', data);
-          logger.info({ sessionId: data.sessionId, winnerId: data.winnerId }, 'Victory event broadcast');
+          logger.info(
+            { sessionId: data.sessionId, winnerId: data.winnerId },
+            'Victory event broadcast'
+          );
         }
         break;
 
@@ -209,7 +204,10 @@ redisSub.on('message', (channel, message) => {
         // Broadcast player elimination to session
         if (data.sessionId) {
           io.to(`session:${data.sessionId}`).emit('player:eliminated', data);
-          logger.info({ sessionId: data.sessionId, playerId: data.playerId }, 'Player eliminated event broadcast');
+          logger.info(
+            { sessionId: data.sessionId, playerId: data.playerId },
+            'Player eliminated event broadcast'
+          );
         }
         break;
 
@@ -239,10 +237,14 @@ redisSub.on('message', (channel, message) => {
         if (data.battleId && data.playerId) {
           // Send error only to the specific player
           const targetSocket = [...io.sockets.sockets.values()].find(
-            (s) => socketPlayers.get(s.id) === data.playerId && socketBattles.get(s.id) === data.battleId
+            (s) =>
+              socketPlayers.get(s.id) === data.playerId && socketBattles.get(s.id) === data.battleId
           );
           if (targetSocket) {
-            targetSocket.emit(COMBAT_EVENTS.COMBAT_ERROR, { message: data.message, code: data.code });
+            targetSocket.emit(COMBAT_EVENTS.COMBAT_ERROR, {
+              message: data.message,
+              code: data.code,
+            });
           }
         }
         break;
@@ -265,13 +267,13 @@ io.on('connection', (socket) => {
     const previousSession = socketSessions.get(socket.id);
     if (previousSession && previousSession !== sessionId) {
       socket.leave(`session:${previousSession}`);
-      await decrementViewers(previousSession);
+      await updateViewerCount(previousSession);
     }
 
     // Join new session
     socket.join(`session:${sessionId}`);
     socketSessions.set(socket.id, sessionId);
-    await incrementViewers(sessionId);
+    await updateViewerCount(sessionId);
     logger.info({ socketId: socket.id, sessionId }, 'Client joined session');
   });
 
@@ -280,7 +282,7 @@ io.on('connection', (socket) => {
     if (currentSession === sessionId) {
       socket.leave(`session:${sessionId}`);
       socketSessions.delete(socket.id);
-      await decrementViewers(sessionId);
+      await updateViewerCount(sessionId);
       logger.info({ socketId: socket.id, sessionId }, 'Client left session');
     }
   });
@@ -337,7 +339,10 @@ io.on('connection', (socket) => {
     logger.info({ socketId: socket.id, battleId, playerId }, 'Player joined combat battle');
 
     // Publish join event to Redis for combat server to handle
-    await redis.publish('combat:player_joined', JSON.stringify({ battleId, playerId, socketId: socket.id }));
+    await redis.publish(
+      'combat:player_joined',
+      JSON.stringify({ battleId, playerId, socketId: socket.id })
+    );
   });
 
   // Leave a combat battle
@@ -351,7 +356,10 @@ io.on('connection', (socket) => {
       logger.info({ socketId: socket.id, battleId, playerId }, 'Player left combat battle');
 
       // Publish leave event to Redis for combat server
-      await redis.publish('combat:player_left', JSON.stringify({ battleId, playerId, socketId: socket.id }));
+      await redis.publish(
+        'combat:player_left',
+        JSON.stringify({ battleId, playerId, socketId: socket.id })
+      );
     }
   });
 
@@ -361,18 +369,27 @@ io.on('connection', (socket) => {
     const playerId = socketPlayers.get(socket.id);
 
     if (!battleId || !playerId) {
-      socket.emit(COMBAT_EVENTS.COMBAT_ERROR, { message: 'Not in a battle', code: 'NOT_IN_BATTLE' });
+      socket.emit(COMBAT_EVENTS.COMBAT_ERROR, {
+        message: 'Not in a battle',
+        code: 'NOT_IN_BATTLE',
+      });
       return;
     }
 
     // Publish input to Redis for combat server to process
-    await redis.publish('combat:input', JSON.stringify({
-      battleId,
-      playerId,
-      input,
-    }));
+    await redis.publish(
+      'combat:input',
+      JSON.stringify({
+        battleId,
+        playerId,
+        input,
+      })
+    );
 
-    logger.debug({ socketId: socket.id, battleId, playerId, type: input.type }, 'Combat input received');
+    logger.debug(
+      { socketId: socket.id, battleId, playerId, type: input.type },
+      'Combat input received'
+    );
   });
 
   // Request current combat state (for reconnection)
@@ -381,11 +398,14 @@ io.on('connection', (socket) => {
     const playerId = socketPlayers.get(socket.id);
 
     // Publish state request to Redis for combat server
-    await redis.publish('combat:request_state', JSON.stringify({
-      battleId,
-      playerId,
-      socketId: socket.id,
-    }));
+    await redis.publish(
+      'combat:request_state',
+      JSON.stringify({
+        battleId,
+        playerId,
+        socketId: socket.id,
+      })
+    );
 
     logger.debug({ socketId: socket.id, battleId, playerId }, 'Combat state requested');
   });
@@ -394,7 +414,7 @@ io.on('connection', (socket) => {
     // Decrement viewer count if socket was in a session
     const sessionId = socketSessions.get(socket.id);
     if (sessionId) {
-      await decrementViewers(sessionId);
+      await updateViewerCount(sessionId);
       socketSessions.delete(socket.id);
     }
 
@@ -403,12 +423,15 @@ io.on('connection', (socket) => {
     const playerId = socketPlayers.get(socket.id);
     if (battleId && playerId) {
       // Publish disconnect event for combat server
-      await redis.publish('combat:player_disconnected', JSON.stringify({
-        battleId,
-        playerId,
-        socketId: socket.id,
-        reason,
-      }));
+      await redis.publish(
+        'combat:player_disconnected',
+        JSON.stringify({
+          battleId,
+          playerId,
+          socketId: socket.id,
+          reason,
+        })
+      );
       socketBattles.delete(socket.id);
     }
     socketPlayers.delete(socket.id);
