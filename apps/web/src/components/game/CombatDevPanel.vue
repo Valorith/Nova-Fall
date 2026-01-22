@@ -35,6 +35,7 @@ const {
   selectBuilding,
   deselectBuilding,
   getSelectedBuildingId,
+  getBuildingAtGridPosition,
   forceAttackGroundWorld,
   screenToWorld,
   issueKillCommand,
@@ -61,8 +62,10 @@ const selectedItem = ref<{
 const placementMode = ref(false);
 
 // Track placed buildings and their positions for click-to-select
-// Maps grid position "x,z" to building info (ID and definition)
-const placedBuildings = ref<Map<string, { id: string; def: DbBuildingDefinition }>>(new Map());
+// Maps building ID to building info including position and footprint
+const placedBuildings = ref<
+  Map<string, { id: string; def: DbBuildingDefinition; x: number; z: number }>
+>(new Map());
 
 // Track spawned units for kill commands
 // Maps unit ID to unit info
@@ -154,10 +157,14 @@ function handleArenaClick(event: MouseEvent) {
 
     const buildingDef = selectedItem.value.item as DbBuildingDefinition;
     const buildingId = devPlaceBuilding(buildingDef, position, selectedTeam.value);
-    // Track placed building for click-to-select
+    // Track placed building for click-to-select (store position for footprint checking)
     if (buildingId) {
-      const key = `${position.x},${position.z}`;
-      placedBuildings.value.set(key, { id: buildingId, def: buildingDef });
+      placedBuildings.value.set(buildingId, {
+        id: buildingId,
+        def: buildingDef,
+        x: position.x,
+        z: position.z,
+      });
     }
   }
 
@@ -181,18 +188,18 @@ function handleSelectionClick(event: MouseEvent) {
 
   getEngine()?.hideTargetRing();
 
-  // Check if there's a building at this position
-  const key = `${position.x},${position.z}`;
-  const buildingInfo = placedBuildings.value.get(key);
+  // Check if there's a building at this position (checks full footprint via engine)
+  const buildingInfo = getBuildingAtGridPosition(position.x, position.z);
 
   if (buildingInfo) {
-    // Select this building
+    // Select this building - deselect any unit first
     selectBuilding(buildingInfo.id);
     selectedPlacedBuildingId.value = buildingInfo.id;
     selectedTargetUnitId.value = null;
     selectedUnitId.value = null;
+    hideMoveMarker(); // Clear unit move marker
     // Check if building can attack (has range and damage)
-    const canAttack = buildingInfo.def.range > 0 && buildingInfo.def.damage > 0;
+    const canAttack = buildingInfo.range > 0 && buildingInfo.damage > 0;
     emit('attackableSelectionChange', canAttack);
     return;
   }

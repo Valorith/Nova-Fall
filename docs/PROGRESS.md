@@ -13,7 +13,7 @@
 | **Current Phase**      | Phase 4 - Combat System |
 | **Overall Progress**   | Phases 0-3 complete     |
 | **MVP Target Date**    | 2026-04-04 (3 months)   |
-| **Total Sessions**     | 53                      |
+| **Total Sessions**     | 56                      |
 
 ---
 
@@ -4395,4 +4395,86 @@ Instead of calculating laser origin/direction from rotations, the new system:
 
 ---
 
-_Last Updated: 2026-01-22 (Session 55 - Model Preview & Combat Persistence)_
+## Session 56 - 2026-01-22
+
+**Duration:** ~1 hour
+**Phase:** Phase 4 - Combat System
+**Focus:** Destruction animations for units and buildings
+
+### Completed Tasks
+
+**Destruction Animations (Task 4.2.6):**
+
+- [x] Building destruction animation sequence
+  - Shrink to 30% size over 1 second
+  - Sink 3 units into ground
+  - Fade out materials
+  - Auto-cleanup when animation completes
+- [x] Unit destruction animation sequence (completed from previous session context)
+  - Shrink to 30% size over 0.8 seconds
+  - Sink 2 units into ground
+  - Fade out materials
+- [x] Spark particle effects on death
+  - Replaced bubble-like particles with spark effects
+  - Used DynamicTexture for WebGL-compatible procedural texture
+  - Bright yellow-white to orange-red color gradient
+  - High velocity (6-18 emit power), strong gravity (-25 to -30)
+  - Short lifespan (0.15-0.7s) for snappy effect
+  - 80-150 particles per burst
+
+**Bug Fixes:**
+
+- [x] Fixed building selection for buildings placed from node storage
+  - Buildings now selectable by clicking anywhere in footprint
+  - Added `getBuildingAtGridPosition()` to CombatEngine
+  - Exposed through useCombatEngine composable
+- [x] Fixed WebGL texture errors
+  - Base64 PNG data URLs caused "bad image data" errors
+  - Replaced with DynamicTexture procedural gradients
+
+### Technical Details
+
+**Files Modified:**
+
+- `apps/web/src/game/combat/CombatEngine.ts`
+  - Added ParticleSystem import
+  - Added death animation fields to building data structure (deathProgress, deathStartTime)
+  - Modified `damageBuilding()` to start death animation
+  - Added `spawnBuildingDeathParticles()` with spark effects
+  - Added `updateBuildingDeathAnimations()` method
+  - Added `getBuildingAtGridPosition()` for footprint-based selection
+  - Integrated death animation update in render loop
+- `apps/web/src/game/combat/UnitManager.ts`
+  - Updated `spawnDeathParticles()` with spark effect parameters
+  - Fixed DynamicTexture usage for WebGL compatibility
+- `apps/web/src/components/game/CombatDevPanel.vue`
+  - Removed local building position tracking
+  - Now uses engine's `getBuildingAtGridPosition` for selection
+- `apps/web/src/composables/useCombatEngine.ts`
+  - Exposed `getBuildingAtGridPosition` method
+- `docs/DEVELOPMENT-PLAN.md`
+  - Marked "Destruction animation sequence" as complete
+
+### Decisions Made
+
+| Decision | Rationale |
+| -------- | --------- |
+| Use DynamicTexture for particle textures | Base64 data URLs cause WebGL errors; DynamicTexture is fully compatible |
+| Spark-like particle settings | User preferred sparks over bubbles - smaller, faster, brighter particles |
+| Footprint-based building selection | Click anywhere in building's tile footprint, not just mesh hit |
+
+### Notes
+
+- Section 4.2 Core Combat Mechanics is now fully complete
+- All lint and typecheck errors resolved
+- Ready for Section 4.2 verification testing
+
+### Next Session Plan
+
+1. Verify Section 4.2 (manual testing checklist)
+2. Begin Section 4.3 Full Combat Features
+3. A* manual orders implementation
+
+---
+
+_Last Updated: 2026-01-22 (Session 56 - Destruction Animations)_

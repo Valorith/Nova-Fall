@@ -532,6 +532,16 @@ export function useCombatEngine() {
   };
 
   /**
+   * Find a building at a grid position by checking footprints
+   */
+  const getBuildingAtGridPosition = (
+    gridX: number,
+    gridZ: number
+  ): { id: string; x: number; z: number; width: number; height: number; range: number; damage: number } | null => {
+    return engine.value?.getBuildingAtGridPosition(gridX, gridZ) ?? null;
+  };
+
+  /**
    * Force attack ground at grid position (snaps to tile center)
    */
   const forceAttackGround = (buildingId: string, position: ArenaPosition): boolean => {
@@ -749,6 +759,7 @@ export function useCombatEngine() {
     deselectBuilding,
     deselectAll,
     getSelectedBuildingId,
+    getBuildingAtGridPosition,
     forceAttackGround,
     forceAttackGroundWorld,
     screenToWorld,

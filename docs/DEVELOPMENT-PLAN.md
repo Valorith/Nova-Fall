@@ -1935,13 +1935,13 @@ The following combat prerequisites were completed in Phase 2.5:
   - [x] Hitscan weapon implementation
   - [x] Damage calculation with armor reduction
   - [x] Health tracking and death handling
-  - [ ] Damage numbers (floating text)
+  - [x] Damage numbers (floating text)
 
 - [x] **HQ health and destruction**
   - [x] HQ health bar UI (prominent display)
   - [x] Damage accumulation tracking
   - [x] Visual damage states (HEALTHY → DAMAGED → CRITICAL)
-  - [ ] Destruction animation sequence
+  - [x] Destruction animation sequence
   - [x] Victory condition detection (HQ destroyed)
 
 - [ ] **Verify Section 4.2:**
@@ -1969,11 +1969,11 @@ The following combat prerequisites were completed in Phase 2.5:
   - [ ] Combat simulation metrics (tick rate, input rate, state update rate)
   - [ ] Debug tab UI for metrics, logs, and filtering
 
-- [~] **Tower targeting and firing** (turret rotation/laser working, needs auto-targeting)
-  - [ ] Tower placement from defense state
-  - [ ] Auto-target nearest enemy in range
-  - [ ] Priority override (player selects target)
-  - [ ] Target cooldown to prevent flicker
+- [x] **Tower targeting and firing**
+  - [x] Tower placement from defense state
+  - [x] Auto-target nearest enemy in range
+  - [x] Priority override (player selects target)
+  - [x] Target cooldown to prevent flicker
   - [x] Range circle visualization
   - [x] Turret yaw rotation (horizontal aiming)
   - [x] Turret pitch rotation (barrel tilts to aim at ground)
@@ -1981,7 +1981,7 @@ The following combat prerequisites were completed in Phase 2.5:
   - [x] Force attack via Ctrl+Click/Right-Click
   - [x] Add `barrelOffsetY` field to BuildingDefinition schema (replaced by barrel line system)
 
-- [~] **Turret Barrel Line System** (rework for reliable laser alignment)
+- [x] **Turret Barrel Line System**
   - [x] Add barrel line positioning to ModelCalibrationPanel (draggable/positionable line)
   - [x] Parent barrel line to pitch mesh so it rotates with barrel
   - [x] Save barrel line local position (Vector3) to definition

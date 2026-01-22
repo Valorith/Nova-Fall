@@ -18,6 +18,8 @@ import {
   TransformNode,
   DynamicTexture,
   SceneLoader,
+  ParticleSystem,
+  Color4,
 } from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
 import type { Scene } from '@babylonjs/core';
@@ -68,6 +70,10 @@ interface UnitVisual {
 
   // Spawn animation progress (0 to 1)
   spawnProgress: number;
+
+  // Death animation progress (0 to 1, null if not dying)
+  deathProgress: number | null;
+  deathStartTime: number | null;
 }
 
 export class UnitManager {
@@ -405,6 +411,8 @@ export class UnitManager {
       attackSpeed: 0, // Will be set from unit definition
       lastFireTime: 0,
       spawnProgress: unitState.state === UnitState.SPAWNING ? 0.1 : 1.0,
+      deathProgress: null,
+      deathStartTime: null,
     };
 
     // Draw initial health bar
@@ -713,7 +721,102 @@ export class UnitManager {
           }
         }
       }
+
+      // Animate dying units
+      if (visual.state === UnitState.DEAD && visual.deathProgress !== null) {
+        const deathDuration = 0.8; // seconds
+        const elapsed = (performance.now() - (visual.deathStartTime ?? 0)) / 1000;
+        visual.deathProgress = Math.min(1, elapsed / deathDuration);
+
+        // Shrink and sink into ground
+        const scale = 1 - visual.deathProgress * 0.7; // Shrink to 30% size
+        const sinkAmount = visual.deathProgress * 2; // Sink 2 units into ground
+
+        visual.container.scaling = new Vector3(scale, scale, scale);
+        visual.container.position.y = visual.currentPosition.y - sinkAmount;
+
+        // Fade out all meshes
+        const alpha = 1 - visual.deathProgress;
+        visual.container.getChildMeshes().forEach((mesh) => {
+          if (mesh.material && 'alpha' in mesh.material) {
+            (mesh.material as StandardMaterial).alpha = alpha;
+          }
+        });
+
+        // Remove when animation completes
+        if (visual.deathProgress >= 1) {
+          this.removeUnit(visual.id);
+        }
+      }
     }
+  }
+
+  /**
+   * Spawn death particles at unit position
+   */
+  private spawnDeathParticles(visual: UnitVisual): void {
+    const particleSystem = new ParticleSystem('deathParticles', 200, this.scene);
+
+    // Create a small bright dot texture for sparks
+    const particleTexture = new DynamicTexture('deathParticleTexture', 32, this.scene, false);
+    const ctx = particleTexture.getContext() as CanvasRenderingContext2D;
+
+    // Draw a small bright core with quick falloff (spark-like)
+    const centerX = 16;
+    const centerY = 16;
+    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 16);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.2, 'rgba(255, 255, 200, 0.9)');
+    gradient.addColorStop(0.5, 'rgba(255, 200, 100, 0.4)');
+    gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 32, 32);
+    particleTexture.update();
+
+    particleSystem.particleTexture = particleTexture;
+
+    // Spark settings - small, fast, short-lived
+    particleSystem.emitter = visual.container.position.clone();
+    particleSystem.minEmitBox = new Vector3(-0.3, 0.5, -0.3);
+    particleSystem.maxEmitBox = new Vector3(0.3, 1.5, 0.3);
+
+    // Bright spark colors: yellow/white core fading to orange/red
+    particleSystem.color1 = new Color4(1, 1, 0.8, 1); // Bright yellow-white
+    particleSystem.color2 = new Color4(1, 0.6, 0.2, 1); // Orange
+    particleSystem.colorDead = new Color4(1, 0.2, 0, 0); // Fade to red then transparent
+
+    // Small particles for sparks
+    particleSystem.minSize = 0.08;
+    particleSystem.maxSize = 0.25;
+
+    // Short lifespan for snappy sparks
+    particleSystem.minLifeTime = 0.15;
+    particleSystem.maxLifeTime = 0.5;
+
+    // Burst of sparks
+    particleSystem.emitRate = 500;
+    particleSystem.manualEmitCount = 80;
+
+    // Spray in all directions with upward bias
+    particleSystem.direction1 = new Vector3(-5, 3, -5);
+    particleSystem.direction2 = new Vector3(5, 10, 5);
+
+    // Strong gravity pulls sparks down in arc
+    particleSystem.gravity = new Vector3(0, -25, 0);
+
+    // High velocity for spark spray
+    particleSystem.minEmitPower = 6;
+    particleSystem.maxEmitPower = 12;
+
+    // Add some rotation for visual variety
+    particleSystem.minAngularSpeed = -8;
+    particleSystem.maxAngularSpeed = 8;
+
+    // Start and auto-dispose
+    particleSystem.start();
+    particleSystem.targetStopDuration = 0.1;
+    particleSystem.disposeOnStop = true;
   }
 
   /**
@@ -854,19 +957,12 @@ export class UnitManager {
       visual.healthBarPlane.isVisible = false;
       visual.cooldownBarPlane.isVisible = false;
 
-      // Apply dead material to all meshes in the container
-      visual.container.getChildMeshes().forEach((mesh) => {
-        if (mesh.material) {
-          mesh.material = this.deadMaterial;
-        }
-      });
-      // Also apply to placeholder mesh if it's still visible
-      visual.mesh.material = this.deadMaterial;
+      // Start death animation
+      visual.deathProgress = 0;
+      visual.deathStartTime = performance.now();
 
-      // Schedule removal after 2 seconds
-      setTimeout(() => {
-        this.removeUnit(unitId);
-      }, 2000);
+      // Spawn death particles
+      this.spawnDeathParticles(visual);
 
       return { alive: false, remainingHealth: 0 };
     }

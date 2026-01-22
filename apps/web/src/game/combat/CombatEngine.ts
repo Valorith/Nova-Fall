@@ -32,6 +32,7 @@ import {
   SceneLoader,
   TransformNode,
   DynamicTexture,
+  ParticleSystem,
 } from '@babylonjs/core';
 import '@babylonjs/loaders/glTF'; // Required for .glb loading
 import type { CombatState, CombatSetup, ArenaPosition, CombatUnitState } from '@nova-fall/shared';
@@ -151,6 +152,9 @@ export class CombatEngine {
       lastFireTime: number; // Timestamp of last shot
       autoTargetId: string | null;
       autoTargetSwitchAt: number;
+      // Death animation state
+      deathProgress: number | null; // 0 to 1 during death animation
+      deathStartTime: number | null; // performance.now() when death started
     }
   >();
 
@@ -229,6 +233,16 @@ export class CombatEngine {
       damage: number;
     }
   >();
+
+  // Active floating damage numbers
+  private activeDamageNumbers: {
+    mesh: Mesh;
+    texture: DynamicTexture;
+    startTime: number;
+    startY: number;
+    duration: number; // seconds
+    floatDistance: number; // meters to float up
+  }[] = [];
 
   constructor(canvas: HTMLCanvasElement, options: CombatEngineOptions = {}) {
     this.canvas = canvas;
@@ -435,6 +449,12 @@ export class CombatEngine {
       // Update cooldown bars
       this.updateAllBuildingCooldownBars();
       this.unitManager?.updateAllCooldownBars();
+
+      // Update floating damage numbers
+      this.updateDamageNumbers(deltaTime);
+
+      // Update building death animations
+      this.updateBuildingDeathAnimations();
 
       if (now - this.lastPerfSampleTime >= 250) {
         this.performanceMonitor.recordFrame(now);
@@ -1284,6 +1304,9 @@ export class CombatEngine {
       lastFireTime: 0, // Never fired yet
       autoTargetId: null,
       autoTargetSwitchAt: 0,
+      // Death animation state (null = alive)
+      deathProgress: null,
+      deathStartTime: null,
     });
 
     // Draw initial bars
@@ -2289,6 +2312,36 @@ export class CombatEngine {
    */
   public getSelectedBuildingId(): string | null {
     return this.selectedBuildingId;
+  }
+
+  /**
+   * Find a building at a grid position by checking if the position falls within any building's footprint
+   * Returns the building ID and info if found, null otherwise
+   */
+  public getBuildingAtGridPosition(
+    gridX: number,
+    gridZ: number
+  ): { id: string; x: number; z: number; width: number; height: number; range: number; damage: number } | null {
+    for (const [buildingId, building] of this.buildingData) {
+      // Check if click position is within building's footprint
+      if (
+        gridX >= building.x &&
+        gridX < building.x + building.tileWidth &&
+        gridZ >= building.z &&
+        gridZ < building.z + building.tileHeight
+      ) {
+        return {
+          id: buildingId,
+          x: building.x,
+          z: building.z,
+          width: building.tileWidth,
+          height: building.tileHeight,
+          range: building.range,
+          damage: building.damage,
+        };
+      }
+    }
+    return null;
   }
 
   // ==================== SELECTION RING ====================
@@ -3890,6 +3943,128 @@ export class CombatEngine {
     }
   }
 
+  // ==================== DAMAGE NUMBERS ====================
+
+  /**
+   * Spawn a floating damage number at the given world position
+   * The number floats upward and fades out over time
+   */
+  public spawnDamageNumber(
+    damage: number,
+    worldX: number,
+    worldY: number,
+    worldZ: number,
+    color = '#ff4444',
+    isCritical = false
+  ): void {
+    const duration = 1.2; // seconds
+    const floatDistance = 4; // meters
+    const size = isCritical ? 8.0 : 5.0; // World units (meters)
+
+    // Create dynamic texture for the text (higher res for crisp text)
+    const textureWidth = 256;
+    const textureHeight = 128;
+    const texture = new DynamicTexture(
+      `damage_tex_${Date.now()}_${Math.random()}`,
+      { width: textureWidth, height: textureHeight },
+      this.scene,
+      false
+    );
+
+    // Draw the damage text
+    const ctx = texture.getContext() as CanvasRenderingContext2D;
+    ctx.clearRect(0, 0, textureWidth, textureHeight);
+
+    // Text styling - large bold font
+    const fontSize = isCritical ? 80 : 64;
+    ctx.font = `bold ${fontSize}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Draw outline for visibility (thicker for larger text)
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 8;
+    const damageText = Math.round(damage).toString();
+    ctx.strokeText(damageText, textureWidth / 2, textureHeight / 2);
+
+    // Draw main text
+    ctx.fillStyle = color;
+    ctx.fillText(damageText, textureWidth / 2, textureHeight / 2);
+
+    texture.update();
+
+    // Create material
+    const material = new StandardMaterial(`damage_mat_${Date.now()}`, this.scene);
+    material.diffuseTexture = texture;
+    material.emissiveTexture = texture;
+    material.opacityTexture = texture;
+    material.disableLighting = true;
+    material.backFaceCulling = false;
+    material.useAlphaFromDiffuseTexture = true;
+
+    // Create billboard plane
+    const plane = MeshBuilder.CreatePlane(
+      `damage_plane_${Date.now()}`,
+      { width: size, height: size / 2 },
+      this.scene
+    );
+    plane.position = new Vector3(worldX, worldY, worldZ);
+    plane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    plane.material = material;
+
+    // Add random offset to prevent stacking
+    plane.position.x += (Math.random() - 0.5) * 1.5;
+    plane.position.z += (Math.random() - 0.5) * 1.5;
+
+    // Track for animation
+    this.activeDamageNumbers.push({
+      mesh: plane,
+      texture,
+      startTime: performance.now() / 1000,
+      startY: worldY,
+      duration,
+      floatDistance,
+    });
+  }
+
+  /**
+   * Update all active damage numbers (called each frame)
+   * Handles floating animation and fade-out, disposes when complete
+   */
+  private updateDamageNumbers(_deltaTime: number): void {
+    const now = performance.now() / 1000;
+
+    // Process in reverse so we can safely remove items
+    for (let i = this.activeDamageNumbers.length - 1; i >= 0; i--) {
+      const dn = this.activeDamageNumbers[i];
+      if (!dn) continue;
+
+      const elapsed = now - dn.startTime;
+      const progress = Math.min(1, elapsed / dn.duration);
+
+      if (progress >= 1) {
+        // Animation complete - dispose and remove
+        dn.mesh.material?.dispose();
+        dn.texture.dispose();
+        dn.mesh.dispose();
+        this.activeDamageNumbers.splice(i, 1);
+        continue;
+      }
+
+      // Float upward with easing (ease-out)
+      const easedProgress = 1 - Math.pow(1 - progress, 2);
+      dn.mesh.position.y = dn.startY + easedProgress * dn.floatDistance;
+
+      // Fade out in the last 40% of duration
+      const fadeStart = 0.6;
+      if (progress > fadeStart) {
+        const fadeProgress = (progress - fadeStart) / (1 - fadeStart);
+        const material = dn.mesh.material as StandardMaterial;
+        material.alpha = 1 - fadeProgress;
+      }
+    }
+  }
+
   /**
    * Damage a building and update its health bar
    */
@@ -3900,15 +4075,173 @@ export class CombatEngine {
     const building = this.buildingData.get(buildingId);
     if (!building) return null;
 
+    // Skip if already in death animation
+    if (building.deathProgress !== null) {
+      return { alive: false, remainingHealth: 0 };
+    }
+
     building.health = Math.max(0, building.health - damage);
     this.updateBuildingHealthBar(buildingId);
 
+    // Spawn floating damage number
+    const { centerX, centerZ } = this.getBuildingCenterWorld(building);
+    const buildingHeight = building.visualCenterWorld?.y ?? 2;
+    this.spawnDamageNumber(damage, centerX, buildingHeight + 1, centerZ);
+
     if (building.health <= 0) {
-      // Building destroyed - could add visual feedback here
+      // Start death animation instead of immediate removal
+      building.deathProgress = 0;
+      building.deathStartTime = performance.now();
+
+      // Hide health and cooldown bars
+      if (building.healthBarPlane) building.healthBarPlane.isVisible = false;
+      if (building.cooldownBarPlane) building.cooldownBarPlane.isVisible = false;
+
+      // Cancel any pending attacks or kill commands for this building
+      this.activeKillCommands.delete(buildingId);
+      this.pendingAttacks.delete(buildingId);
+
+      // Spawn death particles
+      this.spawnBuildingDeathParticles(building);
+
       return { alive: false, remainingHealth: 0 };
     }
 
     return { alive: true, remainingHealth: building.health };
+  }
+
+  /**
+   * Spawn explosion particles for a dying building
+   */
+  private spawnBuildingDeathParticles(
+    building: (typeof this.buildingData extends Map<string, infer V> ? V : never)
+  ): void {
+    const { centerX, centerZ } = this.getBuildingCenterWorld(building);
+    const centerY = building.visualCenterWorld?.y ?? 2;
+
+    // Create particle system at building center - more particles for larger explosion
+    const particleSystem = new ParticleSystem('buildingDeath', 400, this.scene);
+
+    // Create a small bright dot texture for sparks
+    const particleTexture = new DynamicTexture('buildingDeathParticleTexture', 32, this.scene, false);
+    const ctx = particleTexture.getContext() as CanvasRenderingContext2D;
+
+    // Draw a small bright core with quick falloff (spark-like)
+    const texCenterX = 16;
+    const texCenterY = 16;
+    const gradient = ctx.createRadialGradient(texCenterX, texCenterY, 0, texCenterX, texCenterY, 16);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.2, 'rgba(255, 255, 200, 0.9)');
+    gradient.addColorStop(0.5, 'rgba(255, 200, 100, 0.4)');
+    gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 32, 32);
+    particleTexture.update();
+
+    particleSystem.particleTexture = particleTexture;
+
+    // Emitter position
+    particleSystem.emitter = new Vector3(centerX, centerY, centerZ);
+
+    // Bright spark colors: yellow/white core fading to orange/red
+    particleSystem.color1 = new Color4(1, 1, 0.8, 1); // Bright yellow-white
+    particleSystem.color2 = new Color4(1, 0.6, 0.2, 1); // Orange
+    particleSystem.colorDead = new Color4(1, 0.2, 0, 0); // Fade to red then transparent
+
+    // Small particles for sparks (slightly larger than unit sparks)
+    particleSystem.minSize = 0.1;
+    particleSystem.maxSize = 0.4;
+
+    // Short lifespan for snappy sparks
+    particleSystem.minLifeTime = 0.2;
+    particleSystem.maxLifeTime = 0.7;
+
+    // Large burst of sparks for buildings
+    particleSystem.emitRate = 800;
+    particleSystem.manualEmitCount = 150;
+
+    // Emission spread - wider for buildings
+    particleSystem.minEmitBox = new Vector3(-1.5, 0, -1.5);
+    particleSystem.maxEmitBox = new Vector3(1.5, 2, 1.5);
+
+    // Spray in all directions with upward bias - wider spread for buildings
+    particleSystem.direction1 = new Vector3(-8, 4, -8);
+    particleSystem.direction2 = new Vector3(8, 15, 8);
+
+    // Strong gravity pulls sparks down in arc
+    particleSystem.gravity = new Vector3(0, -30, 0);
+
+    // High velocity for spark spray
+    particleSystem.minEmitPower = 8;
+    particleSystem.maxEmitPower = 18;
+
+    // Angular speed for visual variety
+    particleSystem.minAngularSpeed = -10;
+    particleSystem.maxAngularSpeed = 10;
+
+    // Start the system
+    particleSystem.start();
+
+    // Auto-dispose after particles die
+    setTimeout(() => {
+      particleSystem.stop();
+      particleSystem.dispose();
+    }, 1500);
+  }
+
+  /**
+   * Update building death animations (shrink, sink, fade)
+   * Called every frame from the render loop
+   */
+  private updateBuildingDeathAnimations(): void {
+    const deathDuration = 1.0; // seconds
+    const now = performance.now();
+    const toRemove: string[] = [];
+
+    for (const [buildingId, building] of this.buildingData) {
+      if (building.deathProgress === null || building.deathStartTime === null) {
+        continue;
+      }
+
+      // Calculate progress
+      const elapsed = (now - building.deathStartTime) / 1000;
+      const progress = Math.min(1, elapsed / deathDuration);
+      building.deathProgress = progress;
+
+      // Get the mesh to animate
+      const mesh = building.mesh;
+      if (!mesh) {
+        toRemove.push(buildingId);
+        continue;
+      }
+
+      // Apply death animation: shrink and sink
+      const scale = 1 - progress * 0.7; // Shrink to 30%
+      mesh.scaling = new Vector3(scale, scale, scale);
+
+      // Sink into the ground
+      const sinkAmount = progress * 3; // Sink 3 units
+      const originalY = (building.visualCenterWorld?.y ?? 2) - ((building.tileHeight * TILE_SIZE) / 2);
+      mesh.position.y = originalY - sinkAmount;
+
+      // Fade out materials (if StandardMaterial)
+      mesh.getChildMeshes().forEach((child) => {
+        if (child instanceof Mesh && child.material instanceof StandardMaterial) {
+          child.material.alpha = 1 - progress * 0.8;
+        }
+      });
+
+      // Animation complete - mark for removal
+      if (progress >= 1) {
+        toRemove.push(buildingId);
+      }
+    }
+
+    // Remove fully destroyed buildings
+    for (const buildingId of toRemove) {
+      this.destroyBuilding(buildingId);
+    }
   }
 
   // ==================== FORCE ATTACK ====================
@@ -4261,6 +4594,10 @@ export class CombatEngine {
       building.lastFireTime = now;
 
       const result = this.unitManager.damageUnit(command.targetUnitId, command.damage);
+
+      // Spawn damage number at target position
+      this.spawnDamageNumber(command.damage, targetPos.x, targetWorldY + 1.5, targetPos.z);
+
       if (result && !result.alive) {
         this.activeKillCommands.delete(buildingId);
       }
@@ -4413,6 +4750,15 @@ export class CombatEngine {
       building.lastFireTime = now;
 
       const result = this.unitManager.damageUnit(targetId, building.damage);
+
+      // Spawn damage number at target position
+      this.spawnDamageNumber(
+        building.damage,
+        resolvedTargetPos.x,
+        targetWorldY + 1.5,
+        resolvedTargetPos.z
+      );
+
       if (result && !result.alive) {
         building.autoTargetId = null;
       }
